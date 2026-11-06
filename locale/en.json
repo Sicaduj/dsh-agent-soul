@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Agent Soul",
+    "description": "Give every Agent Teams teammate a Markdown-defined soul: persona, tool permission matrix, routed model, and user-invocable slash command. Every teammate runs a defined soul, with a selectable default; a Settings page edits the same Markdown files section by section."
+  }
+}

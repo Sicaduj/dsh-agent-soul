@@ -1,0 +1,46 @@
+{
+  "name": "@local/dsh-agent-soul",
+  "version": "0.2.1",
+  "private": true,
+  "description": "Agent Soul definitions for Agent Teams: per-teammate persona, tool permission matrix, model routing, and user-invocable slash commands from Markdown + YAML frontmatter files, editable in Settings > Agent Soul.",
+  "type": "module",
+  "icon": "./icon.svg",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json",
+    "./agents/*": "./agents/*",
+    "./client": "./client.js"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/*.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "agents/*.md",
+    "docs/*.md",
+    "smoke/*.mjs",
+    "smoke/*.ts",
+    "smoke/README.md",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Environment and credentials (never commit)
+.env
+.env.*
+!.env.example
+
+# DSH plugin runtime state (plugin-owned; contains live session bindings)
+state/bindings.json
+state/preferences.json
+state/trash/
+
+# Logs and editor noise
+*.log
+.idea/
+.vscode/

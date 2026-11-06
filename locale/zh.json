@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Agent Soul",
+    "description": "为每个 Agent Teams 队友定义 Markdown Soul 文件：角色人设、工具权限矩阵、模型路由，以及可手动调用的斜杠命令。每个队友都运行已定义的 Soul，并可选择默认 Soul；设置页可按分段编辑同一批 Markdown 文件。"
+  }
+}

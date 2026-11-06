@@ -1,0 +1,254 @@
+# Agent Soul — options reference
+
+Every control you can edit in the plugin's Settings page, what it does, and when it takes effect.
+This is the user-facing companion to [`GUI-INTERNALS.md`](GUI-INTERNALS.md) (route/payload contract)
+and [`INTERNALS.md`](INTERNALS.md) (module architecture). The feature overview, install steps, and
+authoring guidance live in [`../README.md`](../README.md).
+
+The page is **Settings → Agent Soul** in the Harness Web GUI and has two tabs:
+
+| Tab | What you edit | One file per… |
+|---|---|---|
+| **Souls** | A catalog of teammate definitions | teammate soul (`agents/*.md`) |
+| **Orchestrator** | The single Lead orchestration definition | deployment (`state/orchestrator.md`) |
+
+Editing writes the Markdown file on disk. The **next spawn** (souls) or the **next
+`/orchestrate` / reapply** (orchestrator) uses the new values; running teammates and an
+already-running Orchestrator mode are never modified in place.
+
+---
+
+## Page-level controls (both tabs)
+
+| Control | What it does |
+|---|---|
+| **Souls / Orchestrator tabs** | Switch editors. Switching with unsaved edits asks to discard or keep editing (the same guard as closing a dialog). |
+| **New soul** | Opens the create dialog: a `name` field and a template picker (Blank / Researcher / Code reviewer / Docs writer). Creates the file from the chosen template: the page composes the complete Markdown source (frontmatter + body) and sends it as the new file's initial content. (A create call without template source falls back to the server-side skeleton.) |
+| **Refresh** | Re-fetches the overview (catalog scan, live tools/models, runtime health). Running teammates are unaffected. |
+| **Paste Markdown** | Opens the import dialog: paste a complete soul file, **Parse** it (validates, writes nothing), then import the parsed fields into the current draft or create a new soul from it. |
+| **Create default orchestrator** (Orchestrator tab) | Shown when the orchestrator file (`<dirname(bindingsFile)>/orchestrator.md`) does not exist. Writes a complete six-section definition composed in the page — `name: orchestrator`, no model, tools `*`, plan-first on, gate `strict`, **2** retries, pause-on-fatal on — then opens the editor on the saved file. These are not the values previewed before creation; see ["Where the default values come from"](#where-the-default-values-come-from). |
+| **Search** | Filters list cards by name, description, or file path. |
+| **All / User-invocable / AI-only / Invalid** | List filters: every soul, only `user-invocable: true`, only AI-only, or only files that currently fail parsing. |
+| **Sort: Name / Updated** | Sort cards by soul name or by file modification time (newest first). |
+| **Clear filters** | Appears in the empty state when a search/filter hides every card; resets search and filters. |
+| **Default Soul** (Souls tab) | Selects the Soul `spawn_teammate` uses when `agent_type` is omitted. The selector offers the bundled-default option, every valid Soul, and the persisted name marked `(not in catalog)` when it is stale. Choosing a Soul validates it against the live catalog and writes `<dirname(bindingsFile)>/preferences.json` atomically; choosing the bundled option clears the explicit selection, so `generalist` applies when present. The **Default** badge sits on the effective default (the selection, else the bundled `generalist`). A warning banner appears for a stale selection, no usable default, or a corrupt/malformed/unreadable preferences document. When the document itself is invalid, the page advertises no effective default and a default spawn fails with the reason instead of silently using `generalist`; an explicit `agent_type` is unaffected. |
+| **Soul card** | Click to open that document in the editor dialog. The badges are read-only status (see ["List-card badges"](#list-card-badges-read-only-status)); delete/undo happens inside the dialog. |
+
+The page footer cards (**Plugin settings & runtime**, **Health**) are read-only reports — see
+["Read-only cards"](#read-only-cards).
+
+---
+
+## Soul editor — writable controls
+
+The dialog is resizable (drag the bottom-right handle, arrow keys when it has focus, Home resets;
+the size is remembered) and has a **Form / Raw** mode switch.
+
+### Identity group
+
+| Field | Maps to | What it does |
+|---|---|---|
+| **Name** | frontmatter `name` | The identity used in `agent_type`, the Lead's catalog bullet, and the slash command name. Required, lower-kebab-case, at most 64 characters, unique within the catalog. `lead` is reserved for the Team Lead: a save or preview refuses it without writing and shows `name: "lead" is reserved for the Team Lead` on the name control; create and duplicate refuse it as an invalid name and create nothing. `leadership`, `lead-review`, and `lead-2` remain valid. The teammate's own name (`spawn_teammate({ name })`) is separate, chosen at spawn time, and also cannot be `lead` or an already-used roster name. |
+| **Description** | frontmatter `description` | The **orchestration trigger**: the Lead reads this text to decide when to use the soul. Required, non-empty, one line, at most 2000 characters. It is also the catalog line shown in the Lead's prompt (truncated to 600 characters). Write "what it does + when to use it". |
+
+### Routing group
+
+| Field | Maps to | What it does |
+|---|---|---|
+| **Tools** chip picker | frontmatter `tools` | The teammate's **permission matrix** over inherited (preset/global) tools. Chips light up for names the live Lead's catalog reports. **Inherit every tool** (pressed) = allow every inherited tool (`tools:` omitted / `*`). Pressing it off leaves an empty list (`tools: []`) = hide every inherited tool. Selecting chips builds an explicit allow-list. Team tools are never listed: they are Agent-scoped, cannot be restricted, and stay available to every teammate. Lead-only `manage_agent_souls` is also excluded and rejected because it cannot be delegated. |
+| **Tools (comma-separated)** (Advanced) | same `tools` | The raw form of the same value. `*` (what the field shows when the file omits `tools`) = inherit all; an empty value = deny all (composes `tools: []`); `a, b` = allow exactly `a` and `b`. Useful for tools the GUI text input accepts but the live catalog does not currently show. Stays in sync with the chips. |
+| **Provider** / **Model** selects | frontmatter `provider`, `model` | Route this teammate's model. Empty = inherit the Lead's model. The provider list comes from the live `llm` catalog; the model list is filtered by the chosen provider. Picking a model auto-fills its provider when none is set. A configured route that is not in the live catalog stays selectable (marked "not in catalog") instead of being lost. A declared model that cannot be resolved makes the spawn fail, it does not invalidate the file — though the GUI save refuses an unresolvable declaration while a live catalog is available. |
+| **Reasoning effort** | frontmatter `reasoning-effort` | Optional provider/model effort id (e.g. `high`). Validated against the model when the LLM catalog advertises efforts; otherwise used with a warning. Empty = provider default. |
+| **Context** | frontmatter `context` | Starting context for the teammate. **Not specified** = no value in the file, so spawn resolution uses the call's `context` argument, then the plugin's `defaultContext` (`fresh` by default). **fresh** = clean session without the Lead's history (best for independent work; the default). **fork** = the teammate's session inherits the Lead's completed turns (shared continuity, larger prompt). No other value is accepted; a literal `none` is invalid in raw YAML. |
+| **User-invocable** checkbox | frontmatter `user-invocable` | When checked, the Lead's session registers one slash command for this soul (`/researcher`), letting a person start the teammate directly. Default off (AI-only), and every bundled soul omits the key — set it and save to opt in. Command names can collide with existing commands; the card reports `Command collision`. The built-in `/orchestrate` is installed first on every Lead and always wins its name, so a soul named `orchestrate` needs `commandPrefix: agent-` to become `/agent-orchestrate` (a config change takes effect after the next Host/bundle reload). Deleting or renaming the colliding soul re-registers the remaining commands without a Host reload. |
+
+### Markdown body group
+
+Each section is plain Markdown, edited in its own textarea:
+
+| Section | Role in the teammate prompt |
+|---|---|
+| **Role Definition** | Replaces the deployment persona: who the teammate is, its perspective, and its responsibility. |
+| **Inputs You Will See** | What task message and workspace context the Lead is expected to pass. Sets expectations for the teammate. |
+| **Hard Rules** | Non-negotiable constraints (always/never). Keep them concrete and checkable. |
+| **Output Format** | The exact structure of the teammate's final reply. |
+| **Extra markdown** | Body content outside the four sections: the text before the first canonical heading (the preamble), or the whole body when it has no canonical heading. It is emitted **before** the four canonical sections; other headings inside a section stay inside that section. |
+
+The body must be non-empty; that is part of what makes a file valid.
+
+### Advanced group
+
+| Field | Maps to | What it does |
+|---|---|---|
+| **Tools (comma-separated)** | `tools` | Same value as the picker, editable as text (see Routing group). |
+| **Model** / **Provider** text inputs | `model`, `provider` | Free-text route editing, for a route that is not in the live catalog or when editing while the catalog is unavailable. Keep the Provider select consistent; prefer the dropdowns for discoverability. |
+| **Extra frontmatter** | unknown YAML keys | Preserves keys the plugin does not interpret, verbatim. The GUI shows them here so a save does not drop hand-authored metadata. They do not affect spawning. |
+
+### Editor modes and actions
+
+| Control | What it does |
+|---|---|
+| **Form / Raw** toggle | Form = the split editor above. Raw = the complete Markdown source in one textarea; Save validates it exactly like a form save. Use Raw for unusual YAML or to copy a whole file. |
+| **What the teammate will receive** preview | Read-only live previews of the composed persona and the catalog line, plus the resolved model and the slash-command status. Nothing is written. Use it to check what the model will actually see before spawning. |
+| **Save** | Validates the composed document, then writes the file atomically and re-scans the catalog. Errors appear inline (and in a summary) without writing. A stale draft that conflicts with an external edit answers a **conflict banner** with **Reload file** / **Overwrite**. |
+| **Revert** | Discards the in-page changes and restores the last loaded file content (asks before discarding when the guard fires). |
+| **Duplicate** | Copies the document under a new name (default `<name>-copy`), preserving description, sections, and fields. Fails on an existing name or a bad name. |
+| **Delete** | Two-step confirm, then moves the file into the plugin trash (`<bindings dir>/trash`). The status banner offers **Undo**, which restores the newest deleted file. |
+| **Close / Escape / backdrop** | Closes the dialog. With unsaved edits, the guard asks **Discard changes** or **Keep editing**. |
+| **Reset size** (title row) | Restores the dialog's default size; the chosen size is remembered in `localStorage`. |
+
+A recovered draft is offered when the page reloads with an unsaved draft in `localStorage`:
+**Restore draft** or **Discard draft**. Drafts are per file and never overwrite the file.
+
+---
+
+## Orchestrator editor — writable controls
+
+Opened from the Orchestrator tab (**Edit orchestrator**); same resizable dialog, no delete (the file
+is optional). Saving the definition does **not** change a running mode — it is read the next time
+`/orchestrate` enables the mode (or when an active mode is re-applied after a Host reload / Lead
+creation).
+
+### Configuration group
+
+| Field | Maps to | What it does |
+|---|---|---|
+| **Name** | frontmatter `name` | Display identity of the definition (default `orchestrator`). Lower-kebab-case, ≤ 64 characters. |
+| **Provider** / **Model** selects | `provider`, `model` | The Lead route used **while the mode is on**. Empty = keep the Lead's own route. Same live-catalog dropdowns as the soul editor (inherit option, out-of-catalog route retained). |
+| **Reasoning effort** | `reasoning-effort` | Optional effort id for the Lead route while the mode is on. |
+| **Tools** picker / text | `tools` | The Lead's permission matrix **while the mode is on**. Pressed **Inherit every tool** (`*`) = no restriction (`tools:` omitted); pressing it off, deselecting the last tool, or clearing the text leaves an empty value, which composes `tools: []` = deny every inherited tool; a selection list = allow exactly those inherited tools. Team tools stay visible; listing one is harmless (it is skipped) and is explained in the picker, not flagged as unknown. A name unavailable in the session is skipped with a warning rather than failing the whole mode. |
+| **Gate mode** select | `gate-mode` | Substituted as `{{gateMode}}` into the doctrine: `strict`, `advisory`, or `off`. It changes what the prompt instructs the Lead to do; it does not mechanically block tools. An omitted field is read as `off`. |
+| **Max retries** number | `max-retries` | Integer 0–10, substituted as `{{maxRetries}}`: the retry ceiling the doctrine tells the Lead to follow. It is not an automatic retry driver. An omitted field is read as `0`. |
+| **Plan first** checkbox | `plan-first` | Boolean, substituted as `{{planFirst}}`: doctrine to publish a plan before executing. An omitted field is read as off; the starter documents enable it (see below). |
+| **Pause on fatal** checkbox | `pause-on-fatal` | Boolean, substituted as `{{pauseOnFatal}}`: doctrine to stop and ask the human on unrecoverable failure. An omitted field is read as off; the starter documents enable it (see below). |
+
+### Where the default values come from
+
+There is no single default set for the orchestrator fields; three sources in the code each carry
+their own values, and they do not agree:
+
+| Source | `gate-mode` | `max-retries` | `plan-first` | `pause-on-fatal` |
+|---|---|---|---|---|
+| A saved file with the fields omitted (parser defaults) | `off` | `0` | off | off |
+| The editor's pre-creation preview (the Host skeleton shown while the file does not exist) | `advisory` | `3` | on | on |
+| **Create default orchestrator** (composed in the page and written to disk) | `strict` | `2` | on | on |
+
+All three use `name: orchestrator` and tools `*` (inherit every tool) unless a field is set. Note
+the mismatch: the editor previews `advisory` / `3` before creation, but **Create default
+orchestrator** writes `strict` / `2`. Check the fields after creating.
+
+While the mode is on, the **Identity & Boundaries** section shadows the deployment persona, the
+other five sections become prompt sections around the Team policy, the declared model is selected
+(restored on `/orchestrate off` when it was captured in the same process), and the tools list
+becomes the Lead's inherited-tool matrix. The built-in team policy and soul catalog stay in
+place.
+
+**Route values are validated before any save.** The editor (form and raw) and the Lead's
+`save_orchestrator` action refuse a route that contradicts itself — a full `provider/model` plus a
+different `provider`, a provider without a model, or an empty model id after the slash — and, when
+a live LLM catalog is available and a model is declared, a well-formed route (or reasoning effort)
+this deployment cannot serve. A `reasoning-effort` with no `model`/`provider` is valid and ignored
+at enable because the Lead route is inherited, matching activation. The refusal names the field (`model`, `provider`, or `reasoningEffort`),
+writes nothing, and leaves the previous file intact. Without an LLM service a complete
+`provider/model` route is still saved; it fails later at enable if the deployment cannot serve it.
+An existing invalid file shows **Invalid** and no resolved model, and cannot enable.
+
+### Sections and extras
+
+| Field | Maps to | What it does |
+|---|---|---|
+| **Identity & Boundaries** | section | The Lead's role, authority, and what it must not do itself. Replaces the deployment persona while the mode is on. |
+| **Plan Generation** | section | How to decompose the goal, what a plan contains, when to publish/revise it. |
+| **Delegation & Context Minimization** | section | How to match steps to souls/tools and what context to pass. |
+| **State Tracking** | section | How to use the Team task board as the durable ledger. |
+| **Quality Verification** | section | The gates a completed sub-task must pass before advancing. |
+| **Exception & Recovery** | section | Retry policy, fatal-error handling, human escalation. |
+| **Extra markdown** | extras | Content before the first canonical heading, after an explicit `<!-- orchestrator:extra -->` marker, or under any other `#`/`##` heading. It is preserved but appended after the canonical sections on save, so use `###` for sub-headings that must stay inside a section. |
+
+Template variables available in every section and in extras: `{{maxRetries}}`, `{{gateMode}}`,
+`{{planFirst}}`, `{{pauseOnFatal}}`, `{{catalog}}` (the Lead's soul catalog text). Unknown
+variables stay literal.
+
+### Orchestrator actions
+
+| Control | What it does |
+|---|---|
+| **Create default orchestrator** | Composes a complete six-section definition in the page and writes it immediately, then opens the editor on the saved file: `name: orchestrator`, no model, tools `*`, plan-first on, gate `strict`, 2 retries, pause-on-fatal on, with starter prose in every section. Its values differ from the pre-creation preview and from the omitted-field defaults (see ["Where the default values come from"](#where-the-default-values-come-from)). |
+| **Edit orchestrator** | Opens the dialog described above. |
+| **Save / Revert / close** | Same validation, dirty guard, and dialog behavior as the soul editor. The file is single, so there are no duplicate/delete actions and no `expectedHash` conflicts. |
+| **Edit while the mode is on** | Safe but not hot-applied. Re-run `/orchestrate` (or reload the Host / re-create the Lead) to apply the new definition. A failed re-enable rolls back to the previous doctrine when the rollback succeeds (previousStateRestored=true), and if the rollback itself fails the mode ends inactive (previousStateRestored=false) and the error says so. |
+
+---
+
+## List-card badges (read-only status)
+
+These summarize a file; they are not editable.
+
+| Badge | Meaning |
+|---|---|
+| **Valid** / **Invalid** | Whether the file parses and validates. Invalid files stay listed and editable; the catalog and spawning skip them. |
+| `N tools` / `No tools` / `All tools` | The permission matrix: an allow-list of that size, an empty list (deny every inherited tool), or no list (inherit every inherited tool). |
+| **Model: …** | The resolved `provider/model` when it resolves, otherwise the raw declaration. The badge is absent when the soul inherits the Lead's model. |
+| **Context: fresh/fork** | The declared spawn context. Absent when the soul does not specify one. |
+| **/command** chip | The soul's registered slash command. The chip appears only when the workspace Lead's command registry resolves that command to this soul's own handler (the **Registered** status); AI-only, invalid-name, collision, and no-live-Lead rows show no chip. |
+| **Command collision** | The workspace Lead's command registry does not resolve that command to this soul's own handler: another command owns the name (the built-in `/orchestrate` always wins), or registration failed. Fix by renaming the soul or setting `commandPrefix` (bundle config, reload needed); deleting or renaming the colliding soul clears it without a Host reload. (No live Lead to check against is its own **No live Lead** status, not a collision.) |
+| **N saved · last used …** | Retained durable bindings for this soul in the current workspace: how many are stored now (the store keeps only the newest 500 bindings per workspace, so this is not an all-time count) and when the newest retained one was written. `never used` when none are retained. |
+| **in use by {names}** | Live teammates currently bound to this soul in this workspace. |
+| **AI-only** | Command-status badge meaning the soul is not `user-invocable`, so it has no slash command; the Lead can still spawn it with `agent_type`. All bundled souls start here until you opt in. |
+| **Default** | This is the effective default Soul: the explicit selection, or the bundled `generalist` when no explicit selection exists. Only one card carries it. |
+| **Registered / Invalid name / No live Lead** | The other command-status badges: the workspace Lead's registry resolves the slash command to this soul's handler; the name cannot be a command (bad syntax, or the reserved `lead`); or no live Lead exists to check against. |
+
+## Read-only cards
+
+- **Plugin settings & runtime** — one combined card: plugin name and version, workspace root,
+  configured soul directories (resolved), bindings path with the stored-bindings count, advertised
+  providers (or "The Host reports no providers."), command prefix (or "none"), default context,
+  spawn providers (`fresh` / `fork`), definition/catalog budgets, the active scan time (or
+  "never"), the live Teams and their registered soul commands (with member counts), and the
+  delegation hint with its `spawn_teammate({ …, agent_type: "<name>" })` example. The footer note
+  states that souls are plain Markdown with no separate database. This is where you confirm which
+  workspace and files the page is editing. The live model catalog feeds the editor's Provider/Model
+  dropdowns; it is not listed in this card.
+- **Health** — definition count vs `maxDefinitions`, catalog character usage vs `maxPromptChars`
+  (measured on the full catalog so over-budget pressure is visible), duplicate names, invalid
+  files, scan diagnostics, and the **Team tool surface** composition. The composition warning
+  appears only when the shipped `tool-agent-team` row is still active next to this bundle's row; it
+  carries the one-line profile patch, and `manage_agent_souls({ action: "repair_team_tools" })` (or
+  `claimTeamToolRow`) applies that override. Clicking a scan diagnostic opens the named file in the
+  editor when it matches a catalog document.
+
+---
+
+## File mapping cheat sheet
+
+| Editor location | Soul file | Orchestrator file |
+|---|---|---|
+| Identity → Name | `name` | `name` |
+| Identity → Description | `description` | — |
+| Routing → Tools | `tools` | `tools` |
+| Routing → Provider / Model / Reasoning effort | `provider`, `model`, `reasoning-effort` | same |
+| Routing → Context | `context` | — |
+| Routing → User-invocable | `user-invocable` | — |
+| Routing → Plan first / Gate mode / Max retries / Pause on fatal | — | `plan-first`, `gate-mode`, `max-retries`, `pause-on-fatal` |
+| Body sections | `# Role Definition`, … | six canonical orchestrator sections |
+| Advanced → Extra frontmatter | unknown YAML keys | — |
+| Extra markdown | preamble body content (before the first canonical heading; the whole body when there is none) | extras: preamble, marker tail, noncanonical headings (moved after the canonical sections on save) |
+
+## When an edit takes effect
+
+| Edit | Effect |
+|---|---|
+| Soul field/section saved | Next `spawn_teammate` using that `agent_type`; also next `/command` invocation. Running teammates are not changed. |
+| Default Soul changed | Next `spawn_teammate` that omits `agent_type`; the page re-reads the overview so the **Default** badge and warning move immediately. A selection that is not in the live catalog makes the next default spawn fail with an actionable error — it never silently falls back to `generalist`. A malformed or corrupt preferences document likewise advertises no effective default and fails the default spawn with its diagnostic; fix or clear it in the selector, or pass an explicit `agent_type`. |
+| Soul renamed | Old name stops resolving for spawn; the old file must be renamed or the new file saved under the new name (delete the old one via the dialog if needed). A command collision clears on the next catalog reconciliation (no Host reload). |
+| Colliding soul deleted or renamed | The stale/failed command entry is dropped and the remaining commands re-register immediately (the page reconciles on the next overview or mutation); no Host reload is needed. |
+| Soul marked invalid (`name: "lead"`, a bad field) | The file stays visible and editable, but it leaves the catalog, cannot spawn, and (if it was invocable) loses its command. Fix the named field and save. |
+| Command prefix / dirs / bindings config changed | After a Host/bundle reload (the page shows the active values read-only). |
+| Orchestrator definition saved | Next `/orchestrate` enable or re-apply; not an already-running mode. A refused save writes nothing and leaves the previous definition in effect. |
+| `/orchestrate` | A successful enable answers with the **ORCHESTRATOR MODE ACTIVE** block. A failed enable answers with the error. A failure before any state is touched leaves the mode unchanged; a failure while replacing an active doctrine rolls back to the previous doctrine when the rollback succeeds (previousStateRestored=true), and if the rollback itself fails the mode ends inactive (previousStateRestored=false) and the error says so. A successful enable renames the Session to `orchestrator` only when the profile provides a session-title service and the Session has a prior title to restore. Otherwise the block reports the title as unchanged, with the reason (`session-title service unavailable` or `no prior Session title to restore`). |
+| `/orchestrate off` | The captured Lead model is restored first when it was captured in the same process (a restore failure leaves the mode active for an off retry), then the captured Session title is restored only while it is still exactly `orchestrator`, and then the doctrine sections and tool restriction are removed. After a Host reload, with no prior title, or when the profile has no session-title service, there is no captured title to restore. |
+| `/orchestrate <task>` queue failure | A first enable is reverted (the run settles as an error, matching the durable log). An already-active mode is not reverted: its live bundle is restored to its pre-invocation doctrine, model, and Session title when the snapshot can be recreated; if recreation fails, the freshly applied bundle is kept instead when possible, and only if both restorations fail is the mode left inactive. A durably active mode with no live bundle keeps the freshly applied bundle. Either way the error reports the queue failure. |
+
+For validation codes and their fixes see
+[`../README.md`](../README.md#validation-and-fixes); for the route/payload contract see
+[`GUI-INTERNALS.md`](GUI-INTERNALS.md).

@@ -1,0 +1,31 @@
+# @local/dsh-agent-soul — Agent Teams "Soul" layer.
+#
+# Applied after the profile's agent-team bundle. The shipped Team tool row is replaced by
+# this package's row: same Team tool surface, plus soul-aware `spawn_teammate`
+# (`agent_type`), `list_agent_souls`, the Lead prompt catalog, and one user-invocable
+# slash command per soul.
+#
+# If the Agent Teams bundle is enabled after this bundle, this layer's disable above
+# targets a row that does not exist yet and is skipped; `claimTeamToolRow: true` asks the
+# plugin to persist the same `tool-agent-team` override through the Plugin Manager after
+# the Loader tree settles. Set it to false to keep the plugin from touching profile
+# composition (repair then remains available as the explicit manage_agent_souls action).
+#
+# Everything this project owns lives inside the project directory: the live soul catalog
+# in `agents/`, durable resume bindings in `state/`, and the end-to-end harness in `smoke/`.
+# The paths below are relative to the session workspace root. When using this bundled catalog,
+# make that root this project directory itself, not its parent.
+
+- id: tool-agent-team
+  disabled: true
+
+- insert:
+    - id: agent-soul-team
+      name: '@local/dsh-agent-soul'
+      config:
+        freshProvider: spawn
+        forkProvider: fork
+        claimTeamToolRow: true
+        dirs:
+          - agents
+        bindingsFile: state/bindings.json

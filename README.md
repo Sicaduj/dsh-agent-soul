@@ -23,7 +23,7 @@ enables the mode and submits that task as the next message).
 Agent Team (Lead, optionally the orchestrator)
 ├─ spawn_teammate({ ..., agent_type: "<name>" })                  ← explicit Soul teammate
 ├─ spawn_teammate({ name, description, prompt })                  ← default-Soul teammate
-│    ├─ persona      body shadows the deployment persona in the child's system prompt
+│    ├─ persona      body is added at the deployment-persona position (after a configured prefix line)
 │    ├─ tools        `tools:` becomes a hard permission matrix for inherited tools
 │    ├─ model        `model:` becomes the child's routed LLM model
 │    ├─ context      `context:` picks fresh or fork as the default
@@ -180,6 +180,13 @@ whichever registers second fails on the duplicate `team:policy` section, so `age
 therefore: enable the Agent Teams bundle first, then install this bundle last (the Plugin Manager
 appends a newly enabled bundle to the end of `dsh.profile.bundles`).
 
+A profile can therefore be healthy in one of two ways: the plugin's bundle layer follows the
+Agent Teams bundle and its own patch disables the row, or — the common case when the Agent Teams
+bundle was added or re-enabled later — the plugin's layer is skipped and the persisted profile
+override is the effective replacement. In the second case the override is the composition owner:
+keep it while this bundle is installed, do not clean it up as stale configuration, and note that
+it survives removing the plugin.
+
 The plugin also detects and repairs that mis-ordering on its own:
 
 - the Host log names the conflict when the plugin activates and when the Team tools fail to install;
@@ -319,7 +326,7 @@ relative to each workspace root. See [Configuration](#configuration).
 | **Catalog** | The scanned, validated set of every `*.md` in the configured directories, plus the package's bundled `agents/` catalog when `bundled` is enabled (the default). The Lead sees a prompt catalog describing it; the GUI lists it. |
 | **Binding** | A durable record in `<dirname(bindingsFile)>/bindings.json` (default `<workspace>/.dsh/agent-soul/bindings.json`) associating a teammate's Session with the soul that shaped it. Used to re-apply the soul on cold resume (admission fails closed without one) and to show usage in the GUI. |
 | **Default Soul** | The Soul used when `spawn_teammate` omits `agent_type`. Persisted in `<dirname(bindingsFile)>/preferences.json`; the bundled `generalist` is used when no explicit selection exists. A persisted selection must exist in the live catalog, or the default spawn fails; a corrupt, malformed, or unsupported preferences document is reported as a warning and invalidates the default — the default spawn fails rather than using `generalist`, while an explicit `agent_type` still works. |
-| **Prompt section** | A named, ordered piece of the system prompt. A soul shadows the deployment persona section; the Lead catalog and orchestrator doctrine are ordinary prompt sections. |
+| **Prompt section** | A named, ordered piece of the system prompt. A soul's persona is registered at the deployment-persona order, after the harness's configured deployment persona-prefix line; the Lead catalog and orchestrator doctrine are ordinary prompt sections. |
 | **Permission matrix** | The soul's `tools` list, applied as a tool restriction to inherited (preset/global) tools. Team tools stay visible. |
 | **fresh / fork context** | `fresh` starts the teammate without the Lead's history; `fork` starts it with the Lead's completed turns. The soul picks the default; an explicit tool argument wins. |
 | **Route** | A concrete provider + model (+ optional reasoning effort), e.g. `deepseek-official/deepseek-flash`. A bare `model:` is resolved against the live provider catalogs. |
@@ -587,7 +594,7 @@ YAML tips:
 The body is the teammate's operating contract. The four conventional sections are:
 
 - **Role Definition** — the persona anchor: who the teammate is, what it owns, and what it does not
-  do. This replaces the deployment persona, so make it self-contained.
+  do. It is applied at the deployment-persona position, after a configured deployment prefix line, so make it self-contained and authoritative.
 - **Inputs You Will See** — what the Lead must pass in the task prompt (the question, the diff, the
   file paths, the acceptance criteria), and what to do when an input is missing.
 - **Hard Rules** — concrete, checkable negative constraints and focus rules (what not to touch,
@@ -803,13 +810,13 @@ and rollback.
 
 ### The six sections
 
-Each canonical section is its own prompt section (except Identity, which shadows the deployment
-persona). Write the doctrine as instructions to the Lead; the variables are substituted at apply
-time.
+Each canonical section is its own prompt section (except Identity, which is registered at the
+deployment-persona order, after a configured prefix line). Write the doctrine as instructions to
+the Lead; the variables are substituted at apply time.
 
 | Section | What to put there |
 |---|---|
-| **Identity & Boundaries** | The Lead's role, authority, and what it must not do itself. This replaces the deployment persona, so be explicit about delegation and final ownership. |
+| **Identity & Boundaries** | The Lead's role, authority, and what it must not do itself. It is applied at the deployment-persona position, after a configured prefix line, so be explicit about delegation and final ownership. |
 | **Plan Generation** | How to decompose a goal, what a complete plan contains, when to publish it, and when to revise it. Use `{{planFirst}}` in the prose if the flag should alter the instruction. |
 | **Delegation & Context Minimization** | How to match work to souls/tools, what context to pass, what to withhold, and how to use `{{catalog}}`. Prefer self-contained task messages. |
 | **State Tracking** | How to use the shared task board: statuses, revisions, blockers, write scopes, and the compact result buffer. |
@@ -876,9 +883,11 @@ promise.
 
 When a Team Lead is active, its system prompt is assembled from these pieces, in order:
 
-1. **Deployment persona prefix** — the normal deployment persona, unless orchestrator mode is on;
-   then the fixed runtime orchestrator identity plus the definition's **Identity & Boundaries** text
-   shadows it.
+1. **Deployment persona prefix** — the harness's configured deployment persona line (for shipped
+   profiles, for example "You are an AI agent powered by DeepSeek Harness."). While orchestrator
+   mode is on, the fixed runtime orchestrator identity plus the definition's **Identity & Boundaries**
+   text are added at that same persona position; they follow the deployment line rather than
+   deleting it.
 2. **Preset plugin sections** — the profile's normal agent preset (including its persona and other
    sections).
 3. **Team policy** — `team:policy`, section order `TEAM_POLICY` (read from the Harness prompt
@@ -909,15 +918,16 @@ told to match by `description` and never to invent a soul name.
 
 ### Teammate composition
 
-A teammate's soul persona replaces the deployment persona section:
+A teammate's soul persona is registered at the deployment-persona position (a configured deployment prefix line is still emitted first):
 
 ```text
 You are the delegated teammate "<name>".
 
 <description>
 
-The Agent Soul below is your system-level operating contract for this session. It replaces
-the deployment persona. Follow it exactly, including its Hard Rules and Output Format.
+The Agent Soul below is your system-level operating contract for this session. It is your
+authoritative role definition: where it conflicts with the deployment persona or other generic
+guidance, follow the Agent Soul, including its Hard Rules and Output Format.
 
 <body>
 ```
@@ -1131,6 +1141,8 @@ editor size under `dsh.agent-soul.editor-size`. They are not shared with other b
   later bundle layer inserts, so the plugin must be installed after the Agent Teams bundle. A
   mis-ordered profile is detected and can be repaired (health card, `repair_team_tools`,
   `claimTeamToolRow`), but the repair persists a profile override that outlives removing the plugin.
+  In a mis-ordered profile that persisted override — not this bundle's patch — is the effective
+  replacement; removing it without reordering the bundles brings both Team rows back.
   Compositions without the Plugin Manager service can only report the manual patch.
 - **Team tools cannot be restricted.** Team tools are Agent-scoped registrations and stay visible to
   every teammate by design (except `interrupt_agent` when the bundle's `interrupt` option is off).
@@ -1226,7 +1238,7 @@ End-to-end verification boots a real `dsh --profile headless` process from a DSH
 with a temporary `DSH_HOME`, a scripted LLM adapter, and this bundle selected through its real
 manifest and `cordis.patch.yml`. It asserts the workspace-independent bundled defaults (an empty
 workspace sees the packaged catalog and doctrine, and `bundled: false` restores strict
-workspace-only behavior), the Lead catalog, `spawn_teammate({ agent_type })`, persona shadowing,
+workspace-only behavior), the Lead catalog, `spawn_teammate({ agent_type })`, persona composition,
 exact tool matrices, model routing, user-invocable slash command execution, durable bindings,
 symlinked-workspace and packaged-catalog write-fence refusals, and
 scrubbing of inherited credentials/proxies/Node loader flags:

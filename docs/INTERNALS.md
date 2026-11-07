@@ -24,7 +24,7 @@ tool surface. It keeps the shipped tools and adds:
 1. **Soul definitions** — Markdown files with YAML frontmatter (`name`, `description`, `tools`,
    optional `model`/`provider`/`reasoning-effort`/`context`/`user-invocable`) and a body with the
    conventional Role Definition / Inputs You Will See / Hard Rules / Output Format sections.
-2. `spawn_teammate({ ..., agent_type })` — starts a teammate running one soul: persona shadow,
+2. `spawn_teammate({ ..., agent_type })` — starts a teammate running one soul: persona section placed at the deployment-persona order,
    tool permission matrix, routed model, default spawn context. Omitting `agent_type` resolves the
    configured **default Soul** (usable preference document → persisted selection → bundled
    `generalist` → actionable failure); a malformed/corrupt preference fails the spawn rather than
@@ -463,7 +463,7 @@ outcome is qualified in step 10 under **Enable**).
 2. Re-analyze the source to obtain the parsed definition (the public detail does not carry it).
 3. Resolve the optional model route and probe the optional tools list before touching the current
    bundle. A failure here aborts with no partial state.
-4. Build prompt texts: substitute variables in each section. The persona shadow is
+4. Build prompt texts: substitute variables in each section. The persona text is
    `ORCHESTRATOR_FIXED_IDENTITY` followed by the substituted editable identity (or the fixed text
    alone when the section is empty), so the document can add boundaries but never remove the runtime
    role. The five non-identity sections become `orchestrator:plan`, `:delegation`, `:state`,
@@ -484,7 +484,7 @@ outcome is qualified in step 10 under **Enable**).
    in both cases enable continues with `titleSkipped: true` and the activation block reports the
    matching reason. A rejected rename aborts enable with no registrations applied.
 9. Dispose the existing bundle if any, then create a new `agent.ctx.effect` bundle that registers:
-   - the persona shadow (when identity is non-empty),
+   - the persona section (when identity is non-empty),
    - the doctrine sections,
    - the tool restriction (when `tools` is a list; `allow: []` for an empty list),
    - the model selection (when a route exists).
@@ -616,7 +616,7 @@ orchestrator mode is on, the Lead also gets the orchestrator sections.
 | Team policy | system-prompt section | `team:policy` | `TEAM_POLICY` = 600 | Every Team member |
 | Soul catalog | system-prompt section | `team:agent-souls` | `TEAM_POLICY + 20` = 620 | Lead only; text function, empty when no definitions |
 | Team identity | system-prompt context | `team:identity` | `TEAM_IDENTITY` | Every Team member; required |
-| Orchestrator identity | persona-shadow section | `deployment:persona-prefix` | deployment persona order | Lead, only while mode is on |
+| Orchestrator identity | persona-position system-prompt section | `deployment:persona-prefix` | deployment persona order | Lead, only while mode is on |
 | Orchestrator plan | system-prompt section | `orchestrator:plan` | `TEAM_POLICY - 100` = 500 | Lead, only while mode is on |
 | Orchestrator delegation | system-prompt section | `orchestrator:delegation` | `TEAM_POLICY + 10` = 610 | Lead, only while mode is on |
 | Orchestrator state | system-prompt section | `orchestrator:state` | `TEAM_POLICY + 20` = 620 | Lead, only while mode is on |
@@ -649,13 +649,15 @@ You are the delegated teammate "<name>".
 
 <description>
 
-The Agent Soul below is your system-level operating contract for this session. It replaces
-the deployment persona. Follow it exactly, including its Hard Rules and Output Format.
+The Agent Soul below is your system-level operating contract for this session. It is your
+authoritative role definition: where it conflicts with the deployment persona or other generic
+guidance, follow the Agent Soul, including its Hard Rules and Output Format.
 
 <body>
 ```
 
-`composePersona` is exact; the persona section is registered at the deployment persona order. The
+`composePersona` is exact; the persona section is registered at the deployment-persona order,
+after the harness's configured deployment persona-prefix line (which is not removed). The
 soul body is one text, not four separate prompt sections. The teammate does not get the soul
 catalog section.
 
@@ -664,7 +666,7 @@ The catalog text is `catalogPromptText(snapshot, { maxPromptChars, commandPrefix
 ```text
 ## Available teammate souls
 
-A teammate started with `spawn_teammate({ ..., agent_type: "<name>" })` runs with the matching soul: its role replaces the default persona, its tool list becomes a hard permission matrix, and its model becomes the routed model. Every Team child must run a defined Agent Soul. If no soul matches the task, omit `agent_type` and the configured default Agent Soul is used; if no default is usable, `spawn_teammate` fails and names the reason. Never start a child with `subagent` or `subagent_fork` (both are hidden, guarded, and rejected at creation), and never invent a soul name. Match a task to a soul by its description; call `list_agent_souls` for full detail.
+A teammate started with `spawn_teammate({ ..., agent_type: "<name>" })` runs with the matching soul: its role definition is applied at the deployment-persona position (a configured deployment prefix line is still emitted first), its tool list becomes a hard permission matrix, and its model becomes the routed model. Every Team child must run a defined Agent Soul. If no soul matches the task, omit `agent_type` and the configured default Agent Soul is used; if no default is usable, `spawn_teammate` fails and names the reason. Never start a child with `subagent` or `subagent_fork` (both are hidden, guarded, and rejected at creation), and never invent a soul name. Match a task to a soul by its description; call `list_agent_souls` for full detail.
 
 - <name> — <one-line description, <= 600 chars> (tools: <a, b | all | none>; model: <raw | inherit>; command: /<commandPrefix><name> | AI only)
 ```
@@ -928,7 +930,7 @@ the Plugin Manager listing: any listed `@deepseek-ai/dsh-experimental-tool-agent
 bundles still heals on the next activation. `createCompositionGuard` adds the opt-in
 `claimTeamToolRow` path: `scheduleClaim()` waits one tick, awaits the Loader tree (concurrently
 mounted rows must be visible) when available, inspects (manager fallback included), and repairs at
-most once per activation; the persisted override makes the next recomposition clean. The guard is logged
+most once per activation; the persisted override makes the next recomposition clean. On profiles where this bundle's layer precedes the Agent Teams layer (common when the Team bundle is added or re-enabled later), the bundled patch's disable is skipped and that persisted override — not the patch — is the effective composition owner. The guard is logged
 at activation, named in the `installTeamTools` failure message, exposed as the overview
 `runtime.health.teamTools` block, and surfaced through `manage_agent_souls` actions `diagnose` and
 `repair_team_tools`.
@@ -985,8 +987,8 @@ with the Agent scope; the runtime is a process-wide object disposed by the plugi
 | Effect | Owns | Disposal behavior |
 |---|---|---|
 | Per-Agent `installTeamTools` | `team:policy`, `team:identity`, Lead catalog section, the soul-only restriction + guard bundle, every Team tool | One disposer unregisters everything in reverse order |
-| Per-Agent Soul apply | persona shadow (via `agent.ctx.effect`), tool restriction, model selection | Both the Agent scope and the root installation record own disposers; plugin unload removes persona/restriction, while model selection has no automatic undo (the session survives) |
-| Per-Agent orchestrator bundle | persona shadow, five doctrine sections, extra section, tool restriction, model selection | Bundle disposal removes sections/restriction. `/orchestrate off` and runtime disposal restore the captured model and Session title when present; Agent disposal drops the bundle without restoration |
+| Per-Agent Soul apply | persona section at the deployment-persona order (via `agent.ctx.effect`), tool restriction, model selection | Both the Agent scope and the root installation record own disposers; plugin unload removes persona/restriction, while model selection has no automatic undo (the session survives) |
+| Per-Agent orchestrator bundle | persona section at the deployment-persona order, five doctrine sections, extra section, tool restriction, model selection | Bundle disposal removes sections/restriction. `/orchestrate off` and runtime disposal restore the captured model and Session title when present; Agent disposal drops the bundle without restoration |
 | Per-command injection | the Lead's scoped command registrations | Disposes the injected child |
 | GUI route registration | ten exact paths | Each route's `ctx.effect` disposes with the plugin |
 
@@ -1125,7 +1127,7 @@ directory still classifies as `bundled` and refuses save/delete, leaving the pac
 unchanged; a bundled-soul duplicate still lands under `<workspace>/.dsh/agents`), then dumps that
 fresh profile's composed config and asserts the shipped `tool-agent-team` row is disabled by this
 bundle's own patch (the portable counterpart of a per-machine profile override), then asserts the
-Lead catalog, soul spawn, persona shadow, exact tool matrices, model routing, user-invocable command
+Lead catalog, soul spawn, persona composition, exact tool matrices, model routing, user-invocable command
 execution, durable bindings, and credential/proxy/loader scrubbing — **41 checks** in total. The
 harness passed 41/41 on 2026-11-07 (a point-in-time result; re-run it with
 `node smoke/run-smoke.mjs`). Orchestrator mode activation still has no automated end-to-end coverage

@@ -74,7 +74,7 @@ Each section is plain Markdown, edited in its own textarea:
 
 | Section | Role in the teammate prompt |
 |---|---|
-| **Role Definition** | Replaces the deployment persona: who the teammate is, its perspective, and its responsibility. |
+| **Role Definition** | Applied at the deployment-persona position (after a configured deployment prefix line): who the teammate is, its perspective, and its responsibility. |
 | **Inputs You Will See** | What task message and workspace context the Lead is expected to pass. Sets expectations for the teammate. |
 | **Hard Rules** | Non-negotiable constraints (always/never). Keep them concrete and checkable. |
 | **Output Format** | The exact structure of the teammate's final reply. |
@@ -146,8 +146,9 @@ All three use `name: orchestrator` and tools `*` (inherit every tool) unless a f
 the mismatch: the editor previews `advisory` / `3` before creation, but **Create default
 orchestrator** writes `strict` / `2`. Check the fields after creating.
 
-While the mode is on, the **Identity & Boundaries** section shadows the deployment persona, the
-other five sections become prompt sections around the Team policy, the declared model is selected
+While the mode is on, the **Identity & Boundaries** section is registered at the
+deployment-persona position (after a configured prefix line), the other five sections become prompt
+sections around the Team policy, the declared model is selected
 (restored on `/orchestrate off` when it was captured in the same process), and the tools list
 becomes the Lead's inherited-tool matrix. The built-in team policy and soul catalog stay in
 place.
@@ -166,7 +167,7 @@ An existing invalid file shows **Invalid** and no resolved model, and cannot ena
 
 | Field | Maps to | What it does |
 |---|---|---|
-| **Identity & Boundaries** | section | The Lead's role, authority, and what it must not do itself. Replaces the deployment persona while the mode is on. |
+| **Identity & Boundaries** | section | The Lead's role, authority, and what it must not do itself. Applied at the deployment-persona position while the mode is on. |
 | **Plan Generation** | section | How to decompose the goal, what a plan contains, when to publish/revise it. |
 | **Delegation & Context Minimization** | section | How to match steps to souls/tools and what context to pass. |
 | **State Tracking** | section | How to use the Team task board as the durable ledger. |
@@ -225,7 +226,10 @@ These summarize a file; they are not editable.
   files, scan diagnostics, and the **Team tool surface** composition. The composition warning
   appears only when the shipped `tool-agent-team` row is still active next to this bundle's row; it
   carries the one-line profile patch, and `manage_agent_souls({ action: "repair_team_tools" })` (or
-  `claimTeamToolRow`) applies that override. Clicking a scan diagnostic opens the named file in the
+  `claimTeamToolRow`) applies that override. On a profile where the Agent Teams bundle layer comes
+  after this bundle (common when that bundle is added later), the bundled patch cannot disable the
+  row; the persisted override is then the effective replacement — keep it while the bundle is
+  installed. Clicking a scan diagnostic opens the named file in the
   editor when it matches a catalog document.
 
 ---

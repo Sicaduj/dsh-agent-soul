@@ -1,8 +1,8 @@
 {
   "name": "@local/dsh-agent-soul",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
-  "description": "Agent Soul definitions for Agent Teams: per-teammate persona, tool permission matrix, model routing, and user-invocable slash commands from Markdown + YAML frontmatter files, editable in Settings > Agent Soul.",
+  "description": "Agent Soul definitions for Agent Teams: per-teammate persona, tool permission matrix, model routing, and user-invocable slash commands from Markdown + YAML frontmatter files, editable in Settings > Agent Soul. Ships a bundled soul catalog and orchestrator doctrine, so /orchestrate works in any workspace right after installation.",
   "type": "module",
   "icon": "./icon.svg",
   "main": "index.js",
@@ -13,6 +13,7 @@
     "./icon": "./icon.svg",
     "./package.json": "./package.json",
     "./agents/*": "./agents/*",
+    "./defaults/*": "./defaults/*",
     "./client": "./client.js"
   },
   "files": [
@@ -23,6 +24,7 @@
     "locale/*.json",
     "icon.svg",
     "agents/*.md",
+    "defaults/*.md",
     "docs/*.md",
     "smoke/*.mjs",
     "smoke/*.ts",

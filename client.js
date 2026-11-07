@@ -341,6 +341,9 @@ window.__ModuleLoader__.load({
       orchestratorMissingTitle: 'No orchestrator definition yet',
       orchestratorMissingBody: 'Create the default definition to describe how the Lead plans, delegates, tracks state, verifies work and recovers from failures.',
       orchestratorConfigured: 'Configured',
+      badgeBundled: 'Bundled',
+      bundledSoulNotice: 'This soul is a bundled default shipped with the plugin. It is read-only here; duplicate it into a workspace soul directory to customize it.',
+      orchestratorBundledHint: 'Using the bundled default doctrine shipped with the plugin. Saving writes a workspace-specific definition at the path above; delete that file to fall back to the bundled default.',
       orchestratorUnconfigured: 'Not created',
       orchestratorBadgePlan: 'Plan-first: {value}',
       orchestratorBadgeGate: 'Gate mode: {mode}',
@@ -684,6 +687,9 @@ window.__ModuleLoader__.load({
       orchestratorMissingTitle: '还没有编排器定义',
       orchestratorMissingBody: '创建默认定义来描述 Lead 如何规划、委托、跟踪状态、验证工作并从失败中恢复。',
       orchestratorConfigured: '已配置',
+      badgeBundled: '内置',
+      bundledSoulNotice: '此 soul 是插件自带的内置默认项，在此处为只读；请将其复制到工作区的 soul 目录后再自定义。',
+      orchestratorBundledHint: '正在使用插件自带的默认编排章程。保存会在上方路径写入当前工作区的专属定义；删除该文件即可恢复内置默认。',
       orchestratorUnconfigured: '未创建',
       orchestratorBadgePlan: '先规划：{value}',
       orchestratorBadgeGate: '把关模式：{mode}',
@@ -1027,6 +1033,9 @@ window.__ModuleLoader__.load({
       orchestratorMissingTitle: 'オーケストレーター定義はまだありません',
       orchestratorMissingBody: '既定の定義を作成し、Lead が計画・委任・状態追跡・検証・復旧をどう行うかを記述してください。',
       orchestratorConfigured: '設定済み',
+      badgeBundled: '同梱',
+      bundledSoulNotice: 'このソウルはプラグイン同梱の既定です。ここでは読み取り専用です。カスタマイズするにはワークスペースのソウルディレクトリに複製してください。',
+      orchestratorBundledHint: 'プラグイン同梱の既定ドクトリンを使用しています。保存すると上記パスにワークスペース固有の定義が書き込まれます。そのファイルを削除すると同梱の既定に戻ります。',
       orchestratorUnconfigured: '未作成',
       orchestratorBadgePlan: '計画優先: {value}',
       orchestratorBadgeGate: 'ゲートモード: {mode}',
@@ -1370,6 +1379,9 @@ window.__ModuleLoader__.load({
       orchestratorMissingTitle: 'Noch keine Orchestrator-Definition',
       orchestratorMissingBody: 'Erstelle die Standarddefinition, um zu beschreiben, wie der Lead plant, delegiert, Zustand verfolgt, Arbeit prüft und sich von Fehlern erholt.',
       orchestratorConfigured: 'Konfiguriert',
+      badgeBundled: 'Mitgeliefert',
+      bundledSoulNotice: 'Dieser Soul ist eine mitgelieferte Vorgabe des Plugins. Er ist hier schreibgeschützt; dupliziere ihn in ein Soul-Verzeichnis des Arbeitsbereichs, um ihn anzupassen.',
+      orchestratorBundledHint: 'Es wird die mitgelieferte Standard-Doktrin des Plugins verwendet. Speichern schreibt eine arbeitsbereichsspezifische Definition an den oben genannten Pfad; wird diese Datei gelöscht, gilt wieder die mitgelieferte Vorgabe.',
       orchestratorUnconfigured: 'Nicht erstellt',
       orchestratorBadgePlan: 'Plan zuerst: {value}',
       orchestratorBadgeGate: 'Gate-Modus: {mode}',
@@ -1713,6 +1725,9 @@ window.__ModuleLoader__.load({
       orchestratorMissingTitle: 'Aucune définition d’orchestrateur pour l’instant',
       orchestratorMissingBody: 'Créez la définition par défaut pour décrire comment le Lead planifie, délègue, suit l’état, vérifie le travail et récupère des échecs.',
       orchestratorConfigured: 'Configuré',
+      badgeBundled: 'Intégré',
+      bundledSoulNotice: 'Cette âme est une valeur par défaut fournie avec le plugin. Elle est en lecture seule ici ; dupliquez-la dans un répertoire d’âmes de l’espace de travail pour la personnaliser.',
+      orchestratorBundledHint: 'La doctrine par défaut fournie avec le plugin est utilisée. L’enregistrement écrit une définition propre à l’espace de travail au chemin ci-dessus ; supprimez ce fichier pour revenir à la doctrine intégrée.',
       orchestratorUnconfigured: 'Non créé',
       orchestratorBadgePlan: 'Plan d’abord : {value}',
       orchestratorBadgeGate: 'Mode de contrôle : {mode}',
@@ -2056,6 +2071,9 @@ window.__ModuleLoader__.load({
       orchestratorMissingTitle: 'Aún no hay definición del orquestador',
       orchestratorMissingBody: 'Crea la definición predeterminada para describir cómo el Lead planifica, delega, hace seguimiento del estado, verifica el trabajo y se recupera de fallos.',
       orchestratorConfigured: 'Configurado',
+      badgeBundled: 'Integrado',
+      bundledSoulNotice: 'Esta alma es un valor predeterminado incluido con el plugin. Aquí es de solo lectura; duplíquela en un directorio de almas del espacio de trabajo para personalizarla.',
+      orchestratorBundledHint: 'Se está usando la doctrina predeterminada incluida con el plugin. Guardar escribe una definición propia del espacio de trabajo en la ruta anterior; elimine ese archivo para volver a la definición integrada.',
       orchestratorUnconfigured: 'Sin crear',
       orchestratorBadgePlan: 'Planificar primero: {value}',
       orchestratorBadgeGate: 'Modo de control: {mode}',
@@ -2399,6 +2417,9 @@ window.__ModuleLoader__.load({
       orchestratorMissingTitle: 'Определения оркестратора пока нет',
       orchestratorMissingBody: 'Создайте определение по умолчанию, чтобы описать, как Lead планирует, делегирует, отслеживает состояние, проверяет работу и восстанавливается после сбоев.',
       orchestratorConfigured: 'Настроен',
+      badgeBundled: 'Встроенный',
+      bundledSoulNotice: 'Эта душа — встроенное значение плагина по умолчанию. Здесь она доступна только для чтения; скопируйте её в каталог душ рабочего пространства, чтобы настроить.',
+      orchestratorBundledHint: 'Используется встроенная доктрина плагина по умолчанию. Сохранение запишет определение для текущего рабочего пространства по указанному выше пути; удалите этот файл, чтобы вернуться к встроенной доктрине.',
       orchestratorUnconfigured: 'Не создан',
       orchestratorBadgePlan: 'Сначала план: {value}',
       orchestratorBadgeGate: 'Режим контроля: {mode}',
@@ -2742,6 +2763,9 @@ window.__ModuleLoader__.load({
       orchestratorMissingTitle: 'Ainda não há definição do orquestrador',
       orchestratorMissingBody: 'Crie a definição padrão para descrever como o Lead planeja, delega, acompanha o estado, verifica o trabalho e se recupera de falhas.',
       orchestratorConfigured: 'Configurado',
+      badgeBundled: 'Embutido',
+      bundledSoulNotice: 'Esta alma é um padrão incluído no plugin. Aqui ela é somente leitura; duplique-a em um diretório de almas do espaço de trabalho para personalizá-la.',
+      orchestratorBundledHint: 'Usando a doutrina padrão incluída no plugin. Salvar grava uma definição específica do espaço de trabalho no caminho acima; exclua esse arquivo para voltar à doutrina incluída.',
       orchestratorUnconfigured: 'Não criado',
       orchestratorBadgePlan: 'Planejar primeiro: {value}',
       orchestratorBadgeGate: 'Modo de controle: {mode}',
@@ -3124,6 +3148,11 @@ window.__ModuleLoader__.load({
 
     /**
      * Defensive view of one orchestrator GET/POST payload.
+     *
+     * `bundled` and `sourcePath` describe the effective document origin (a
+     * packaged default versus a workspace file); the Orchestrator tab renders
+     * its Bundled badge and hint from them, so they must survive normalization.
+     *
      * @param {unknown} value - the `orchestrator` object.
      * @returns {object} complete definition state for the page.
      */
@@ -3132,6 +3161,8 @@ window.__ModuleLoader__.load({
       return {
         path: typeof record.path === 'string' ? record.path : '',
         configured: record.configured === true,
+        bundled: record.bundled === true,
+        sourcePath: typeof record.sourcePath === 'string' ? record.sourcePath : null,
         source: typeof record.source === 'string' ? record.source : '',
         valid: record.valid !== false,
         diagnostics: Array.isArray(record.diagnostics) ? record.diagnostics : [],
@@ -7065,6 +7096,9 @@ window.__ModuleLoader__.load({
                 : 'agent-soul-badge agent-soul-badge-ok',
             }, document.valid === false ? t('badgeInvalid') : t('badgeValid')),
           ]
+          if (document.bundled === true) {
+            badges.push(badge(t('badgeBundled'), 'agent-soul-badge-active', 'bundled'))
+          }
           if (Array.isArray(document.tools)) {
             badges.push(badge(document.tools.length === 0
               ? t('badgeNoTools')
@@ -7223,6 +7257,7 @@ window.__ModuleLoader__.load({
       const buildEditorForm = function () {
         const fields = draft.fields !== null && typeof draft.fields === 'object' ? draft.fields : {}
         const sections = draft.sections !== null && typeof draft.sections === 'object' ? draft.sections : {}
+        const bundledDocument = draft.bundled === true
         const currentProvider = typeof fields.provider === 'string' ? fields.provider : ''
         const currentModel = typeof fields.model === 'string' ? fields.model : ''
         const currentTools = typeof fields.tools === 'string' ? fields.tools : ''
@@ -7782,6 +7817,15 @@ window.__ModuleLoader__.load({
                 disabled: busyLocked,
               }, t('cancelButton')))))
 
+        const bundledNotice = !bundledDocument ? null : h('section', {
+          className: 'agent-soul-banner',
+          role: 'status',
+          'aria-label': t('badgeBundled'),
+        },
+          h('div', { className: 'agent-soul-banner-copy' },
+            h('p', { className: 'agent-soul-banner-title' }, t('badgeBundled')),
+            h('p', { className: 'agent-soul-banner-text' }, t('bundledSoulNotice'))))
+
         const draftBanner = draftOffer === null ? null : h('section', {
           className: 'agent-soul-banner',
           role: 'status',
@@ -7887,7 +7931,8 @@ window.__ModuleLoader__.load({
             type: 'button',
             className: 'agent-soul-primary-button',
             onClick: function () { void saveDocument() },
-            disabled: busyLocked,
+            disabled: busyLocked || bundledDocument,
+            title: bundledDocument ? t('bundledSoulNotice') : undefined,
           }, busy === 'save' ? t('savingButton') : t('saveButton')),
           h('button', {
             type: 'button',
@@ -7904,9 +7949,9 @@ window.__ModuleLoader__.load({
             },
             disabled: busyLocked || dirty,
           }, t('duplicateButton')),
-          deleteControl)
+          bundledDocument ? null : deleteControl)
         return {
-          notices: h(React.Fragment, null, draftBanner, conflictBanner, fieldErrorSummary),
+          notices: h(React.Fragment, null, bundledNotice, draftBanner, conflictBanner, fieldErrorSummary),
           body: h(React.Fragment, null,
             editorMeta,
             modeBar,
@@ -8787,6 +8832,9 @@ window.__ModuleLoader__.load({
             value: fields.pauseOnFatal ? t('valueOn') : t('valueOff'),
           }), undefined, 'pause-on-fatal'))
         }
+        if (record.bundled === true) {
+          badges.push(badge(t('badgeBundled'), 'agent-soul-badge-active', 'bundled'))
+        }
         const missing = record.configured ? null : h('div', { className: 'agent-soul-empty' },
           h('p', { className: 'agent-soul-empty-title' }, t('orchestratorMissingTitle')),
           h('p', { className: 'agent-soul-empty-body' }, t('orchestratorMissingBody')),
@@ -8821,6 +8869,9 @@ window.__ModuleLoader__.load({
               title: record.path === '' ? undefined : record.path,
             }, record.path === '' ? '—' : record.path)),
           h('div', { className: 'agent-soul-badges' }, badges),
+          record.bundled === true
+            ? h('p', { className: 'agent-soul-field-hint' }, t('orchestratorBundledHint'))
+            : null,
           missing,
           diagnostics,
           activation,

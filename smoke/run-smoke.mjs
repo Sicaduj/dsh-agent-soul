@@ -25,6 +25,16 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { expectedSoulTools } from './contract.mjs'
+import { BUNDLED_SOULS_DIR, createCatalog } from '../lib/soul.js'
+import { readOrchestrator } from '../lib/orchestrator.js'
+import {
+  createDocument,
+  deleteDocument,
+  duplicateDocument,
+  listDocuments,
+  readDocument,
+  saveDocumentSource,
+} from '../lib/admin.js'
 
 const smokeDir = dirname(fileURLToPath(import.meta.url))
 const pluginDir = resolve(smokeDir, '..')
@@ -58,7 +68,7 @@ async function readObservations(path) {
 
 /** Publish the smoke soul definition into the workspace watched by the run. */
 async function writeSoul(root) {
-  const dir = join(root, 'agents')
+  const dir = join(root, '.dsh', 'agents')
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, 'probe.md'), `---
 name: probe
@@ -96,7 +106,7 @@ One short report through send_message.
  * and execution through the real commands service.
  */
 async function writeCommandSoul(root) {
-  const dir = join(root, 'agents')
+  const dir = join(root, '.dsh', 'agents')
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, 'probe-cli.md'), `---
 name: probe-cli
@@ -231,11 +241,173 @@ async function main() {
   const root = await mkdtemp(join(tmpdir(), 'dsh-soul-smoke-'))
   const home = join(root, '.dsh')
   const observationsPath = join(root, 'observations.jsonl')
-  const bindingsPath = join(root, 'state', 'bindings.json')
+  const bindingsPath = join(root, '.dsh', 'agent-soul', 'bindings.json')
   try {
     await writeSoul(root)
     await writeCommandSoul(root)
     await writeProfile(home)
+
+    // Bundled defaults are workspace-independent: a brand-new workspace with no
+    // plugin files at all must already see the shipped catalog and doctrine.
+    const emptyWorkspace = join(root, 'empty-workspace')
+    await mkdir(emptyWorkspace, { recursive: true })
+    const looseConfig = { dirs: ['.dsh/agents'], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
+    const looseCatalog = createCatalog({ dirs: looseConfig.dirs, bundled: true })
+    const looseSnapshot = await looseCatalog.refresh(emptyWorkspace)
+    check(
+      'bundled soul catalog is available in an empty workspace',
+      looseSnapshot.definitions.some(definition => definition.name === 'generalist'),
+      JSON.stringify(looseSnapshot.definitions.map(definition => definition.name)),
+    )
+    const looseOrchestrator = await readOrchestrator({ config: looseConfig, root: emptyWorkspace })
+    check(
+      'bundled orchestrator doctrine fills a missing workspace definition',
+      looseOrchestrator.ok === true && looseOrchestrator.orchestrator.configured === true
+        && looseOrchestrator.orchestrator.bundled === true && looseOrchestrator.orchestrator.valid === true,
+      looseOrchestrator.ok ? JSON.stringify(looseOrchestrator.orchestrator.diagnostics) : looseOrchestrator.message,
+    )
+    const strictOrchestrator = await readOrchestrator({ config: { ...looseConfig, bundled: false }, root: emptyWorkspace })
+    check(
+      'config.bundled=false keeps the strict workspace-only behavior',
+      strictOrchestrator.ok === true && strictOrchestrator.orchestrator.configured === false,
+      strictOrchestrator.ok ? JSON.stringify(strictOrchestrator.orchestrator.configured) : strictOrchestrator.message,
+    )
+
+    // Filesystem safety of the document layer, checked directly against temp
+    // workspaces: the implicit soul-directory creation must not follow a
+    // symlinked ancestor, and the packaged catalog must stay read-only however a
+    // configuration aliases it. The packaged file is restored in `finally`, so a
+    // regression here reports a failure instead of leaving the checkout mutated.
+    const probeRoot = join(root, 'module-probes')
+    const bundledFile = join(BUNDLED_SOULS_DIR, 'generalist.md')
+    const bundledSource = await readFile(bundledFile, 'utf8')
+    try {
+      await mkdir(probeRoot, { recursive: true })
+      const escapeRoot = join(probeRoot, 'escape')
+      const escapeWorkspace = join(escapeRoot, 'workspace')
+      const escapeOutside = join(escapeRoot, 'outside')
+      await mkdir(escapeWorkspace, { recursive: true })
+      await mkdir(escapeOutside, { recursive: true })
+      await symlink(escapeOutside, join(escapeWorkspace, '.dsh'), process.platform === 'win32' ? 'junction' : 'dir')
+      const escapeConfig = { dirs: ['.dsh/agents'], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
+      const escapedCreate = await createDocument({ config: escapeConfig, root: escapeWorkspace, name: 'escaped-soul' })
+      check(
+        'symlinked .dsh cannot auto-create a soul outside the workspace',
+        escapedCreate.ok === false,
+        escapedCreate.ok ? escapedCreate.document.file : escapedCreate.code,
+      )
+      check(
+        'refused auto-create leaves the outside directory empty',
+        (await readdir(escapeOutside)).length === 0,
+        JSON.stringify(await readdir(escapeOutside)),
+      )
+      const escapedDuplicate = await duplicateDocument({
+        config: escapeConfig,
+        root: escapeWorkspace,
+        file: bundledFile,
+        name: 'escaped-copy',
+      })
+      check(
+        'symlinked .dsh cannot duplicate a bundled soul outside the workspace',
+        escapedDuplicate.ok === false,
+        escapedDuplicate.ok ? escapedDuplicate.document.file : escapedDuplicate.code,
+      )
+      check(
+        'refused duplicate leaves the outside directory empty',
+        (await readdir(escapeOutside)).length === 0,
+        JSON.stringify(await readdir(escapeOutside)),
+      )
+
+      const aliasWorkspace = join(probeRoot, 'alias-workspace')
+      await mkdir(aliasWorkspace, { recursive: true })
+      await symlink(BUNDLED_SOULS_DIR, join(aliasWorkspace, 'agents-alias'), process.platform === 'win32' ? 'junction' : 'dir')
+      const absoluteConfig = { dirs: [BUNDLED_SOULS_DIR], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
+      const symlinkConfig = { dirs: ['agents-alias'], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
+      const mutatedSource = `${bundledSource}\n`
+      const directSave = await saveDocumentSource({
+        config: absoluteConfig,
+        root: aliasWorkspace,
+        file: bundledFile,
+        source: mutatedSource,
+      })
+      check(
+        'a configured absolute alias of the packaged directory refuses saveDocumentSource',
+        directSave.ok === false,
+        directSave.ok ? directSave.file : directSave.code,
+      )
+      const directDelete = await deleteDocument({ config: absoluteConfig, root: aliasWorkspace, file: bundledFile })
+      check(
+        'a configured absolute alias of the packaged directory refuses deleteDocument',
+        directDelete.ok === false,
+        directDelete.ok ? directDelete.file : directDelete.code,
+      )
+      const aliasFile = join(aliasWorkspace, 'agents-alias', 'generalist.md')
+      const symlinkSave = await saveDocumentSource({
+        config: symlinkConfig,
+        root: aliasWorkspace,
+        file: aliasFile,
+        source: mutatedSource,
+      })
+      check(
+        'a symlink alias of the packaged directory refuses saveDocumentSource',
+        symlinkSave.ok === false,
+        symlinkSave.ok ? symlinkSave.file : symlinkSave.code,
+      )
+      const symlinkDelete = await deleteDocument({ config: symlinkConfig, root: aliasWorkspace, file: aliasFile })
+      check(
+        'a symlink alias of the packaged directory refuses deleteDocument',
+        symlinkDelete.ok === false,
+        symlinkDelete.ok ? symlinkDelete.file : symlinkDelete.code,
+      )
+      const packagedAfterWrites = await readFile(bundledFile, 'utf8').catch(() => '')
+      check(
+        'refused bundled writes leave the packaged file unchanged',
+        packagedAfterWrites === bundledSource,
+      )
+      const aliasListing = await listDocuments({ config: symlinkConfig, root: aliasWorkspace })
+      const aliasRows = aliasListing.documents.filter(row => row.name === 'generalist')
+      check(
+        'a configured alias of the packaged directory lists its souls as bundled',
+        aliasRows.length === 1 && aliasRows[0].bundled === true,
+        JSON.stringify(aliasRows.map(row => ({ name: row.name, bundled: row.bundled }))),
+      )
+      const aliasDetail = await readDocument({ config: symlinkConfig, root: aliasWorkspace, file: aliasFile })
+      check(
+        'read detail classifies an aliased bundled soul as bundled',
+        aliasDetail.ok === true && aliasDetail.document.bundled === true,
+        aliasDetail.ok ? String(aliasDetail.document.bundled) : aliasDetail.message,
+      )
+
+      const duplicateWorkspace = join(probeRoot, 'duplicate-workspace')
+      await mkdir(duplicateWorkspace, { recursive: true })
+      const defaultConfig = { dirs: ['.dsh/agents'], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
+      const duplicated = await duplicateDocument({
+        config: defaultConfig,
+        root: duplicateWorkspace,
+        file: bundledFile,
+        name: 'generalist-copy',
+      })
+      check(
+        'duplicating a bundled soul into a fresh workspace succeeds',
+        duplicated.ok === true,
+        duplicated.ok ? duplicated.document.file : duplicated.message,
+      )
+      const duplicateFile = join(duplicateWorkspace, '.dsh', 'agents', 'generalist-copy.md')
+      const duplicateText = await readFile(duplicateFile, 'utf8').catch(() => '')
+      check(
+        'the bundled-soul duplicate lands under the workspace soul directory',
+        duplicated.ok === true && duplicated.document.file === duplicateFile && duplicateText.includes('name: generalist-copy'),
+        duplicated.ok ? duplicated.document.file : duplicateFile,
+      )
+    } finally {
+      let current = null
+      try {
+        current = await readFile(bundledFile, 'utf8')
+      } catch {
+        current = null
+      }
+      if (current !== bundledSource) await writeFile(bundledFile, bundledSource, 'utf8')
+    }
 
     // The plugin's own patch must replace the shipped Team tool row in a fresh
     // profile whose bundle order is the documented one: the Agent Teams bundle

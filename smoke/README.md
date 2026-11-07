@@ -52,3 +52,46 @@ for the two scripted turns and records observations to a JSON Lines file. The ha
 requires the DSH source checkout (default `/Users/zosyn/LLM/deepseek-harness`; set
 `DSH_CHECKOUT` to point elsewhere) because it launches the CLI from TypeScript source with
 `tsx`.
+
+## Focused QAS-F001/QAS-F002 remediation regressions
+
+The additional module tests exercise the real binding store with temporary files and the real admin
+tool registration with a capturing registry. They cover independent roots/store instances, eight
+primed OS processes, canonical symlink aliases, same-root mutation journaling, deletion without
+resurrection, read/write failure recovery, equal-timestamp and newest-500 retention, bounded lock
+contention, detached snapshots, and all three orchestrator-read variants against the registered
+closed output schema:
+
+```sh
+node --test smoke/remediation-bindings.test.mjs smoke/remediation-admin.test.mjs
+```
+
+The focused real-runtime harness boots fresh headless CLI processes with scripted models and
+`claimTeamToolRow: false`. It never installs or repairs the real profile. By default it creates a
+new run root under the OS temporary directory; set `QAS_RUN_ROOT` to retain evidence in a chosen
+new disposable directory. Every invocation creates fresh timestamp-unique work/evidence folders
+rather than rewriting an earlier attempt:
+
+```sh
+QAS_RUN_ROOT=/path/to/new/disposable-run \
+DSH_CHECKOUT=/path/to/deepseek-harness \
+node smoke/remediation-runtime.mjs --target candidate --only all
+```
+
+It primes two real plugin stores in separate processes before concurrently spawning through a
+shared absolute bindings file, then uses actual process recreation to check cold resume and
+fail-closed missing-binding behavior. It also invokes `get_orchestrator` through the registered
+tools/results pipeline for bundled, valid-workspace, and invalid-workspace definitions, checks exact
+source/path results and unchanged digests, and observes writes during the read. The model adapter is
+a fixture: this is runtime evidence, not model-quality, paid-provider, or rendered-browser evidence.
+
+For a before/after comparison, reconstruct the original plugin commit in a separate archive and
+name it explicitly. The baseline mode succeeds only when it reproduces one lost binding plus cold
+refusal and the exact `INVALID_TOOL_OUTPUT` defects; do not point it at a live installation:
+
+```sh
+QAS_RUN_ROOT=/path/to/new/disposable-baseline-run \
+QAS_BASELINE_DIR=/path/to/archived-original-plugin \
+DSH_CHECKOUT=/path/to/deepseek-harness \
+node smoke/remediation-runtime.mjs --target baseline --only all
+```

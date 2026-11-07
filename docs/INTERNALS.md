@@ -562,9 +562,14 @@ Lead's Agent scope.
 - On first use it reads the configured file. Missing files are an empty store. Unsupported versions,
   unreadable files, and malformed JSON log a warning and empty the store; individual malformed
   records are dropped.
-- `set` writes the smallest record needed to re-apply a soul, stamps `savedAt`, prunes to the
-  newest 500 per root, and serializes writes per root through a promise chain. Each write is a
-  temp file in the same directory plus `rename`.
+- `set` writes the smallest record needed to re-apply a soul and stamps `savedAt`. Each root
+  queues persistence attempts; a filesystem lock at the **canonical bindings pathname** coordinates
+  different roots, store instances, and cooperating processes. Under that lock the writer re-reads
+  the latest document, applies only its uncommitted sets/deletes, and prunes to the newest 500
+  records. Equal timestamps retain the prior stable insertion-order pruning rule. Each replacement
+  uses a uniquely named temp file in the same directory plus `rename`, with normal-error cleanup.
+  Failed attempts keep local mutations for a later healthy write; cached snapshots are never
+  merged wholesale, so another writer's updates, deletions, or retention pruning are not undone.
 - `get` returns the applied snapshot; `list` returns detached rows newest first (`childId`, `name`,
   `tools`, `model`, `context`, `sourceLabel`, `savedAt`); `size` returns the retained count; `flush`
   waits for pending writes; `dispose` flushes and clears.
@@ -757,8 +762,32 @@ parser itself does not require any of the four headings; the document layer uses
 ```
 
 `model` is `null` when the soul inherited the Lead's model; `context` may be `null`;
-`sourceLabel` may be `null` in old records. The store retains the newest 500 records per root.
-Writes are per-root serialized; a temp file and `rename` make each document replacement atomic.
+`sourceLabel` may be `null` in old records. The store retains the newest 500 records **per
+bindings document**: normally one per workspace root. An intentionally shared absolute
+`bindingsFile` shares both the child-id keyspace and the retention budget; it does not create a
+second root namespace. Use the default workspace-relative file for separate workspace state.
+Reads remain lazy per-root caches; a fresh store sees the complete shared document. Returned
+snapshots/rows are detached as before. No on-disk format migration is needed.
+
+Writes use canonical-file read/modify/write transactions. Existing file and parent-directory
+symlink aliases resolve to the same target (including not-yet-created parent directories);
+dangling symlinks refuse persistence rather than being replaced. A sibling `<canonical-file>.lock`
+directory excludes cooperating writers across processes. The writer waits at most five seconds
+(monotonic time), then logs a persistence warning while retaining the in-memory plan and pending
+mutations. It never steals a lock merely because it is old. Other bindings files make progress
+independently. A temp file and `rename` make each complete JSON replacement atomic.
+
+**Crash recovery and coordination limits.** Every writer sharing a document must use this locking
+protocol; older plugin versions, external editors, hard-link aliases, and network filesystems
+without local atomic mkdir/rename semantics are not coordinated. A process killed while holding
+the lock can leave its empty lock directory (and possibly its uniquely named temp file). Stop
+**all** processes using that bindings document, verify the resolved lock/temp paths and that no
+writer is active, then remove only the stale lock and abandoned temp files. Do not delete or
+restore over the bindings document. Restart/retry afterward. There is no automatic stale-lock
+reclamation or fsync/power-loss durability guarantee. A transactional read I/O error aborts the
+replacement rather than overwriting unknown shared data; corrupt/unsupported JSON retains the
+existing warning-and-replace-on-next-write recovery behavior. Cold-resume admission remains
+fail-closed if the required binding is absent.
 
 ### Preferences document
 
@@ -1170,8 +1199,9 @@ in this candidate. See [`../smoke/README.md`](../smoke/README.md).
   `SOUL_PLAN_UNAVAILABLE` and a `reason`, and `list_agent_souls` returns it with
   `source: "admission:<teammate>"`. The shared subagent lifecycle's generic `is unavailable` wrapper
   is unchanged. The 500-record cap can drop older cold-resume data; a pruned record blocks that
-  resume until re-spawn. Writes are serialized per root; a failed write logs and does not fail the
-  spawn. At plugin activation, pre-existing live teammates without a plan are skipped with a warning
+  resume until re-spawn. Writes are serialized per root and by canonical file across processes;
+  a failed write logs and does not fail the spawn. At plugin activation, pre-existing live teammates
+  without a plan are skipped with a warning
   and no Team tools rather than failing the whole plugin.
 - **Fork history.** A fork teammate inherits the Lead's completed turns, which may mention tools the
   soul's matrix excludes. The restriction still prevents those calls, but the model sees the

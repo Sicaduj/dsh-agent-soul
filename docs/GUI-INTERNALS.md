@@ -21,7 +21,7 @@ handlers in `lib/gui-host.js` and must be checked against them.
 | `lib/soul.js` | parse/validate one soul Markdown document (frontmatter + body), catalog scanning and prompt text |
 | `lib/tools.js` | ported Team tools (`spawn_teammate`, messaging, task board) + `team:policy`, `team:identity`, `team:agent-souls` prompt sections |
 | `lib/composition.js` | live Loader inspection of the replaced `tool-agent-team` row (Plugin Manager listing fallback when the Web profile does not expose the Loader), Plugin Manager repair, opt-in `claimTeamToolRow` guard |
-| `lib/apply.js` | applies a soul to a spawned or cold-resumed teammate: fail-closed plan resolution (pending plan, then durable binding), persona shadow, sections, tool matrix, model route, binding record |
+| `lib/apply.js` | applies a soul to a spawned or cold-resumed teammate: fail-closed plan resolution (pending plan, then durable binding), persona section at the deployment-persona order, sections, tool matrix, model route, binding record |
 | `lib/commands.js` | registers one Lead-scoped slash command per user-invocable soul |
 | `lib/admin.js` | GUI/agent-tool document layer: split/compose/validate, directory scanning, path safety, atomic writes, trash |
 | `lib/gui-host.js` | authenticated JSON routes + overview assembly; workspace-root selection; command/usage/health status |
@@ -873,7 +873,7 @@ soul catalog text; unknown variables stay literal).
   settled as `kind: 'error'` is skipped, so the mode is the last qualifying run's value. Unreadable
   log ⇒ off.
 - Enable (live Lead scope, via a per-agent `agent.ctx.effect` bundle):
-  - shadow `deployment:persona-prefix` (persona order) with a fixed runtime identity followed by the
+  - register at the persona order a fixed runtime identity followed by the
   **Identity & Boundaries** text: the fixed wording names the orchestrator role and the soul-only
   delegation rule, so editing (or emptying) the document cannot remove the runtime identity;
   - register sections `orchestrator:plan` (order `TEAM_POLICY − 100`), `orchestrator:delegation`

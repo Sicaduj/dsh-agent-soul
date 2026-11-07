@@ -8,8 +8,10 @@
 # If the Agent Teams bundle is enabled after this bundle, this layer's disable above
 # targets a row that does not exist yet and is skipped; `claimTeamToolRow: true` asks the
 # plugin to persist the same `tool-agent-team` override through the Plugin Manager after
-# the Loader tree settles. Set it to false to keep the plugin from touching profile
-# composition (repair then remains available as the explicit manage_agent_souls action).
+# the Loader tree settles. In that mis-ordered profile the persisted profile override, not this
+# patch, is the effective composition owner: keep it while this bundle is installed.
+# Set it to false to keep the plugin from touching profile composition (repair then remains
+# available as the explicit manage_agent_souls action).
 #
 # This row carries no workspace-relative paths, so one installation is portable: every
 # Session resolves user content against its own workspace root. The package itself ships

@@ -122,6 +122,7 @@ malformed values throw, which fails activation rather than running with half-app
 // Config passed to the modules. Values below are the defaults; ranges are enforced.
 {
   dirs: ['.dsh/agents'],                 // non-empty string[]; absolute, ~/…, or workspace-relative
+  bundled: true,                         // boolean; append the package catalog + default doctrine
   commandPrefix: '',                     // /^[a-z0-9_-]*$/
   maxDefinitions: 64,                    // integer 1..1000
   maxPromptChars: 12000,                 // integer 1000..200000
@@ -134,9 +135,28 @@ malformed values throw, which fails activation rather than running with half-app
 }
 ```
 
-The bundled [`cordis.patch.yml`](../cordis.patch.yml) overrides `dirs` to `agents` and
-`bindingsFile` to `state/bindings.json`, both relative to the session workspace root. The Session
-root must be the project directory itself when using the bundled catalog and state.
+The bundled [`cordis.patch.yml`](../cordis.patch.yml) deliberately sets no paths: one installation is
+portable, and every Session resolves user content against its own workspace root. The package
+resolves its own bundled assets from `import.meta.url` (so a linked checkout, a profile package
+copy, and a source run behave the same):
+
+- `lib/soul.js` exports `BUNDLED_SOULS_DIR` (`<package>/agents`); with `bundled` enabled the catalog
+  scan appends it after the configured directories. A local soul with the same name shadows the
+  bundled copy and suppresses the duplicate diagnostic.
+- `lib/orchestrator.js` exports `BUNDLED_ORCHESTRATOR_PATH` (`<package>/defaults/orchestrator.md`);
+  when the workspace definition is absent and `bundled` is enabled, `readOrchestrator` reports the
+  packaged source as the effective detail (`configured: true`, `bundled: true`, `sourcePath` set,
+  `path` still the writable workspace target).
+- `lib/admin.js` exposes `bundledSoulsDir(config)` and lists bundled souls as read-only documents
+  (`bundled: true`). The packaged-directory check is canonical (`realpath`) and runs before any
+  configured-directory match, so an absolute path, workspace-relative alias, or symlink to
+  `<package>/agents` is still classified bundled and `resolveTarget` refuses writes/deletes there
+  with a message telling the caller to duplicate the soul into a workspace directory;
+  `writableDirs` excludes that canonical directory from writable targets. `writableDirs` also
+  creates the first workspace-relative configured directory on demand so a fresh workspace can save
+  a new soul, but only after resolving the real workspace root and the real nearest existing
+  ancestor with `realpath`: an ancestor outside the real workspace refuses the creation (nothing is
+  written), and the created directory is canonically re-checked before it is returned.
 
 The `deps` object is built once by `index.js` and passed unchanged to every module:
 
@@ -284,7 +304,11 @@ direct duplicate adds no roster member, pending plan, or binding.
 
 - `lib/soul.js` scans configured directories recursively for `*.md`, skips dot entries and
   `node_modules`, limits depth to 8, and sorts entries for stable output. Missing directories are
-  not diagnostics. Each file is strict-parsed; a file with any diagnostic is skipped and reported.
+  not diagnostics. With `bundled` enabled (the default) the package `agents/` directory is scanned
+  last, after the configured directories, so installs expose the bundled souls in every workspace;
+  a local definition with the same name shadows the bundled one and the duplicate diagnostic is
+  suppressed for the shadowed packaged copy. Each file is strict-parsed; a file with any diagnostic
+  is skipped and reported.
   A file with `name: lead` produces the reserved-name diagnostic and no definition: it stays visible
   to the GUI as invalid but is absent from `definitions`/`byName`, the prompt catalog, and spawn
   resolution. Duplicate names keep the first file (scan order: configured directories in order,
@@ -427,8 +451,12 @@ outcome is qualified in step 10 under **Enable**).
 **Enable.** `runtime.enable(agent)` calls
 `applyTo(agent, { capturePrevious: true, renameTitle: true })`:
 
-1. Read the definition (`<dirname(bindingsFile)>/orchestrator.md`). Missing or invalid is an error
-   before any state is touched, so the mode is unchanged. This is the only visible activation
+1. Read the definition (`<dirname(bindingsFile)>/orchestrator.md`). When that workspace file is
+   absent and `bundled` is enabled (the default), the packaged
+   [`defaults/orchestrator.md`](../defaults/orchestrator.md) is the effective document; only when
+   neither exists (or `bundled: false` and the workspace file is absent) is a missing definition an
+   error — reported before any state is touched, so the mode is unchanged. An invalid document is
+   likewise an error. This is the only visible activation
    surface: a successful enable answers
    with `ORCHESTRATOR MODE ACTIVE` plus identity/path/model/gate/retries (a failed enable answers
    with the error instead).
@@ -698,6 +726,7 @@ parser itself does not require any of the four headings; the document layer uses
 // {
 //   root: string,                    // absolute
 //   dirs: string[],                  // absolute directories that existed at scan time
+//   bundledDir: string | null,       // packaged agents/ when bundled is on and it exists
 //   definitions: SoulDefinition[],
 //   byName: Map<string, SoulDefinition>,
 //   diagnostics: { source: string, message: string }[],
@@ -796,9 +825,13 @@ it omits `model`, `provider`, `reasoning-effort`, and `tools` when they are inhe
 runs `analyzeOrchestrator` (shape plus declaration-level route consistency), then the optional
 `validate(definition)` live-route layer, creates the parent directory on demand, writes atomically,
 and re-reads. Any refusal returns `invalid` with field-tagged diagnostics and writes nothing, before
-even the path check. `readOrchestrator` returns a valid skeleton with `configured: false` when the
-file is absent; an existing contradictory file reads as `valid: false` with the same diagnostics, and
-`orchestratorSummary` reports it with `modelResolved: null`.
+even the path check. `readOrchestrator` resolves the **effective** document: an existing workspace
+file always wins; when the workspace file is absent and `bundled` is enabled (the default) the
+packaged [`defaults/orchestrator.md`](../defaults/orchestrator.md) is returned with
+`configured: true, bundled: true, sourcePath: <package path>` and `path` still the writable
+workspace target; otherwise it returns a valid skeleton with `configured: false`. An existing
+contradictory file reads as `valid: false` with the same diagnostics, and `orchestratorSummary`
+reports it with `modelResolved: null` and the same `bundled`/`sourcePath` fields.
 
 Extra markdown rules: content before the first canonical heading; content after
 `<!-- orchestrator:extra -->`; and any other `#`/`##` heading with its following lines until a
@@ -967,8 +1000,11 @@ back to the first live Lead), which keeps concurrent Sessions from reporting fal
   require the parent directory to exist already.
 - **Path safety.** Targets are `.md` files inside a resolved soul directory (or the trash
   directory for restore), checked lexically and through `realpath`/`lstat`; symlink escapes are
-  refused. Orchestrator reads and writes share a real-path state-directory fence, including parent
-  symlinks, with a second check after parent creation.
+  refused. The packaged `agents/` directory is fenced canonically before configured-directory
+  matching, so aliases of it stay read-only. Implicit soul-directory creation resolves the real
+  workspace root and the real nearest existing ancestor before `mkdir`, and re-checks the created
+  directory canonically. Orchestrator reads and writes share a real-path state-directory fence,
+  including parent symlinks, with a second check after parent creation.
 - **Canonical JSON schemas.** Tool definitions use object-level `required` arrays, not per-property
   `required: true`. Tool arguments are not registry-validated, so each module validates in
   `execute`. Tool output values are validated against `output.schema` and must be plain JSON (never
@@ -1031,9 +1067,10 @@ back to the first live Lead), which keeps concurrent Sessions from reporting fal
 
 This tree ships **no unit-test suite**: there is no `tests/` directory and no test glob is shipped
 in `package.json`. `node --test tests/*.test.mjs` runs **0 tests** and exits 0 (the unmatched glob
-reaches Node unchanged), so that command proves nothing. **Orchestrator mode currently has no
-automated end-to-end or unit coverage in this candidate**: the smoke harness below does not exercise
-`/orchestrate`, and there is no other suite.
+reaches Node unchanged), so that command proves nothing. **Orchestrator mode activation still has no
+automated end-to-end coverage in this candidate**: the smoke harness does not activate `/orchestrate`,
+but it does verify the bundled-default resolution that makes the command available in any workspace
+(direct module checks against a brand-new empty workspace, plus the `bundled: false` strict path).
 
 The executable checks are syntax checks plus the keyless end-to-end harness:
 
@@ -1050,14 +1087,20 @@ writes to the real workspace `.dsh` or `state/`.
 
 The smoke harness boots a real `dsh --profile headless` process from the DSH source
 checkout with a temporary `DSH_HOME`, the Agent Teams bundle, this bundle selected through its real
-manifest/patch, and a scripted LLM adapter. It first dumps that fresh profile's composed config and
-asserts the shipped `tool-agent-team` row is disabled by this bundle's own patch (the portable
-counterpart of a per-machine profile override), then asserts the Lead catalog, soul spawn, persona
-shadow, exact tool matrices, model routing, user-invocable command execution, durable bindings, and
-credential/proxy/loader scrubbing — **25 checks** in total. The harness passed 25/25 on 2026-11-06
-(a point-in-time result; re-run it with `node smoke/run-smoke.mjs`). It does not cover orchestrator
-mode end-to-end, and orchestrator mode has no other automated coverage in this candidate. See
-[`../smoke/README.md`](../smoke/README.md).
+manifest/patch, and a scripted LLM adapter. It first checks the workspace-independent bundled
+defaults directly (an empty workspace sees the packaged catalog and a valid bundled orchestrator
+doctrine, and `bundled: false` restores the strict workspace-only behavior), exercises the document
+layer's filesystem fence directly (a symlinked `.dsh` cannot auto-create or duplicate outside the
+workspace; a configured absolute, workspace-relative, or symlink alias of the packaged `agents/`
+directory still classifies as `bundled` and refuses save/delete, leaving the packaged file
+unchanged; a bundled-soul duplicate still lands under `<workspace>/.dsh/agents`), then dumps that
+fresh profile's composed config and asserts the shipped `tool-agent-team` row is disabled by this
+bundle's own patch (the portable counterpart of a per-machine profile override), then asserts the
+Lead catalog, soul spawn, persona shadow, exact tool matrices, model routing, user-invocable command
+execution, durable bindings, and credential/proxy/loader scrubbing — **41 checks** in total. The
+harness passed 41/41 on 2026-11-07 (a point-in-time result; re-run it with
+`node smoke/run-smoke.mjs`). Orchestrator mode activation still has no automated end-to-end coverage
+in this candidate. See [`../smoke/README.md`](../smoke/README.md).
 
 ## Sharp edges
 

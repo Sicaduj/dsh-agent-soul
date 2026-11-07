@@ -4,9 +4,13 @@
  * Replaces the shipped `@deepseek-ai/dsh-experimental-tool-agent-team` row with
  * a soul-aware copy of the Team tool surface. A user defines one Markdown
  * file per Agent Soul (YAML frontmatter + role/inputs/rules/output body) in
- * the directories selected by this row's `dirs` config (the bundled patch points at this
- * project's `agents/` directory) reachable from the session workspace; the Team Lead can then
- * start a teammate with
+ * the directories selected by this row's `dirs` config, relative to the session
+ * workspace (default `<workspace>/.dsh/agents`). With `bundled` enabled (the
+ * default), the catalog shipped inside this package (`agents/`) is always
+ * scanned after the configured directories, so the bundled souls are available
+ * in any workspace, and the bundled orchestrator doctrine
+ * (`defaults/orchestrator.md`) fills in when the workspace has no local one.
+ * The Team Lead can then start a teammate with
  * `spawn_teammate({ ..., agent_type: "<name>" })`, a human can invoke a soul
  * through its `/ <name>` slash command, and every teammate started that way runs
  * with:
@@ -50,6 +54,7 @@ const DEFAULT_DIRS = ['.dsh/agents']
 /** Every accepted config key, for the unknown-key warning. */
 const CONFIG_KEYS = new Set([
   'dirs',
+  'bundled',
   'commandPrefix',
   'maxDefinitions',
   'maxPromptChars',
@@ -117,6 +122,7 @@ export function normalizeConfig(raw, logger) {
   }
   const config = {
     dirs: DEFAULT_DIRS,
+    bundled: true,
     commandPrefix: '',
     maxDefinitions: 64,
     maxPromptChars: 12000,
@@ -132,6 +138,10 @@ export function normalizeConfig(raw, logger) {
       throw new TypeError('agent-soul config.dirs must be a non-empty array of directory strings')
     }
     config.dirs = input.dirs.map((dir, index) => stringValue(dir, `dirs[${index}]`))
+  }
+  if (input.bundled !== undefined) {
+    if (typeof input.bundled !== 'boolean') throw new TypeError('agent-soul config.bundled must be a boolean')
+    config.bundled = input.bundled
   }
   if (input.commandPrefix !== undefined) {
     if (typeof input.commandPrefix !== 'string' || !/^[a-z0-9_-]*$/u.test(input.commandPrefix)) {
@@ -248,6 +258,7 @@ export async function apply(ctx, rawConfig) {
   const config = normalizeConfig(rawConfig, logger)
   const catalog = createCatalog({
     dirs: config.dirs,
+    bundled: config.bundled,
     logger,
     maxDefinitions: config.maxDefinitions,
     maxPromptChars: config.maxPromptChars,

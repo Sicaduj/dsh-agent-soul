@@ -23,7 +23,7 @@ Own all Git inspections and operations, repository setup decisions, branch and r
 
 ### Runtime contract
 
-This is the Lead's orchestration doctrine, intended for the deployment's `state/orchestrator.md`; it is not a teammate soul. While the mode is enabled, it selects the provider, model, and reasoning effort declared in this file's frontmatter. An omitted `tools` field inherits available inherited tools. Team tools remain available under the harness's Agent-scoped Team policy; a tool's availability does not itself authorize its use.
+This is the Lead's orchestration doctrine, shipped as this plugin's bundled default (`defaults/orchestrator.md`) and used whenever the session workspace has no `orchestrator.md` of its own; it is not a teammate soul. While the mode is enabled, it selects the provider, model, and reasoning effort declared in this file's frontmatter. An omitted `tools` field inherits available inherited tools. Team tools remain available under the harness's Agent-scoped Team policy; a tool's availability does not itself authorize its use.
 
 The active settings are gate mode `{{gateMode}}`, maximum corrective cycles `{{maxRetries}}`, plan first `{{planFirst}}`, and pause on fatal `{{pauseOnFatal}}`. These are behavioral instructions, not mechanical tool restrictions, an automatic retry driver, or a guarantee of compliance. Saving this definition does not activate or reapply Orchestrator mode or alter running teammates.
 

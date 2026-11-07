@@ -10,11 +10,17 @@ The page is **Settings → Agent Soul** in the Harness Web GUI and has two tabs:
 | Tab | What you edit | One file per… |
 |---|---|---|
 | **Souls** | A catalog of teammate definitions | teammate soul (`agents/*.md`) |
-| **Orchestrator** | The single Lead orchestration definition | deployment (`state/orchestrator.md`) |
+| **Orchestrator** | The single Lead orchestration definition | workspace (`<dirname(bindingsFile)>/orchestrator.md`); falls back to the bundled `defaults/orchestrator.md` |
 
 Editing writes the Markdown file on disk. The **next spawn** (souls) or the **next
 `/orchestrate` / reapply** (orchestrator) uses the new values; running teammates and an
 already-running Orchestrator mode are never modified in place.
+
+Installations ship **bundled defaults**: the five packaged souls under `agents/` and the packaged
+orchestrator doctrine under `defaults/orchestrator.md` are available in every workspace without
+local files. Bundled souls are listed with a **Bundled** badge and are read-only in place — use
+**Duplicate** to create an editable workspace copy. The orchestrator tab shows the bundled doctrine
+until a workspace file overrides it.
 
 ---
 
@@ -26,7 +32,7 @@ already-running Orchestrator mode are never modified in place.
 | **New soul** | Opens the create dialog: a `name` field and a template picker (Blank / Researcher / Code reviewer / Docs writer). Creates the file from the chosen template: the page composes the complete Markdown source (frontmatter + body) and sends it as the new file's initial content. (A create call without template source falls back to the server-side skeleton.) |
 | **Refresh** | Re-fetches the overview (catalog scan, live tools/models, runtime health). Running teammates are unaffected. |
 | **Paste Markdown** | Opens the import dialog: paste a complete soul file, **Parse** it (validates, writes nothing), then import the parsed fields into the current draft or create a new soul from it. |
-| **Create default orchestrator** (Orchestrator tab) | Shown when the orchestrator file (`<dirname(bindingsFile)>/orchestrator.md`) does not exist. Writes a complete six-section definition composed in the page — `name: orchestrator`, no model, tools `*`, plan-first on, gate `strict`, **2** retries, pause-on-fatal on — then opens the editor on the saved file. These are not the values previewed before creation; see ["Where the default values come from"](#where-the-default-values-come-from). |
+| **Create default orchestrator** (Orchestrator tab) | Shown only when there is no effective definition at all — no workspace file and no bundled default (for example `bundled: false`). Writes a complete six-section definition composed in the page — `name: orchestrator`, no model, tools `*`, plan-first on, gate `strict`, **2** retries, pause-on-fatal on — then opens the editor on the saved file. These are not the values previewed before creation; see ["Where the default values come from"](#where-the-default-values-come-from). |
 | **Search** | Filters list cards by name, description, or file path. |
 | **All / User-invocable / AI-only / Invalid** | List filters: every soul, only `user-invocable: true`, only AI-only, or only files that currently fail parsing. |
 | **Sort: Name / Updated** | Sort cards by soul name or by file modification time (newest first). |
@@ -105,7 +111,10 @@ A recovered draft is offered when the page reloads with an unsaved draft in `loc
 ## Orchestrator editor — writable controls
 
 Opened from the Orchestrator tab (**Edit orchestrator**); same resizable dialog, no delete (the file
-is optional). Saving the definition does **not** change a running mode — it is read the next time
+is optional). On a fresh install the tab shows the **Bundled** badge and the bundled-default hint:
+editing loads the packaged doctrine, and saving writes the workspace override at the path shown.
+Delete that workspace file to fall back to the bundled doctrine. Saving the definition does **not**
+change a running mode — it is read the next time
 `/orchestrate` enables the mode (or when an active mode is re-applied after a Host reload / Lead
 creation).
 
@@ -177,6 +186,7 @@ variables stay literal.
 | **Edit orchestrator** | Opens the dialog described above. |
 | **Save / Revert / close** | Same validation, dirty guard, and dialog behavior as the soul editor. The file is single, so there are no duplicate/delete actions and no `expectedHash` conflicts. |
 | **Edit while the mode is on** | Safe but not hot-applied. Re-run `/orchestrate` (or reload the Host / re-create the Lead) to apply the new definition. A failed re-enable rolls back to the previous doctrine when the rollback succeeds (previousStateRestored=true), and if the rollback itself fails the mode ends inactive (previousStateRestored=false) and the error says so. |
+| **Bundled default** | When the tab shows the bundled doctrine (no workspace file), **Edit** loads it and **Save** creates a workspace override at the path shown. The dialog has no delete action for the packaged asset; delete the workspace file to fall back to the bundled default. |
 
 ---
 
@@ -187,6 +197,7 @@ These summarize a file; they are not editable.
 | Badge | Meaning |
 |---|---|
 | **Valid** / **Invalid** | Whether the file parses and validates. Invalid files stay listed and editable; the catalog and spawning skip them. |
+| **Bundled** | This soul comes from the plugin package (`agents/`) rather than a workspace directory. It is read-only in place: the editor disables **Save** and **Delete**, and **Duplicate** creates an editable workspace copy under the configured `dirs` (created on demand). A local soul with the same name shadows the bundled card. |
 | `N tools` / `No tools` / `All tools` | The permission matrix: an allow-list of that size, an empty list (deny every inherited tool), or no list (inherit every inherited tool). |
 | **Model: …** | The resolved `provider/model` when it resolves, otherwise the raw declaration. The badge is absent when the soul inherits the Lead's model. |
 | **Context: fresh/fork** | The declared spawn context. Absent when the soul does not specify one. |
@@ -233,17 +244,19 @@ These summarize a file; they are not editable.
 | Body sections | `# Role Definition`, … | six canonical orchestrator sections |
 | Advanced → Extra frontmatter | unknown YAML keys | — |
 | Extra markdown | preamble body content (before the first canonical heading; the whole body when there is none) | extras: preamble, marker tail, noncanonical headings (moved after the canonical sections on save) |
+| Bundled vs workspace | `agents/` in the package (read-only) vs the configured workspace `dirs` | `defaults/orchestrator.md` in the package (read-only) vs the workspace `<dirname(bindingsFile)>/orchestrator.md` |
 
 ## When an edit takes effect
 
 | Edit | Effect |
 |---|---|
 | Soul field/section saved | Next `spawn_teammate` using that `agent_type`; also next `/command` invocation. Running teammates are not changed. |
+| Bundled content (package upgrade) | The packaged souls (`agents/`) and doctrine (`defaults/orchestrator.md`) are read from the installed package; updating or reinstalling the bundle replaces them for every workspace, while local files still shadow the bundled copies. |
 | Default Soul changed | Next `spawn_teammate` that omits `agent_type`; the page re-reads the overview so the **Default** badge and warning move immediately. A selection that is not in the live catalog makes the next default spawn fail with an actionable error — it never silently falls back to `generalist`. A malformed or corrupt preferences document likewise advertises no effective default and fails the default spawn with its diagnostic; fix or clear it in the selector, or pass an explicit `agent_type`. |
 | Soul renamed | Old name stops resolving for spawn; the old file must be renamed or the new file saved under the new name (delete the old one via the dialog if needed). A command collision clears on the next catalog reconciliation (no Host reload). |
 | Colliding soul deleted or renamed | The stale/failed command entry is dropped and the remaining commands re-register immediately (the page reconciles on the next overview or mutation); no Host reload is needed. |
 | Soul marked invalid (`name: "lead"`, a bad field) | The file stays visible and editable, but it leaves the catalog, cannot spawn, and (if it was invocable) loses its command. Fix the named field and save. |
-| Command prefix / dirs / bindings config changed | After a Host/bundle reload (the page shows the active values read-only). |
+| Command prefix / dirs / bindings config changed | After a Host/bundle reload (the page shows the active values read-only). `bundled` follows the same rule; changing it changes whether the packaged catalog and doctrine apply in every workspace. |
 | Orchestrator definition saved | Next `/orchestrate` enable or re-apply; not an already-running mode. A refused save writes nothing and leaves the previous definition in effect. |
 | `/orchestrate` | A successful enable answers with the **ORCHESTRATOR MODE ACTIVE** block. A failed enable answers with the error. A failure before any state is touched leaves the mode unchanged; a failure while replacing an active doctrine rolls back to the previous doctrine when the rollback succeeds (previousStateRestored=true), and if the rollback itself fails the mode ends inactive (previousStateRestored=false) and the error says so. A successful enable renames the Session to `orchestrator` only when the profile provides a session-title service and the Session has a prior title to restore. Otherwise the block reports the title as unchanged, with the reason (`session-title service unavailable` or `no prior Session title to restore`). |
 | `/orchestrate off` | The captured Lead model is restored first when it was captured in the same process (a restore failure leaves the mode active for an off retry), then the captured Session title is restored only while it is still exactly `orchestrator`, and then the doctrine sections and tool restriction are removed. After a Host reload, with no prior title, or when the profile has no session-title service, there is no captured title to restore. |

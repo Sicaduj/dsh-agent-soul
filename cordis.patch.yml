@@ -11,10 +11,22 @@
 # the Loader tree settles. Set it to false to keep the plugin from touching profile
 # composition (repair then remains available as the explicit manage_agent_souls action).
 #
-# Everything this project owns lives inside the project directory: the live soul catalog
-# in `agents/`, durable resume bindings in `state/`, and the end-to-end harness in `smoke/`.
-# The paths below are relative to the session workspace root. When using this bundled catalog,
-# make that root this project directory itself, not its parent.
+# This row carries no workspace-relative paths, so one installation is portable: every
+# Session resolves user content against its own workspace root. The package itself ships
+# the bundled soul catalog (`agents/`) and the bundled orchestrator doctrine
+# (`defaults/orchestrator.md`). With `bundled: true` (the default) those apply in any
+# workspace that has no local definition, so `/orchestrate` and the bundled souls work
+# immediately after installation, from whichever workspace the person happens to use.
+#
+# Local overrides stay per workspace:
+#   - souls: the configured `dirs` (default `<workspace>/.dsh/agents`), which take
+#     precedence over the bundled catalog for duplicate names;
+#   - orchestrator doctrine: `<dirname(bindingsFile)>/orchestrator.md`
+#     (default `<workspace>/.dsh/agent-soul/orchestrator.md`);
+#   - plugin-owned state: beside the bindings file, default
+#     `<workspace>/.dsh/agent-soul/`.
+# Set `bundled: false` for strictly workspace-scoped content (a missing local definition
+# then makes `/orchestrate` refuse to enable).
 
 - id: tool-agent-team
   disabled: true
@@ -26,6 +38,3 @@
         freshProvider: spawn
         forkProvider: fork
         claimTeamToolRow: true
-        dirs:
-          - agents
-        bindingsFile: state/bindings.json

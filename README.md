@@ -47,6 +47,11 @@ Agent Team (Lead, optionally the orchestrator)
   teammate will receive, and bindings let a resumed teammate recover its soul.
 - **Lead-level orchestration.** One optional orchestrator definition adds plan-first, gating, state
   tracking, verification, and recovery doctrine to the Lead — opt-in per session.
+- **Works from any workspace.** The package ships its own soul catalog (`agents/`) and orchestrator
+  doctrine (`defaults/orchestrator.md`). With the default `bundled: true`, a fresh installation
+  already lists the bundled souls and `/orchestrate` works in every Lead session, in whichever
+  workspace that session was opened; a local soul or workspace `orchestrator.md` shadows the
+  bundled copy without extra configuration.
 - **No soul-less delegation.** The default Soul makes an unmatched task still run under a reviewable
   persona and tool matrix; every new or cold-resumed roster teammate must resolve a Soul plan or be
   refused, and generic `subagent` and `subagent_fork` are unavailable to Team members.
@@ -100,6 +105,14 @@ Agent Team (Lead, optionally the orchestrator)
 >   declarations that contradict themselves, and (when a live catalog exists) routes this deployment
 >   cannot serve.
 
+> **Upgrading from 0.2.** The bundled patch no longer sets workspace-relative `dirs`/`bindingsFile`;
+> an installation is portable and uses the defaults documented under
+> [Configuration](#configuration). `/orchestrate` now falls back to the packaged
+> `defaults/orchestrator.md`, and the packaged `agents/` catalog is always scanned — opt out with
+> `bundled: false`. Plugin-owned state moves from `<workspace>/state/` (used by the old bundled
+> patch) to `<workspace>/.dsh/agent-soul/`; copy `state/bindings.json` there to keep existing
+> cold-resume bindings, or restate the old paths in a profile patch.
+
 ## Requirements and install
 
 ### Requirements
@@ -135,26 +148,27 @@ Lead. Review provider costs before selecting a paid route.
 
 ### Install and enable
 
-This checkout is a **bundle**, not a separately running service. The supplied patch supports a
-**linked checkout located at `<session-workspace>/dsh-agent-soul`**, with the Session working
-directory set to that same project directory. The patch resolves `agents` and `state` directly
-beneath it—there is no additional `dsh-agent-soul` path segment. In this workspace it is installed
-as a linked bundle in the `web` profile. If it is not active, enable it on the profile's **Plugins**
-page, or install it from this directory:
+This checkout is a **bundle**, not a separately running service. Installing it adds a self-contained
+plugin: the bundled souls under `agents/` and the bundled orchestrator doctrine under
+`defaults/` travel with the package, so an installation works from **whichever workspace** the person
+happens to use. No workspace has to be named `dsh-agent-soul`, and no project directory has to be
+the workspace root. Install it from this directory:
 
 ```js
 plugin_manager({
   action: "install_bundle",
-  target: "/path/to/session-workspace/dsh-agent-soul",
+  target: "/path/to/dsh-agent-soul",
 })
 ```
 
-A registry, tarball, Git, or other package-spec installation is not supported by the supplied patch:
-it does not relocate the catalog into an installed package. Do not install this private bundle that
-way unless you replace `dirs` and `bindingsFile` with paths appropriate for that deployment.
+The bundle can be linked (as in this repository), installed as a package copy, or reached through
+another package spec, because the bundled assets resolve from the package's own module location, not
+from the session workspace. A linked path, copied package directory, tarball, or Git installation
+therefore works without relocating the catalog; only a deployment that wants its own souls or
+doctrine needs workspace configuration (`dirs`, `bindingsFile`, or local files — see below).
 
 The bundle's [`cordis.patch.yml`](cordis.patch.yml) disables the shipped `tool-agent-team` row and
-inserts `agent-soul-team` with the project paths already configured. Removing this bundle restores
+inserts `agent-soul-team` with portable defaults only. Removing this bundle restores
 the shipped row, unless a repair wrote the profile override (see below): remove
 `- id: tool-agent-team` from the profile patch or re-enable that row on the Plugins page.
 
@@ -195,38 +209,43 @@ watcher, when it is running); changes to the Host half need a profile/bundle rel
 
 ### Project layout
 
-Every folder this project owns sits inside `dsh-agent-soul/`. The bundled patch points the plugin
-at `agents` and `state` relative to the session workspace root, which must be this project directory
-itself when using the bundled catalog and state.
+Every folder this project owns sits inside the package directory. Nothing below `agents/` or
+`defaults/` is required to live in a Session workspace: those two are the **bundled defaults** and
+apply in every workspace. User content and plugin-owned runtime state live in the workspace instead.
 
 ```
-dsh-agent-soul/
-├─ agents/                      ← live soul catalog (one Markdown file per soul)
-│  ├─ generalist.md             · default general-purpose teammate (bundled default Soul), AI-only
-│  ├─ researcher.md             · web research analyst, AI-only (/researcher after opt-in)
-│  ├─ software-engineer.md      · implementation and debugging, AI-only (/software-engineer after opt-in)
+dsh-agent-soul/                  ← the package (can live anywhere; no fixed workspace name)
+├─ agents/                       ← bundled soul catalog (one Markdown file per soul)
+│  ├─ generalist.md              · default general-purpose teammate (bundled default Soul), AI-only
+│  ├─ researcher.md              · web research analyst, AI-only (/researcher after opt-in)
+│  ├─ software-engineer.md       · implementation and debugging, AI-only (/software-engineer after opt-in)
 │  ├─ adversarial-red-team-verifier.md · independent verification, AI-only
-│  └─ scribe.md                 · documentation writer, AI-only
-├─ state/
-│  ├─ bindings.json             ← durable soul bindings for cold resume (plugin-owned)
-│  ├─ preferences.json          ← default-Soul selection (created on first change; plugin-owned)
-│  ├─ orchestrator.md           ← optional Lead orchestration doctrine (created from the GUI)
-│  └─ trash/                    ← recoverable deletes (created on first delete; Undo restores)
-├─ lib/                         ← Host modules (see docs/INTERNALS.md)
-├─ client.js                    ← Settings → "Agent Soul" page + Orchestrator header badge
-├─ smoke/                       ← keyless end-to-end verification harness
-├─ docs/                        ← maintainer contracts
-├─ locale/                      ← package locale metadata (en, zh)
-├─ cordis.patch.yml             ← profile patch (row config)
-├─ index.js                     ← Cordis plugin entry
+│  └─ scribe.md                  · documentation writer, AI-only
+├─ defaults/
+│  └─ orchestrator.md            ← bundled Lead orchestration doctrine used when a workspace has none
+├─ lib/                          ← Host modules (see docs/INTERNALS.md)
+├─ client.js                     ← Settings → "Agent Soul" page + Orchestrator header badge
+├─ smoke/                        ← keyless end-to-end verification harness
+├─ docs/                         ← maintainer contracts
+├─ locale/                       ← package locale metadata (en, zh)
+├─ cordis.patch.yml              ← profile patch (portable row config)
+├─ index.js                      ← Cordis plugin entry
 ├─ package.json
 └─ README.md
+
+<workspace>/                     ← whichever workspace a Session was opened in
+├─ .dsh/agents/                  ← optional local soul overrides (default `dirs`)
+└─ .dsh/agent-soul/
+   ├─ bindings.json              ← durable soul bindings for cold resume (plugin-owned)
+   ├─ orchestrator.md            ← optional local Lead doctrine (overrides defaults/orchestrator.md)
+   ├─ preferences.json           ← default-Soul selection (created on first change; plugin-owned)
+   └─ trash/                     ← recoverable deletes (created on first delete; Undo restores)
 ```
 
-If the project is not inside the workspace where you run the Team, change `dirs` and
-`bindingsFile` in [`cordis.patch.yml`](cordis.patch.yml) to absolute paths (or `~/…`). With no
-configuration the plugin defaults are `<workspace>/.dsh/agents` and
-`<workspace>/.dsh/agent-soul/bindings.json`.
+Local content wins: a workspace soul with the same name shadows the bundled copy, and a workspace
+`<dirname(bindingsFile)>/orchestrator.md` overrides `defaults/orchestrator.md`. Configure different
+soul directories or a different state anchor with `dirs` / `bindingsFile` — absolute, `~/…`, or
+relative to each workspace root. See [Configuration](#configuration).
 
 ## Quick start
 
@@ -234,10 +253,15 @@ configuration the plugin defaults are `<workspace>/.dsh/agents` and
    `generalist`, `researcher`, `software-engineer`, `adversarial-red-team-verifier`, and `scribe`
    cards, with `generalist` marked as the default while no explicit selection exists. Every bundled
    soul is AI-only, so the cards show the **AI-only** command status until you turn on
-   **User-invocable** for one.
-2. **Inspect or edit one.** Click `researcher`. The editor dialog shows each Markdown section
-   separately, the tool matrix, the model route, and a live **"What the teammate will receive"**
-   preview. Click **Save**; the next spawn uses the file on disk.
+   **User-invocable** for one. Cards that come from the package rather than the workspace carry a
+   **Bundled** badge and are read-only in place: use **Duplicate** to create an editable workspace
+   copy (the configured `.dsh/agents` directory is created on demand).
+2. **Inspect one, then customize a copy.** Click `researcher`. The editor dialog shows each Markdown
+   section separately, the tool matrix, the model route, and a live **"What the teammate will
+   receive"** preview. The bundled documents are read-only, so **Save** is disabled on them: click
+   **Duplicate** to create an editable workspace copy (for example `researcher-copy`), which opens
+   the saved copy in the editor. Edit it and click **Save**; the next spawn uses the file on disk.
+   (You can also start from **New soul**.)
 3. **Let the Lead delegate.** In a chat with an Agent Team, ask the Lead to research a question, or
    call the tool directly:
 
@@ -255,24 +279,27 @@ configuration the plugin defaults are `<workspace>/.dsh/agents` and
    fails with an actionable error — it never starts a generic child.
 4. **Opt in to a slash command (optional).** The bundled souls ship AI-only: none of `researcher`,
    `software-engineer`, `adversarial-red-team-verifier`, `scribe`, or `generalist` declares
-   `user-invocable`. To invoke one yourself, open it, turn on **User-invocable** (frontmatter
-   `user-invocable: true`), and save. The Lead session then has the matching command, for example:
+   `user-invocable`. To invoke one yourself, duplicate it as described above, then turn on
+   **User-invocable** (frontmatter `user-invocable: true`) on the workspace copy and save. The
+   command is the copy's name, so a copy of `researcher` named `researcher-copy` registers
+   `/researcher-copy` in the Lead session, for example:
 
    ```text
-   /researcher Find the current official DSH plugin compatibility requirements and cite the sources.
-   /software-engineer Fix the failing import and run the focused tests.
+   /researcher-copy Find the current official DSH plugin compatibility requirements and cite the sources.
+   /software-engineer-copy Fix the failing import and run the focused tests.
    ```
 
    The text after the command is the task. The teammate name is derived from the soul name and
-   made unique against the roster (`researcher`, `researcher-2`, …). The command registers
+   made unique against the roster (`researcher-copy`, `researcher-copy-2`, …). The command registers
    immediately; no Host reload is needed. An AI-only soul is still available to the Lead through
    `spawn_teammate({ ..., agent_type: "<name>" })`.
 5. **Choose the default Soul.** In the **Souls** tab, pick a Soul in the **Default Soul** selector.
    The choice is stored atomically in `<dirname(bindingsFile)>/preferences.json`, validated against
    the live catalog, and shown as a **Default** badge. Selecting the bundled option clears the
    explicit choice, so `generalist` applies again when present.
-6. **Try orchestrator mode.** Open the **Orchestrator** tab and review or edit the supplied doctrine
-   (create the default if the file is absent), then type `/orchestrate` in that session — or `/orchestrate <task>` to
+6. **Try orchestrator mode.** Open the **Orchestrator** tab and review the supplied doctrine — a
+   fresh install shows the bundled default with a **Bundled** badge, so there is no file to create
+   first. Type `/orchestrate` in that session — or `/orchestrate <task>` to
    enable the mode and submit the task as the next message in one step. A successful enable answers
    with the **ORCHESTRATOR MODE ACTIVE** block; a failed enable answers with the error: a failure
    before any state is touched leaves the mode unchanged (a failed first enable leaves it off); a
@@ -289,14 +316,14 @@ configuration the plugin defaults are `<workspace>/.dsh/agents` and
 | **Lead** | The top-level Team agent that plans, delegates, and reports back. It is the only member that can start teammates. |
 | **Teammate** | A delegated child agent. Every teammate runs one defined Agent Soul — explicit or the configured default — and no generic child is permitted. |
 | **Soul** | One Markdown file under a configured soul directory: YAML frontmatter plus a body that becomes the teammate's system-prompt persona. |
-| **Catalog** | The scanned, validated set of every `*.md` in the configured directories. The Lead sees a prompt catalog describing it; the GUI lists it. |
-| **Binding** | A durable record in `state/bindings.json` associating a teammate's Session with the soul that shaped it. Used to re-apply the soul on cold resume (admission fails closed without one) and to show usage in the GUI. |
+| **Catalog** | The scanned, validated set of every `*.md` in the configured directories, plus the package's bundled `agents/` catalog when `bundled` is enabled (the default). The Lead sees a prompt catalog describing it; the GUI lists it. |
+| **Binding** | A durable record in `<dirname(bindingsFile)>/bindings.json` (default `<workspace>/.dsh/agent-soul/bindings.json`) associating a teammate's Session with the soul that shaped it. Used to re-apply the soul on cold resume (admission fails closed without one) and to show usage in the GUI. |
 | **Default Soul** | The Soul used when `spawn_teammate` omits `agent_type`. Persisted in `<dirname(bindingsFile)>/preferences.json`; the bundled `generalist` is used when no explicit selection exists. A persisted selection must exist in the live catalog, or the default spawn fails; a corrupt, malformed, or unsupported preferences document is reported as a warning and invalidates the default — the default spawn fails rather than using `generalist`, while an explicit `agent_type` still works. |
 | **Prompt section** | A named, ordered piece of the system prompt. A soul shadows the deployment persona section; the Lead catalog and orchestrator doctrine are ordinary prompt sections. |
 | **Permission matrix** | The soul's `tools` list, applied as a tool restriction to inherited (preset/global) tools. Team tools stay visible. |
 | **fresh / fork context** | `fresh` starts the teammate without the Lead's history; `fork` starts it with the Lead's completed turns. The soul picks the default; an explicit tool argument wins. |
 | **Route** | A concrete provider + model (+ optional reasoning effort), e.g. `deepseek-official/deepseek-flash`. A bare `model:` is resolved against the live provider catalogs. |
-| **Orchestrator mode** | A session-scoped mode turned on with `/orchestrate` (or `/orchestrate <task>`, which enables the mode and queues that task as the next message); it applies the single `state/orchestrator.md` doctrine and its optional model/tool overrides to that session's Lead. |
+| **Orchestrator mode** | A session-scoped mode turned on with `/orchestrate` (or `/orchestrate <task>`, which enables the mode and queues that task as the next message); it applies the effective orchestrator doctrine — the workspace definition when present, else the packaged `defaults/orchestrator.md` — and its optional model/tool overrides to that session's Lead. |
 | **Diagnostic** | A validation or scan message. Invalid soul files stay visible in the GUI with diagnostics; they are skipped by the catalog. |
 
 ## The Settings page
@@ -412,7 +439,9 @@ configuration change.
 
 The **Orchestrator** tab shows the single orchestrator definition:
 
-- **Definition card:** file path, configured/not-created state, valid/invalid badge, and when
+- **Definition card:** file path, configured/not-created state, valid/invalid badge, a **Bundled**
+  badge when the packaged `defaults/orchestrator.md` is the effective definition (with a hint that
+  explains the fallback and that saving writes a workspace override), and when
   configured: name, model, tools, plan-first, gate mode, max retries, and pause-on-fatal badges,
   plus diagnostics.
 - **Activation hint:** applies only after `/orchestrate` (or `/orchestrate <task>`, which also
@@ -425,9 +454,13 @@ The **Orchestrator** tab shows the single orchestrator definition:
   **Provider**/**Model** dropdowns fed by the live catalog (the same pickers as the soul editor,
   with an explicit *inherit* option that keeps the Lead's own route). Team tools in the tools list
   are called out as **always available and non-restrictable**, not flagged as unknown. There is no
-  delete; the file is optional.
+  delete; the file is optional. Editing a bundled default and saving creates the workspace override
+  at the shown path — the packaged asset itself is never modified; delete the workspace file to fall
+  back to the bundled doctrine.
 - **Create default orchestrator** composes a new definition in the browser and saves it, valid by
-  construction. Three different sources of defaults exist in the code and they disagree, so the
+  construction. It appears only when there is no effective definition at all — no workspace file and
+  no bundled default (for example with `bundled: false`). Three different sources of defaults exist
+  in the code and they disagree, so the
   created file does **not** match the draft the editor showed beforehand:
   - the button itself writes `gate-mode: strict`, `max-retries: 2`, `plan-first: true`,
     `pause-on-fatal: true`, and `tools: *`, with its own English section prose;
@@ -443,6 +476,10 @@ The **Orchestrator** tab shows the single orchestrator definition:
 
 Saving the definition does not apply it to a currently active mode. It is read the next time the
 mode is enabled (or re-applied after a Host reload / Lead creation).
+
+On a fresh installation the tab shows the packaged doctrine with a **Bundled** badge, so
+`/orchestrate` works in any workspace without creating files. Save to copy it into the workspace
+first if you want to customize it; delete the workspace file to return to the packaged default.
 
 ### Which workspace does the page edit?
 
@@ -603,7 +640,7 @@ session's Lead only; teammates continue to come from their own souls.
 ### Turn it on and off
 
 ```text
-/orchestrate          # enable for this session (requires a valid definition file)
+/orchestrate          # enable for this session (effective definition: workspace file or bundled default)
 /orchestrate <task>   # enable and submit <task> as the next message
 /orchestrate off      # disable (exit, stop, and disable also work)
 ```
@@ -652,16 +689,21 @@ every other capability; only the badge is absent.
 
 ### The definition file
 
-There is exactly one file, derived from the configured bindings file:
+There is exactly one writable workspace file, derived from the configured bindings file:
 
 ```text
 <dirname(bindingsFile)>/orchestrator.md
 ```
 
-This project uses `dsh-agent-soul/state/orchestrator.md`. The file is optional; when it is
-absent, `/orchestrate` reports how to create it, and the GUI can create a default definition. The
-definition is read when the mode is enabled (or re-applied after a Host reload / Lead creation);
-saving it from the GUI does not hot-apply it to an already-running mode.
+With the default configuration that is `<workspace>/.dsh/agent-soul/orchestrator.md`. The workspace
+file is optional. When it is absent and `bundled` is enabled (the default), the packaged doctrine
+[`defaults/orchestrator.md`](defaults/orchestrator.md) is the effective definition — so `/orchestrate`
+works immediately after installation, in any workspace. The GUI's Orchestrator tab shows that
+doctrine with a **Bundled** badge and a hint; **Edit** loads it and saving writes the workspace
+override at the path above. Delete the workspace file to fall back to the bundled default. Set
+`bundled: false` to require a workspace-owned file: `/orchestrate` then reports the missing path
+instead of enabling. The definition is read when the mode is enabled (or re-applied after a Host
+reload / Lead creation); saving it from the GUI does not hot-apply it to an already-running mode.
 
 ```markdown
 ---
@@ -979,7 +1021,8 @@ only installed in the Lead's scope.
 
 ## Configuration
 
-The bundle patch configures only what must match the Agent Teams setup:
+The bundled patch configures only what must match the Agent Teams setup and leaves every path at its
+portable default:
 
 ```yaml
 - id: agent-soul-team
@@ -988,14 +1031,23 @@ The bundle patch configures only what must match the Agent Teams setup:
     freshProvider: spawn
     forkProvider: fork
     claimTeamToolRow: true
+```
+
+To deploy workspace-specific or shared content, restate `config` in a profile patch (or edit the
+bundle patch) with the keys below; the row may also set `dirs`, `bindingsFile`, and the optional
+limits explicitly:
+
+```yaml
     dirs:
-      - agents
-    bindingsFile: state/bindings.json
+      - .dsh/agents
+    bindingsFile: .dsh/agent-soul/bindings.json
+    bundled: true
 ```
 
 | Key | Default | Accepted values | Meaning |
 |---|---|---|---|
-| `dirs` | `['.dsh/agents']` | Non-empty array of non-empty strings; absolute, `~/…`, or workspace-relative | Soul directories per workspace. Missing directories are fine. Duplicates are removed after resolution. |
+| `bundled` | `true` | Boolean | Ship the package's own `agents/` catalog and `defaults/orchestrator.md` doctrine into every workspace. When true, a workspace with no local definition still lists the bundled souls and `/orchestrate` enables anywhere right after installation, without setup. Set `false` for strictly workspace-scoped content: the catalog then contains only configured directories, and `/orchestrate` refuses when the workspace file is absent. |
+| `dirs` | `['.dsh/agents']` | Non-empty array of non-empty strings; absolute, `~/…`, or workspace-relative | Local soul directories per workspace. Missing directories are fine, and the GUI creates the first workspace-relative one on demand when saving a new soul. When `bundled` is on, the package catalog is appended after these directories and a local name shadows the bundled one. |
 | `commandPrefix` | `''` | `/^[a-z0-9_-]*$/` | Prefix for human commands. `agent-` gives `/agent-researcher`. |
 | `maxDefinitions` | `64` | Integer 1–1000 | Maximum valid definitions kept per root; extra valid files become a diagnostic. |
 | `maxPromptChars` | `12000` | Integer 1000–200000 | Budget for the Lead's catalog section; entries are kept whole until the budget runs out. |
@@ -1008,8 +1060,8 @@ The bundle patch configures only what must match the Agent Teams setup:
 
 The default-Soul selection is not a configuration key: it is user-editable plugin state in
 `<dirname(bindingsFile)>/preferences.json`, written atomically by the Settings page or the
-`POST /agent-soul/preferences` route and validated against the live catalog. The bundled profile
-therefore keeps it in `state/preferences.json`.
+`POST /agent-soul/preferences` route and validated against the live catalog. With the default
+configuration that is `<workspace>/.dsh/agent-soul/preferences.json`.
 
 Unknown keys log a warning and are ignored. Invalid values fail activation with a message naming the
 key; there is no half-applied configuration. The Settings page shows the active values read-only
@@ -1024,7 +1076,7 @@ against each workspace root.
 |---|---|
 | **Save a soul** | The file is written atomically, the catalog is rescanned, and the next `spawn_teammate` / command / list sees it. Running teammates are not changed. |
 | **Catalog scan** | Runs at plugin activation for a Lead, when a Lead is created, on every soul spawn, `list_agent_souls`, command invocation, GUI overview, and GUI mutation. There is no filesystem watcher. |
-| **Cold resume** | The teammate's applied snapshot is read from `state/bindings.json` and its persona, tool matrix, and model are re-applied. Admission is fail-closed: a resumed roster teammate with no durable binding, or whose binding cannot be read, is refused rather than resumed Soul-less. The plugin makes the refusal actionable: its `send_message` tool answers `teammate "<name>" could not be resumed: <Soul-specific cause>. The teammate was not started. Restore its durable Agent Soul binding or re-spawn it with spawn_teammate to create a valid one.`, the Host log records `agent-soul: cold resume refused for teammate "<name>": … (code SOUL_PLAN_UNAVAILABLE, reason …)`, and `list_agent_souls` returns the same cause under `diagnostics` with `source: "admission:<name>"`. The shared subagent lifecycle's generic `is unavailable` wrapper itself is unchanged. The store is best-effort only for persistence and retains the newest 500 bindings per workspace; a pruned or corrupt record therefore blocks that resume (re-spawn the teammate) instead of degrading it. |
+| **Cold resume** | The teammate's applied snapshot is read from `<dirname(bindingsFile)>/bindings.json` (default `<workspace>/.dsh/agent-soul/bindings.json`) and its persona, tool matrix, and model are re-applied. Admission is fail-closed: a resumed roster teammate with no durable binding, or whose binding cannot be read, is refused rather than resumed Soul-less. The plugin makes the refusal actionable: its `send_message` tool answers `teammate "<name>" could not be resumed: <Soul-specific cause>. The teammate was not started. Restore its durable Agent Soul binding or re-spawn it with spawn_teammate to create a valid one.`, the Host log records `agent-soul: cold resume refused for teammate "<name>": … (code SOUL_PLAN_UNAVAILABLE, reason …)`, and `list_agent_souls` returns the same cause under `diagnostics` with `source: "admission:<name>"`. The shared subagent lifecycle's generic `is unavailable` wrapper itself is unchanged. The store is best-effort only for persistence and retains the newest 500 bindings per workspace; a pruned or corrupt record therefore blocks that resume (re-spawn the teammate) instead of degrading it. |
 | **Plugin activation** | A pre-existing live roster teammate with no pending or durable Soul plan is skipped with a warning and gets no Team tools; its creation already happened, so it cannot be vetoed. The warning carries the Soul-specific reason, and the refusal is also recorded for `list_agent_souls` diagnostics. New teammates and cold resumes are vetoed in `agent/created` instead. |
 | **Member installation failure / host safety** | Only plan resolution (`SoulPlanUnavailableError`) vetoes creation. Agent disposal, creation cancellation, plugin teardown, and unexpected post-plan apply failures are logged skips after every partial registration (Team tools included) is unwound. The shared installation task is internally observed, so an abandoned caller cannot turn a failure into a process-fatal unhandled rejection. A skipped teammate can be re-spawned to repair it. |
 | **Default Soul** | Persisted in `<dirname(bindingsFile)>/preferences.json`. A missing document means no explicit selection (bundled `generalist` applies when present); a stale selection, or a corrupt/malformed/unsupported document, invalidates the default and fails the next default spawn with the reason. A document (or state directory) that cannot be read at all also fails the spawn with its path. Explicit `agent_type` bypasses the preference document. |
@@ -1032,7 +1084,7 @@ against each workspace root.
 | **Host reload / bundle toggle** | The plugin is re-created; the catalog and preferences are read from disk again; active orchestrator mode is re-applied from the session log without re-capturing the previous model or Session title. |
 | **Page refresh** | The browser artifact reloads. Unsaved drafts remain in `localStorage` and are offered for recovery. |
 | **Delete a soul** | The file moves to `<dirname(bindingsFile)>/trash/<YYYYMMDDTHHMMSSmmmZ>-<original filename>` (a `<pid>.<counter>-` suffix is added on a name collision); **Undo delete** moves it back. If the trash write fails, the file is hard-deleted and no Undo is offered. |
-| **Switch workspace** | Soul directories and bindings resolve per workspace. The GUI edits one workspace at a time and shows which root it chose. |
+| **Switch workspace** | Soul directories, bindings, and the writable orchestrator definition resolve per workspace. The GUI edits one workspace at a time and shows which root it chose. The packaged catalog and doctrine are the same in every workspace unless `bundled: false`; local files shadow them per workspace. |
 | **Orchestrator mode** | Derived from the session command log, so it survives a page/Host reload and is reapplied when the session's Lead is created. It is never a profile default. |
 
 The GUI keeps these browser-only values: drafts under `dsh.agent-soul.draft:<file>` and the
@@ -1043,14 +1095,16 @@ editor size under `dsh.agent-soul.editor-size`. They are not shared with other b
 | Symptom | Check | Fix |
 |---|---|---|
 | **Settings → Agent Soul is missing** | Is the profile a Web profile? Is the bundle enabled? Did the page load after enabling? | Enable the bundle on the Plugins page, then refresh the page. In headless/SDK/ACP profiles the page is intentionally absent; the agent tools still work. |
-| **The page loads but lists no souls** | The workspace root shown in the settings card; resolved directories; whether `dirs` exists in that workspace. | Open the page from the workspace that contains `dsh-agent-soul/`, create the configured directory, or point `dirs` at absolute paths. Press **Refresh**. |
+| **The page loads but lists no souls** | The workspace root shown in the settings card; the `bundled` config value; resolved `dirs`; whether one exists in that workspace. | With `bundled: true` (the default) the five packaged souls always appear (possibly shadowed by local files). If the list is empty, `bundled` was set to `false` and no `dirs` entry exists for this workspace — create the configured directory, point `dirs` at absolute paths, or re-enable bundled defaults. Press **Refresh**. |
 | **A file is valid but the Lead never chooses it** | Its `description`; the Lead's catalog budget; whether the Lead is in a different workspace. | Write "what + when" in the first sentence. Check `maxPromptChars` / `maxDefinitions` and the health card. Use absolute `dirs` if workspaces differ. |
 | **Spawn says `unknown agent soul`** | The exact `name`; catalog scan diagnostics; duplicate names. | Use a name from `list_agent_souls`. Fix the file's diagnostics. Rename one of the duplicates. |
 | **A soul file is invalid with `name: "lead" is reserved for the Team Lead`** | The file uses the Team Lead's reserved identity. | Rename the file and its frontmatter `name`; `leadership`, `lead-review`, and `lead-2` are valid. An invalid file on disk stays visible in the page but is excluded from the catalog and cannot spawn. |
 | **Command status is `Command collision`** | Whether another command already uses the prefixed name — notably the built-in `/orchestrate`, which always wins — the live Lead for this workspace, and the registration reason returned as `command.reason` by the preview. | Rename the soul or set `commandPrefix` (e.g. `agent-`) and reload; deleting or renaming the colliding soul clears it without a Host reload. The Lead can run `manage_agent_souls({ action: "diagnose" })` for the registry view. |
-| **Command is missing or says AI-only** | `user-invocable`; the command-name syntax; whether a live Lead exists; the page's command status. | Set `user-invocable: true`, use a lower-kebab-case name/prefix, open a Team session, refresh. |
+| **Command is missing or says AI-only** | `user-invocable`; the command-name syntax; whether a live Lead exists; the page's command status. | If the soul is bundled (read-only), **Duplicate** it first; then set `user-invocable: true` on the workspace copy, use a lower-kebab-case name/prefix, open a Team session, refresh. |
 | **`/orchestrate` is not found** | You are in a Lead session (not a teammate); the plugin is active; the command is lowercase. | Use `/orchestrate` in the Team's chat. Teammates do not receive the command. |
-| **`/orchestrate` says no definition** | The path shown; `state/orchestrator.md`; the settings card's bindings file. | Create the default from the Orchestrator tab, or write the file at the shown path. |
+| **`/orchestrate` says no definition** | The path shown; the settings card's `bundled` value and bindings file; whether the package's `defaults/orchestrator.md` was installed. | With the default `bundled: true` this should not happen in a complete install: the packaged default is used. If it does, the package asset is missing (reinstall the bundle) or `bundled` is `false` — create the file at the shown path from the Orchestrator tab, restore the bundled asset, or re-enable bundled defaults. |
+| **The Orchestrator tab shows a Bundled badge** | That is expected on a fresh install: the effective doctrine is the package default. | Save from the editor to create a workspace override at the shown path; delete that file (or the plugin's saved copy) to fall back to the bundled doctrine. |
+| **A soul card shows a Bundled badge and the editor will not save** | Bundled souls are read-only package assets. | Use **Duplicate** in the editor to create an editable copy under the configured workspace `dirs` (created on demand). A local soul with the same name shadows the bundled card. |
 | **`/orchestrate <task>` enabled the mode but no task ran** | The command result text; a queue failure is reported as an error. A first enable is reverted; an already-active mode is not reverted — a live bundle is restored to its pre-invocation state when the snapshot can be recreated (otherwise the freshly applied bundle is kept instead when possible, and only if both restorations fail is the live mode left inactive), while a durably active mode with no live bundle keeps the freshly applied bundle. | Send the task as a normal message after `/orchestrate`; the queued form needs a live Lead Agent that accepts input. |
 | **Orchestrator definition is invalid** | Diagnostics in the Orchestrator tab: gate mode, retries, booleans, model/provider (a conflicting route, provider without model, an empty model id), body. A `reasoning-effort` alone is ignored at enable and is not an error. | Fix the named field. Invalid saves write nothing; the mode stays off or keeps its previous state. |
 | **Model is unresolved** | The raw model/provider and the live providers; whether the `llm` service is available. | Use a model id the providers advertise, or write the full `provider/model` route. A different `provider` plus a prefixed model is an error. |
@@ -1059,12 +1113,12 @@ editor size under `dsh.agent-soul.editor-size`. They are not shared with other b
 | **A new file does not appear** | There is no filesystem watcher. | Press **Refresh** in the page, or trigger a spawn/list/command (each rescans). |
 | **Save conflict (409)** | The file changed on disk since it was loaded. | **Reload file** to discard local edits, or **Overwrite** to save with the current server hash. |
 | **`/orchestrate off` did not restore the model or title** | The mode was already on after a Host reload, so the runtime has no captured original route/title; the Session had no prior title at enable; you renamed the Session during the mode; or the profile mounts no session-title service. | Expected limitation: select the model again, or rename the Session. The pre-reload route cannot be recovered, a human rename is deliberately preserved, and with no prior title or no title service nothing was renamed to restore. |
-| **`spawn_teammate` fails with "no usable default Agent Soul"** | The Souls tab warning; the Default Soul selector; whether the selected Soul file still exists and is valid. | Select a valid default, create `agents/generalist.md`, or pass an explicit valid `agent_type`. The spawn refuses to start a generic child. |
+| **`spawn_teammate` fails with "no usable default Agent Soul"** | The Souls tab warning; the Default Soul selector; whether the selected Soul file still exists and is valid. | Select a valid default, create `generalist.md` in the configured soul directory (default `<workspace>/.dsh/agents/generalist.md`), or pass an explicit valid `agent_type`. The spawn refuses to start a generic child. |
 | **`spawn_teammate` fails with "selected default Agent Soul … is not in the live catalog"** | The stored selection vs. the current catalog. | Pick an existing Soul in the Default Soul selector; a stale explicit selection never silently falls back to `generalist`. |
-| **`spawn_teammate` fails with "the preferences document is invalid"** | The warning in the Souls tab and the malformed selection/shape in `state/preferences.json` (for example `selected: 42`, a non-kebab-case name, or a missing `selected` key). | Fix or clear the selection in the Default Soul selector, or pass an explicit `agent_type`; a malformed document is never reinterpreted as `generalist`. |
+| **`spawn_teammate` fails with "the preferences document is invalid"** | The warning in the Souls tab and the malformed selection/shape in `<dirname(bindingsFile)>/preferences.json` (default `<workspace>/.dsh/agent-soul/preferences.json`; for example `selected: 42`, a non-kebab-case name, or a missing `selected` key). | Fix or clear the selection in the Default Soul selector, or pass an explicit `agent_type`; a malformed document is never reinterpreted as `generalist`. |
 | **`spawn_teammate` fails with `teammate name "…" was already used in this Team`** | The Team service refuses a name already used in this Team; direct spawn never renames on your behalf. | Choose a fresh lower-kebab-case name. Slash commands derive a free name automatically (`<soul>`, `<soul>-2`, …). |
 | **`spawn_teammate` fails with `a soul spawn for this Lead and teammate name is already pending`** | A spawn for the same Lead and requested name is still in flight; the plugin refuses the duplicate before it reaches the Team service. | Wait for the first spawn to settle, or choose a different name. |
-| **A cold-resumed teammate fails with "no pending or durable Agent Soul plan" or "cannot read its durable Agent Soul binding"** | The binding store (`state/bindings.json`) and its 500-record cap; whether the teammate was created through `spawn_teammate`; the plugin's `teammate "<name>" could not be resumed:` refusal (it appends the Soul-specific cause); the Host log line containing `SOUL_PLAN_UNAVAILABLE`; `list_agent_souls` diagnostics with `source: "admission:<name>"`. | Re-spawn the teammate with `spawn_teammate`; cold-resume admission is fail-closed rather than Soul-less. The shared subagent lifecycle's own `is unavailable` wrapper does not carry the cause — read the plugin's refusal text, log line, or diagnostics for it. |
+| **A cold-resumed teammate fails with "no pending or durable Agent Soul plan" or "cannot read its durable Agent Soul binding"** | The binding store (`<dirname(bindingsFile)>/bindings.json`, default `<workspace>/.dsh/agent-soul/bindings.json`) and its 500-record cap; whether the teammate was created through `spawn_teammate`; the plugin's `teammate "<name>" could not be resumed:` refusal (it appends the Soul-specific cause); the Host log line containing `SOUL_PLAN_UNAVAILABLE`; `list_agent_souls` diagnostics with `source: "admission:<name>"`. | Re-spawn the teammate with `spawn_teammate`; cold-resume admission is fail-closed rather than Soul-less. The shared subagent lifecycle's own `is unavailable` wrapper does not carry the cause — read the plugin's refusal text, log line, or diagnostics for it. |
 | **The log says member installation was `SKIPPED after an unexpected failure` or `cancelled`** | The error and teammate identity in the warning. Partial Team-tool and Soul registrations were unwound; the host stays alive, but this teammate may be running without its Soul effects. | Re-spawn the teammate. For a cancellation, retrying creation or resume is enough. For an unexpected apply failure, preserve and report the warning line if it recurs. Only a missing/unreadable Soul plan is an intentional creation veto. |
 | **A `subagent` / `subagent_fork` call is denied or the tool is missing** | The Team member is intentionally restricted. | Use `spawn_teammate` with a valid `agent_type`, or omit it to use the default Soul. Generic children are rejected at creation even if the tools are invoked indirectly. |
 | **A workflow run's `agent()` calls fail inside a Team session** | The `agent/created` fence: provider-owned children under a Team member are vetoed, so the child start fails. | Delegate with `spawn_teammate`; generic child orchestration (workflow children included) does not run inside a Team session. |
@@ -1170,9 +1224,12 @@ node smoke/run-smoke.mjs
 
 End-to-end verification boots a real `dsh --profile headless` process from a DSH source checkout
 with a temporary `DSH_HOME`, a scripted LLM adapter, and this bundle selected through its real
-manifest and `cordis.patch.yml`. It asserts the Lead catalog, `spawn_teammate({ agent_type })`,
-persona shadowing, exact tool matrices, model routing, user-invocable slash command execution,
-durable bindings, and scrubbing of inherited credentials/proxies/Node loader flags:
+manifest and `cordis.patch.yml`. It asserts the workspace-independent bundled defaults (an empty
+workspace sees the packaged catalog and doctrine, and `bundled: false` restores strict
+workspace-only behavior), the Lead catalog, `spawn_teammate({ agent_type })`, persona shadowing,
+exact tool matrices, model routing, user-invocable slash command execution, durable bindings,
+symlinked-workspace and packaged-catalog write-fence refusals, and
+scrubbing of inherited credentials/proxies/Node loader flags:
 
 ```sh
 node smoke/run-smoke.mjs
@@ -1180,13 +1237,13 @@ node smoke/run-smoke.mjs
 DSH_CHECKOUT=/path/to/deepseek-harness node smoke/run-smoke.mjs
 ```
 
-The harness runs **25 checks** and passed **25/25** on 2026-11-06 — a dated point-in-time result
+The harness runs **41 checks** and passed **41/41** on 2026-11-07 — a dated point-in-time result
 that anyone can re-run with `node smoke/run-smoke.mjs` — starting with a composed fresh profile
 whose `--dump-config` proves this bundle's own patch disables the shipped `tool-agent-team` row.
-It does not exercise orchestrator mode, and nothing else in the bundle currently verifies
-`/orchestrate` end-to-end, so check the mode manually. The default checkout path is
-`/Users/zosyn/LLM/deepseek-harness`. No credentials or network calls are used. See
-[`smoke/README.md`](smoke/README.md).
+The `/orchestrate` command is registered but the mode is not activated end-to-end; the bundled
+doctrine resolution that makes it available in any workspace is verified directly by the harness.
+The default checkout path is `/Users/zosyn/LLM/deepseek-harness`. No credentials or network calls
+are used. See [`smoke/README.md`](smoke/README.md).
 
 For a Host change: reload the bundle from the profile (or restart the Harness). For a browser change:
 refresh the Settings page; in a development checkout with the Web dev watcher running, the client
@@ -1197,11 +1254,13 @@ module.
 
 | Path | What it is |
 |---|---|
-| [`agents/`](agents/) | Live soul catalog: five bundled definitions, including the `generalist` default. All five are AI-only until a soul opts in to `user-invocable`. |
-| `state/bindings.json` | Durable teammate bindings (plugin-owned runtime state; gitignored, created on first spawn). |
-| `state/preferences.json` | Plugin-owned default-Soul selection (gitignored, created on first change). |
-| [`state/orchestrator.md`](state/orchestrator.md) | Optional Lead doctrine (created from the GUI or edited directly). |
-| `state/trash/` | Recoverable deletes (gitignored, created on first delete). |
+| [`agents/`](agents/) | Bundled soul catalog: five packaged definitions, including the `generalist` default. Shipped with the bundle and available in every workspace; all five are AI-only until a soul opts in to `user-invocable`. |
+| [`defaults/orchestrator.md`](defaults/orchestrator.md) | Bundled Lead doctrine, used when a workspace has no `orchestrator.md`; edit this file to change the packaged default for every installation. |
+| `<workspace>/.dsh/agents/` | Optional local soul overrides (default `dirs`); created on demand by the GUI. |
+| `<workspace>/.dsh/agent-soul/bindings.json` | Durable teammate bindings (plugin-owned runtime state, created on first spawn; gitignored in this repository). |
+| `<workspace>/.dsh/agent-soul/preferences.json` | Plugin-owned default-Soul selection (created on first change). |
+| `<workspace>/.dsh/agent-soul/orchestrator.md` | Optional workspace Lead doctrine; overrides the bundled default. |
+| `<workspace>/.dsh/agent-soul/trash/` | Recoverable deletes (created on first delete). |
 | [`locale/en.json`](locale/en.json) | Package locale metadata for the Settings entry (English). |
 | [`locale/zh.json`](locale/zh.json) | Package locale metadata for the Settings entry (Chinese); the eight in-page dictionaries live in `client.js`. |
 | [`icon.svg`](icon.svg) | Bundle icon shown by the profile/bundle listings. |

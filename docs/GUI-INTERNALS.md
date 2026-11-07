@@ -25,7 +25,7 @@ handlers in `lib/gui-host.js` and must be checked against them.
 | `lib/commands.js` | registers one Lead-scoped slash command per user-invocable soul |
 | `lib/admin.js` | GUI/agent-tool document layer: split/compose/validate, directory scanning, path safety, atomic writes, trash |
 | `lib/gui-host.js` | authenticated JSON routes + overview assembly; workspace-root selection; command/usage/health status |
-| `lib/bindings.js` | durable teammate binding store (`state/bindings.json`) used for cold resume and GUI usage data |
+| `lib/bindings.js` | durable teammate binding store (`<dirname(bindingsFile)>/bindings.json`, default `<workspace>/.dsh/agent-soul/bindings.json`) used for cold resume and GUI usage data |
 | `lib/preferences.js` | plugin-owned default-Soul preference document (`preferences.json`): atomic read/write, real-path fence, default resolution (selection → bundled `generalist` → failure) |
 | `lib/orchestrator.js` | single orchestrator definition: parse/validate/compose, `/orchestrate` command, session-scoped mode runtime (prompt sections, model/tool overrides, rollback) |
 | `lib/orchestrator-mode.js` | shared pure durable-mode fold + Host session projection definition (`agentSoulOrchestrator`); the only place off-words and command-log settlement semantics live |
@@ -55,15 +55,15 @@ see "Default Soul preference and soul-only delegation" below.
 |---|---|
 | **Overview** | the single `GET /agent-soul/overview` snapshot the page renders: catalogs, document rows, settings, runtime health, the orchestrator summary, and the default-Soul preference block |
 | **Document** | one soul file (`DocumentSummary` in a listing, `DocumentDetail` when loaded/saved, with `source`) |
-| **Catalog** | the scanned, validated set of every `*.md` under the configured soul directories |
-| **Binding** | plugin-owned durable record in `state/bindings.json` mapping a teammate's child Session to the soul that shaped it (persona, tools, model, context) |
+| **Catalog** | the scanned, validated set of every `*.md` under the configured soul directories, plus the packaged `agents/` catalog when `bundled` is enabled (the default) |
+| **Binding** | plugin-owned durable record in `<dirname(bindingsFile)>/bindings.json` (default `<workspace>/.dsh/agent-soul/bindings.json`) mapping a teammate's child Session to the soul that shaped it (persona, tools, model, context) |
 | **Preferences** | plugin-owned `preferences.json` beside the bindings file: the explicit default-Soul selection plus the effective default, its source, validity, and warning |
 | **Draft / baseline** | browser-only localStorage copy of unsaved edits and the file state the editor loaded |
 | **`expectedHash`** | optimistic-concurrency token: the hash the editor believes is on disk; a mismatch answers `409 conflict` with `currentHash`/`currentModifiedAt` |
 | **`expectedMissing`** | explicit no-replace precondition for recreating a file that was absent at conflict time; a newly appeared target answers `409 conflict` instead of being overwritten |
 | **Command status** | live check of the soul's slash command against the workspace-matched Lead: `registered`, `ai-only`, `invalid-name`, `collision`, `no-live-lead`. With a per-Lead registration record, `registered` means this soul's own handler is the effective one; `collision` means the name is invocable but another handler owns it (the built-in `/orchestrate`) or registration failed. |
 | **Health** | catalog-wide budgets and scan findings: definition count, catalog characters, duplicate names, invalid files, diagnostics |
-| **Orchestrator mode** | per-session mode turned on with `/orchestrate`; applies the single orchestrator doctrine (`<dirname(bindingsFile)>/orchestrator.md`; `state/orchestrator.md` in this project), model, and tool matrix to that session's Lead, announces activation, and renames the Session title when the optional service is available and a prior title exists |
+| **Orchestrator mode** | per-session mode turned on with `/orchestrate`; applies the effective orchestrator doctrine (the workspace `<dirname(bindingsFile)>/orchestrator.md` when present, else the packaged `defaults/orchestrator.md` when `bundled` is on), model, and tool matrix to that session's Lead, announces activation, and renames the Session title when the optional service is available and a prior title exists |
 | **Trash** | recoverable delete directory beside the bindings file (`<dirname bindingsFile>/trash`); Undo moves the newest entry back |
 
 `index.js` wires both halves: the document layer is also used by an agent tool, so the same
@@ -136,7 +136,7 @@ Route names and payloads (the browser half addresses them without the leading sl
 | POST | `/agent-soul/preview` | teammate-prompt preview for a draft, write nothing | P1 |
 | POST | `/agent-soul/duplicate` | copy a document under a new name | P1 |
 | POST | `/agent-soul/restore` | restore one trashed document | P1 |
-| GET | `/agent-soul/orchestrator` | load the orchestrator definition (skeleton when absent) | P4 |
+| GET | `/agent-soul/orchestrator` | load the effective orchestrator definition (bundled default when the workspace file is absent and `bundled` is on; skeleton only when both are absent) | P4 |
 | POST | `/agent-soul/orchestrator` | save the orchestrator definition | P4 |
 | GET | `/agent-soul/preferences` | load the default-Soul selection and the effective default | below |
 | POST | `/agent-soul/preferences` | validate and atomically persist the default-Soul selection (`name`, or null to clear) | below |
@@ -144,17 +144,19 @@ Route names and payloads (the browser half addresses them without the leading sl
 ### `GET /agent-soul/overview`
 
 200 body (example values are illustrative; `plugin.version` is read from the real manifest —
-`0.2.1` at this revision — and the no-`pluginMeta` fallback constant `PLUGIN_META_DEFAULTS` in
+`0.3.0` at this revision — and the no-`pluginMeta` fallback constant `PLUGIN_META_DEFAULTS` in
 `lib/gui-host.js` matches it):
 
 ```jsonc
 {
-  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.2.1", "root": "/abs/workspace" },
+  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.3.0", "root": "/abs/workspace" },
   "settings": {
-    "dirs": ["agents"],
-    "resolvedDirs": ["/abs/workspace/agents"],
-    "bindingsFile": "state/bindings.json",
-    "bindingsPath": "/abs/workspace/state/bindings.json",
+    "dirs": [".dsh/agents"],
+    "resolvedDirs": ["/abs/workspace/.dsh/agents"],
+    "bundled": true,                                 // package catalog/docs fallback enabled
+    "bundledDir": "/abs/profile/node_modules/@local/dsh-agent-soul/agents",
+    "bindingsFile": ".dsh/agent-soul/bindings.json",
+    "bindingsPath": "/abs/workspace/.dsh/agent-soul/bindings.json",
     "commandPrefix": "", "defaultContext": "fresh",
     "freshProvider": "spawn", "forkProvider": "fork", "interrupt": true,
     "maxDefinitions": 64, "maxPromptChars": 12000,
@@ -179,15 +181,17 @@ Route names and payloads (the browser half addresses them without the leading sl
     }
   },
   "documents": [DocumentSummary],
-  "orchestrator": {                        // P4: single definition summary
-    "path": "/abs/workspace/state/orchestrator.md",
-    "configured": true, "valid": true, "name": "orchestrator",
-    "model": "deepseek-v4-pro", "modelResolved": "deepseek-official/deepseek-v4-pro",
-    "tools": ["spawn_teammate", "send_message", "read"], "planFirst": true,
-    "gateMode": "strict", "maxRetries": 3, "pauseOnFatal": true, "diagnostics": []
+  "orchestrator": {                        // P4: effective definition summary
+    "path": "/abs/workspace/.dsh/agent-soul/orchestrator.md",   // writable workspace target
+    "configured": true, "bundled": true,   // bundled: packaged default is in effect
+    "sourcePath": "/abs/profile/node_modules/@local/dsh-agent-soul/defaults/orchestrator.md",
+    "valid": true, "name": "orchestrator",
+    "model": "", "modelResolved": null,
+    "tools": null, "planFirst": true,
+    "gateMode": "strict", "maxRetries": 10, "pauseOnFatal": true, "diagnostics": []
   },
   "preferences": {                         // default-Soul selector state
-    "path": "/abs/workspace/state/preferences.json",
+    "path": "/abs/workspace/.dsh/agent-soul/preferences.json",
     "selected": null,                      // persisted explicit selection, null = none
     "effective": "generalist",             // resolved default; null when none is usable or the document is invalid
     "source": "builtin",                   // "selection" | "builtin" | "none"
@@ -203,7 +207,8 @@ Route names and payloads (the browser half addresses them without the leading sl
 also accepts an optional `root` and requires `name` (a soul name, or `null`/empty to clear). An
 unknown name answers 400 `{ ok: false, code: 'unknown-soul', message, available }` and writes
 nothing; an invalid wire value answers 400 `invalid-request`. The selection is stored at
-`<dirname(resolved bindingsFile)>/preferences.json` (`state/preferences.json` in this project) with
+`<dirname(resolved bindingsFile)>/preferences.json` (default
+`<workspace>/.dsh/agent-soul/preferences.json`) with
 the same real-path/symlink fence and temp-file-plus-`rename` atomic replacement as the orchestrator
 document. A missing file means no explicit selection. A corrupt, malformed, or unsupported document
 is reported through `warning` with `valid: false`, `effective: null`, and `source: 'none'`; that
@@ -214,10 +219,11 @@ or cleared. An explicit `agent_type` does not read the preferences document.
 
 ```jsonc
 {
-  "file": "/abs/workspace/agents/researcher.md",                  // absolute
-  "label": "agents/researcher.md",                                // root-relative when inside root
+  "file": "/abs/workspace/.dsh/agents/researcher.md",             // absolute
+  "label": "researcher.md",                                       // root-relative (packaged: file name)
   "name": "researcher", "description": "Researches …",                // null when unparseable
-  "valid": true, "tools": ["web_search", "web_fetch"],                // null = inherits every tool
+  "valid": true, "bundled": false,                                // true for the packaged read-only catalog
+  "tools": ["web_search", "web_fetch"],                // null = inherits every tool
   "model": "deepseek-flash",                                          // raw frontmatter model or null
   "modelResolved": "deepseek-official/deepseek-flash",                // null when unresolvable/inherited
   "userInvocable": true, "context": "fresh",                           // context null when absent
@@ -247,13 +253,16 @@ created/renamed/deleted invocable soul needs no Host reload.
 
 200 `{ "document": DocumentDetail }`; 404 `{ ok: false, code: 'not-found', message }` when the file
 does not exist; 400 `{ ok: false, code: 'unsafe-path', message }` when it resolves outside every
-configured soul directory (or is not a `.md` file).
+readable soul directory (or is not a `.md` file). The packaged bundled catalog is readable through
+this route and reports `bundled: true`; writes to those paths are refused instead.
 
 ```jsonc
 // DocumentDetail
 {
   "file": "/abs/…/researcher.md",
-  "label": "agents/researcher.md",
+  "label": "researcher.md",
+  "bundled": false,                               // true: packaged soul, read-only in place
+  "sourcePath": "/abs/…/researcher.md",
   "source": "---\nname: researcher\n…",          // complete current file text
   "hash": "…",                                    // SHA-256 hex of `source`
   "modifiedAt": 1793461007624,                    // file mtime; 0 for a not-yet-written suggestion
@@ -299,15 +308,25 @@ atomically, rescans the catalog, and answers:
   `name: "lead" is reserved for the Team Lead`) is mirrored into `fieldErrors[field]` so the editor
   focuses that control. Nothing is written for an `invalid` save.
 
+A write aimed at a packaged bundled soul is refused as `unsafe-path` with a message telling the
+caller to duplicate the soul into a workspace soul directory (the GUI disables Save for such a
+document and offers **Duplicate** instead).
+
 ### `POST /agent-soul/create`
 
 Body `{ "name": "researcher", "source": "…" }` (`source` optional) → 200
-`{ "ok": true, "document": DocumentDetail }` after creating `<first dir>/<name>.md`. Without
-`source` the file starts as the Host canonical skeleton (`canonicalSkeleton`; valid by
-construction, placeholder body text); with `source` the validated template text is written instead
-(the browser's New-soul dialog composes its own template client-side and always sends `source`).
+`{ "ok": true, "document": DocumentDetail }` after creating `<first dir>/<name>.md`. When no
+configured directory exists yet, the first **workspace-relative** directory is created on demand
+only after its real nearest existing ancestor resolves inside the real workspace, and the created
+directory is canonically re-checked; a symlinked `.dsh` that leaves the workspace therefore answers
+`no-dirs` instead of writing outside. This keeps a fresh workspace able to create its first soul
+without a manual `mkdir`. Without `source` the file starts as the Host canonical skeleton
+(`canonicalSkeleton`; valid by construction, placeholder body text); with `source` the validated
+template text is written instead (the browser's New-soul dialog composes its own template
+client-side and always sends `source`).
 400 codes: `invalid-name` (not lower-kebab-case, >64 chars, or the reserved `lead`), `exists`
-(`<name>.md` already exists in a configured directory), `no-dirs` (no soul directory exists), and
+(`<name>.md` already exists in a configured directory), `no-dirs` (no writable workspace-relative
+soul directory is configured), and
 `invalid` (the source template does not parse); an `invalid` response includes `fieldErrors`.
 
 ### `POST /agent-soul/delete`
@@ -496,7 +515,11 @@ commands. Actions: `list`, `get` (`file`), `save` (`file`, `source` raw markdown
 (`name`), `delete` (`file`), `diagnose` (live Lead/command-registry snapshot plus the
 `teamTools` composition block for support), `repair_team_tools` (persists the shipped-row disable
 through the Plugin Manager and reports the manual fix when that service is unavailable),
-`get_orchestrator` and `save_orchestrator` (`source` raw markdown) for the P4 definition. Its output schema is canonical JSON Schema (object-level `required`
+`get_orchestrator` and `save_orchestrator` (`source` raw markdown) for the P4 definition.
+`get_orchestrator` answers the **effective** document: when the workspace file is absent and
+`bundled` is enabled it returns `bundled: true` plus `sourcePath` for the packaged default and a
+message saying a save writes the workspace target; `save_orchestrator` always writes that workspace
+target. Its output schema is canonical JSON Schema (object-level `required`
 arrays, never author-style per-property `required: true`), because the tools registry validates it
 at registration. `save_orchestrator` runs the same two validation layers as the GUI save — the
 document analysis (`analyzeOrchestrator`) plus `orchestratorRouteDiagnostics(definition,
@@ -803,9 +826,15 @@ the `/orchestrate` chat command. Sub-agent souls keep driving downstream delegat
 
 ### Definition file
 
-Path derives from the bindings file: `<dirname(resolved bindingsFile)>/orchestrator.md`
-(this project: `dsh-agent-soul/state/orchestrator.md`). Optional; when absent, mode cannot be
-enabled (the command explains how to create it).
+The **effective** definition comes from the workspace file
+`<dirname(resolved bindingsFile)>/orchestrator.md` when it exists. When it is absent and `bundled`
+is enabled (the default), the packaged [`defaults/orchestrator.md`](../defaults/orchestrator.md) is
+the effective document — so `/orchestrate` works in every workspace right after installation. The
+GET route returns the bundled source with `configured: true`, `bundled: true`, `sourcePath` set to
+the package file, and `path` still the writable workspace target; a Save therefore creates the
+workspace override. Deleting that file falls back to the bundled default again. With
+`bundled: false`, an absent workspace file keeps `configured: false` (the skeleton) and mode cannot
+be enabled; the command explains how to create it.
 
 Frontmatter (strict YAML subset via `lib/soul.js` `parseFrontmatter`):
 `name` (optional, default `orchestrator`), `model`, `provider`, `reasoning-effort`,

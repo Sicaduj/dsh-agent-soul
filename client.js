@@ -10,8 +10,9 @@
  * table. The Host half (`lib/gui-host.js`) owns the eleven JSON route paths this
  * page calls; they are documented in `docs/GUI-INTERNALS.md`.
  *
- * All visible copy flows through the slot-bound `t` of the
- * `settings.agentSoul` locale namespace; the page styles render as one inline
+ * Plugin-authored UI chrome uses the slot-bound `t` of the
+ * `settings.agentSoul` locale namespace; Host diagnostics/messages and file
+ * content may be rendered untranslated. The page styles render as one inline
  * `<style>` element inside the component tree, while the compact header badge
  * keeps its styles in an inline object. Both use only the shipped theme's
  * `--dsw-alias-*` / `--dsw-radius-*` custom properties.

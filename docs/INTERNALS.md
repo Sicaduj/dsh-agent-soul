@@ -123,6 +123,8 @@ malformed values throw, which fails activation rather than running with half-app
 {
   dirs: ['.dsh/agents'],                 // non-empty string[]; absolute, ~/…, or workspace-relative
   bundled: true,                         // boolean; append the package catalog + default doctrine
+  bundledEditable: false,                // boolean; opt-in: edit the packaged catalog/doctrine in place
+                                         //   (inert + one activation warning while bundled is false)
   commandPrefix: '',                     // /^[a-z0-9_-]*$/
   maxDefinitions: 64,                    // integer 1..1000
   maxPromptChars: 12000,                 // integer 1000..200000
@@ -146,13 +148,25 @@ copy, and a source run behave the same):
 - `lib/orchestrator.js` exports `BUNDLED_ORCHESTRATOR_PATH` (`<package>/defaults/orchestrator.md`);
   when the workspace definition is absent and `bundled` is enabled, `readOrchestrator` reports the
   packaged source as the effective detail (`configured: true`, `bundled: true`, `sourcePath` set,
-  `path` still the writable workspace target).
-- `lib/admin.js` exposes `bundledSoulsDir(config)` and lists bundled souls as read-only documents
-  (`bundled: true`). The packaged-directory check is canonical (`realpath`) and runs before any
-  configured-directory match, so an absolute path, workspace-relative alias, or symlink to
-  `<package>/agents` is still classified bundled and `resolveTarget` refuses writes/deletes there
-  with a message telling the caller to duplicate the soul into a workspace directory;
-  `writableDirs` excludes that canonical directory from writable targets. `writableDirs` also
+  `path` still the writable workspace target). With `bundledEditable` enabled it instead reports the
+  packaged file as the editable effective document (`path` = `sourcePath` = the packaged path,
+  `bundled: false`), and `saveOrchestrator` rewrites that file in place under a dedicated
+  packaged-path check (exact packaged path, real parent equal to the package's real `defaults/`
+  directory, no symlink escape) instead of the state-directory fence. A workspace definition always
+  wins, and one that appears while the save is in flight is re-checked just before the write and
+  answers `conflict` instead of being clobbered.
+- `lib/admin.js` exposes `bundledSoulsDir(config)` and `bundledEditableEnabled(config)`; package
+  ownership and read-only status are separate. The packaged-directory check is canonical (`realpath`)
+  and runs before any configured-directory match, so an absolute path, workspace-relative alias, or
+  symlink to `<package>/agents` keeps its packaged identity (`packageOwned: true`) instead of
+  becoming an editable configured directory. By default (`bundledEditable` false) a package-owned
+  document is read-only (`bundled: true`): `resolveTarget` refuses writes/deletes there with a
+  message telling the caller to duplicate the soul into a workspace directory, and `writableDirs`
+  excludes that canonical directory from writable targets. With `bundledEditable` true the same
+  files are listed with `bundled: false` + `packageOwned: true`, keep package-relative labels and
+  the local-shadow/duplicate-name semantics, and accept save/delete/restore in place (delete still
+  trashes into the workspace trash) while create/duplicate still write the configured directories.
+  `writableDirs` also
   creates the first workspace-relative configured directory on demand so a fresh workspace can save
   a new soul, but only after resolving the real workspace root and the real nearest existing
   ancestor with `realpath`: an ancestor outside the real workspace refuses the creation (nothing is
@@ -358,7 +372,8 @@ Both callers use `lib/admin.js`.
 **GUI save.** `POST /agent-soul/document` validates the wire body, then calls
 `saveDocument` (`fields`/`sections`) or `saveDocumentSource` (raw `source`). Both:
 
-1. Resolve and validate the target path (`.md`, inside a configured soul directory, with a
+1. Resolve and validate the target path (`.md`, inside a configured soul directory — or the
+   packaged `agents/` directory when `bundledEditable` makes it a write target — with a
    realpath/symlink fence).
 2. When `expectedHash` is a string (including `''`), re-read the current file under its mutation
    lock; a missing file or a different hash returns `conflict` with `currentHash`/`currentModifiedAt`
@@ -990,7 +1005,7 @@ with the Agent scope; the runtime is a process-wide object disposed by the plugi
 | Per-Agent Soul apply | persona section at the deployment-persona order (via `agent.ctx.effect`), tool restriction, model selection | Both the Agent scope and the root installation record own disposers; plugin unload removes persona/restriction, while model selection has no automatic undo (the session survives) |
 | Per-Agent orchestrator bundle | persona section at the deployment-persona order, five doctrine sections, extra section, tool restriction, model selection | Bundle disposal removes sections/restriction. `/orchestrate off` and runtime disposal restore the captured model and Session title when present; Agent disposal drops the bundle without restoration |
 | Per-command injection | the Lead's scoped command registrations | Disposes the injected child |
-| GUI route registration | ten exact paths | Each route's `ctx.effect` disposes with the plugin |
+| GUI route registration | eleven exact paths | Each route's `ctx.effect` disposes with the plugin |
 
 ### HMR and reload
 
@@ -1002,14 +1017,21 @@ up `client.js` changes.
 
 ## Host GUI routes
 
-The browser half talks to thirteen authenticated endpoints registered as ten exact paths:
+The browser half talks to fifteen authenticated endpoints registered as eleven exact paths:
 `overview`, `document` (GET/POST), `create`, `delete`, `parse`, `preview`, `duplicate`, `restore`,
-`orchestrator` (GET/POST), and `preferences` (GET/POST). `createGuiRoutes(deps)` returns one
+`orchestrator` (GET/POST), `preferences` (GET/POST), and `config` (GET/POST). `createGuiRoutes(deps)` returns one
 descriptor per endpoint in contract order; `installGui` groups by path, merges method dispatch for
-`document`, `orchestrator`, and `preferences`, and registers each group with `kind: 'exact'`. Every handler runs the connection
+`document`, `orchestrator`, `preferences`, and `config`, and registers each group with `kind: 'exact'`. Every handler runs the connection
 trust fence first, answers JSON with `cache-control: no-store`, bounds request bodies to 1 MiB, and
 delegates mutations to the document/orchestrator/preferences layers. The full payload and status-code contract
 is maintained in [`GUI-INTERNALS.md`](GUI-INTERNALS.md#endpoint-inventory); do not restate it here.
+
+The `config` pair (GET/POST `/agent-soul/config`) is the packaged-defaults toggle and is
+plugin-wide (no `root`): GET reports the effective `bundledEditable`, whether `bundled` is on, and
+whether the row is configurable; POST persists `bundledEditable` through the Host `configEditor`
+service into the plugin's own Loader row (`agent-soul-team`) in the profile patch — every other row
+key is preserved — and the Loader reloads the plugin row once. A refused POST answers 400
+`invalid-request` (bad body) or 409 `bundled-disabled` / `not-configurable` / `overridden`.
 
 The browser derives the current main Session root from `retainedBy.mainView`, pins it for the editor
 session, and sends it on every route. The Host authorizes the requested root against live top-level
@@ -1032,10 +1054,12 @@ back to the first live Lead), which keeps concurrent Sessions from reporting fal
 - **Path safety.** Targets are `.md` files inside a resolved soul directory (or the trash
   directory for restore), checked lexically and through `realpath`/`lstat`; symlink escapes are
   refused. The packaged `agents/` directory is fenced canonically before configured-directory
-  matching, so aliases of it stay read-only. Implicit soul-directory creation resolves the real
+  matching, so aliases of it keep their packaged identity — read-only by default, writable in place
+  only when `bundledEditable` is enabled. Implicit soul-directory creation resolves the real
   workspace root and the real nearest existing ancestor before `mkdir`, and re-checks the created
   directory canonically. Orchestrator reads and writes share a real-path state-directory fence,
-  including parent symlinks, with a second check after parent creation.
+  including parent symlinks, with a second check after parent creation (the `bundledEditable`
+  packaged target uses its own packaged-path check instead).
 - **Canonical JSON schemas.** Tool definitions use object-level `required` arrays, not per-property
   `required: true`. Tool arguments are not registry-validated, so each module validates in
   `execute`. Tool output values are validated against `output.schema` and must be plain JSON (never
@@ -1109,6 +1133,7 @@ The executable checks are syntax checks plus the keyless end-to-end harness:
 node --check index.js
 for f in lib/*.js; do node --check "$f" || exit 1; done
 node --check client.js
+node --test smoke/
 node smoke/run-smoke.mjs
 ```
 
@@ -1122,16 +1147,28 @@ manifest/patch, and a scripted LLM adapter. It first checks the workspace-indepe
 defaults directly (an empty workspace sees the packaged catalog and a valid bundled orchestrator
 doctrine, and `bundled: false` restores the strict workspace-only behavior), exercises the document
 layer's filesystem fence directly (a symlinked `.dsh` cannot auto-create or duplicate outside the
-workspace; a configured absolute, workspace-relative, or symlink alias of the packaged `agents/`
-directory still classifies as `bundled` and refuses save/delete, leaving the packaged file
-unchanged; a bundled-soul duplicate still lands under `<workspace>/.dsh/agents`), then dumps that
-fresh profile's composed config and asserts the shipped `tool-agent-team` row is disabled by this
-bundle's own patch (the portable counterpart of a per-machine profile override), then asserts the
-Lead catalog, soul spawn, persona composition, exact tool matrices, model routing, user-invocable command
-execution, durable bindings, and credential/proxy/loader scrubbing — **41 checks** in total. The
-harness passed 41/41 on 2026-11-07 (a point-in-time result; re-run it with
-`node smoke/run-smoke.mjs`). Orchestrator mode activation still has no automated end-to-end coverage
-in this candidate. See [`../smoke/README.md`](../smoke/README.md).
+workspace; with the default config, a configured absolute, workspace-relative, or symlink alias of
+the packaged `agents/` directory still classifies as `bundled` and refuses save/delete, leaving the
+packaged file unchanged; a bundled-soul duplicate still lands under `<workspace>/.dsh/agents`), then
+dumps that fresh profile's composed config and asserts the shipped `tool-agent-team` row is disabled
+by this bundle's own patch (the portable counterpart of a per-machine profile override), then asserts
+the Lead catalog, soul spawn, persona composition, exact tool matrices, model routing, user-invocable
+command execution, durable bindings, and credential/proxy/loader scrubbing — **41 checks** in total.
+The harness passed 41/41 on 2026-11-07 (a point-in-time result; re-run it with
+`node smoke/run-smoke.mjs`). The `bundledEditable` behavior is covered by the keyless `node:test`
+module [`smoke/bundled-editable.test.mjs`](../smoke/bundled-editable.test.mjs), which runs against a
+temp copy of the package tree: default-config read-only fencing and shadow/duplicate semantics,
+editable package-owned save (including stale-hash `conflict`), delete/restore through the workspace
+trash, create/duplicate staying in the workspace directories, symlink confinement, the inert
+`bundled: false` combination, and the packaged-orchestrator target (in-place save, workspace
+precedence, the mid-edit conflict refusal, and flag-off behavior). The **Use default agent souls**
+toggle is covered by [`smoke/config-toggle.test.mjs`](../smoke/config-toggle.test.mjs): the
+fifteen-endpoint/eleven-path route pair, GET's effective-flag report, POST persistence through the
+plugin row, every POST refusal code, and the connection trust fence. Per-module counts live in
+[`../smoke/README.md`](../smoke/README.md) — 222 counted assertions for
+`bundled-editable.test.mjs` and 129 for `config-toggle.test.mjs` (39 `node:test` cases in total,
+all passing) — and `node smoke/run-smoke.mjs` stays at **41/41 checks**. Orchestrator mode
+activation still has no automated end-to-end coverage in this candidate. See [`../smoke/README.md`](../smoke/README.md).
 
 ## Sharp edges
 

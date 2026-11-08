@@ -29,6 +29,13 @@
 #     `<workspace>/.dsh/agent-soul/`.
 # Set `bundled: false` for strictly workspace-scoped content (a missing local definition
 # then makes `/orchestrate` refuse to enable).
+#
+# `bundledEditable: true` (with `bundled: true`) is the opt-in authoring mode: the packaged
+# `agents/` souls and `defaults/orchestrator.md` then open editable in Settings > Agent Soul and
+# save back into the package directory. Those edits are shared by every workspace in the profile
+# and are lost if the package is reinstalled or updated; the flag is ignored when `bundled: false`.
+# The GUI can also set `bundledEditable` for you (Plugins page toggle "Use Default Agent Souls", or
+# the "Use default agent souls" switch in the Agent Soul settings card), which rewrites this row config.
 
 - id: tool-agent-team
   disabled: true

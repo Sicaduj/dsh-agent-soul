@@ -66,6 +66,78 @@ closed output schema:
 node --test smoke/remediation-bindings.test.mjs smoke/remediation-admin.test.mjs
 ```
 
+## Focused bundledEditable regressions
+
+`smoke/bundled-editable.test.mjs` covers the opt-in in-place authoring mode
+(`config.bundledEditable`) for packaged soul documents and the packaged orchestrator
+doctrine. Every case copies `lib/`, `agents/`, `defaults/`, `package.json`, and
+`index.js` into a fresh temporary package and imports the copy through its own file URL, so
+`BUNDLED_SOULS_DIR` and `BUNDLED_ORCHESTRATOR_PATH` resolve inside the copy and the real
+package is never written; workspace roots are separate temporary directories and both are
+removed afterwards. It runs 222 assertions and covers:
+
+- config normalization (a boolean is accepted, every other type is a `TypeError`, the flag
+  is inert while `bundled: false` and activation warns once) and `bundledEditableEnabled`;
+- the default config: packaged rows are `bundled: true`/`packageOwned: true` with
+  package-relative labels, in-place save/delete are refused with `unsafe-path`, and
+  workspace shadowing plus same-name duplication behave exactly as before;
+- `bundledEditable: true`: packaged rows are `bundled: false`/`packageOwned: true`,
+  in-place saves are atomic (no temporary leftovers) and a stale `expectedHash` returns
+  `conflict` (the GUI's 409), delete moves the file to the workspace trash and restore
+  round-trips, create/duplicate still write only to workspace directories, a local
+  same-name soul still shadows the packaged row, and a symlink alias of the packaged
+  directory stays inside the copy while an escaping symlink is refused;
+- `bundled: false`: the flag is inert and no packaged catalog is scanned or readable;
+- the GUI document route: 400 `unsafe-path` for a read-only in-place save, 409
+  `conflict` with `currentHash` for a stale save, and the overview's
+  `settings.bundledEditable`/`settings.bundledDir`;
+- the Phase 2 orchestrator: the packaged doctrine is read and saved in place (no workspace
+  `orchestrator.md` is created), a workspace file wins for both read and save, deleting it
+  falls back to the packaged doctrine, an appearing workspace file turns the save into
+  `conflict`, and flag-off or `bundled: false` keep the historical workspace paths.
+
+```sh
+node --test smoke/bundled-editable.test.mjs
+```
+
+## Focused "Use Default Agent Souls" toggle regressions
+
+`smoke/config-toggle.test.mjs` covers the P3 configuration toggle at both contract
+boundaries. Host cases copy the package (`lib/`, `agents/`, `defaults/`, `index.js`,
+`package.json`) into a temporary directory and import the copied `lib/gui-host.js`, then
+call the registered route handlers with fake req/res objects and a fake Host
+`configEditor` service. Client cases load the real `client.js` classic artifact in a fake
+module loader and inspect its registered slot contribution, locale dictionaries, and
+toggle source contract. No server, profile, credential, network, or real-package write is
+involved. It runs 129 assertions and covers:
+
+- `createGuiRoutes` exposes 15 endpoints over 11 exact paths, including the new
+  GET+POST `/agent-soul/config` pair;
+- `GET` reports the effective `bundledEditable`/`bundled` flags and `configurable` only
+  when the `configEditor` service and the plugin's `agent-soul-team` Loader row are both
+  available (missing service, missing row, throwing `entries()`, and throwing service
+  lookup stay not configurable);
+- `POST` validates the JSON boolean body (400 `invalid-request`), refuses a disabled
+  packaged catalog (409 `bundled-disabled`), a missing editor/row (409
+  `not-configurable`), and a failed editor write (409 `overridden`), and answers a
+  successful write with the applied config;
+- a successful write calls `editor.edit(entry, change)` exactly once with the plugin row
+  entry, and `change(current)` preserves every other config key (the profile-patch
+  shallow-replacement guard);
+- the connection trust fence rejects both methods with 401/403 and a composition without a
+  fence fails closed with 403;
+- `client.js` registers `plugins.row.config` keyed
+  `@local/dsh-agent-soul#agent-soul-team` under `settings.agentSoul`, ships the twelve
+  toggle locale keys non-empty in all eight dictionaries (with the exact English
+  `Use Default Agent Souls` title and `Use default agent souls` labels), removes the old
+  `infoBundled`/`Bundled defaults` copy, reads `agent-soul/config` on mount, POSTs
+  `{ bundledEditable: boolean }` on toggle, polls the read route after success, and shares
+  one control between the Plugins row page and the Settings `Plugin settings & runtime` card.
+
+```sh
+node --test smoke/config-toggle.test.mjs
+```
+
 The focused real-runtime harness boots fresh headless CLI processes with scripted models and
 `claimTeamToolRow: false`. It never installs or repairs the real profile. By default it creates a
 new run root under the OS temporary directory; set `QAS_RUN_ROOT` to retain evidence in a chosen

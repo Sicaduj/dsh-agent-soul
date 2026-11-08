@@ -18,9 +18,11 @@ already-running Orchestrator mode are never modified in place.
 
 Installations ship **bundled defaults**: the five packaged souls under `agents/` and the packaged
 orchestrator doctrine under `defaults/orchestrator.md` are available in every workspace without
-local files. Bundled souls are listed with a **Bundled** badge and are read-only in place — use
-**Duplicate** to create an editable workspace copy. The orchestrator tab shows the bundled doctrine
-until a workspace file overrides it.
+local files. By default the packaged souls are listed with a **Bundled** badge and are read-only in
+place — use **Duplicate** to create an editable workspace copy. With **Use default agent souls**
+on (config key `bundledEditable`, with `bundled: true`), the packaged souls open editable in place
+instead and carry no badge. The orchestrator tab shows the bundled doctrine until a workspace file
+overrides it.
 
 ---
 
@@ -39,9 +41,10 @@ until a workspace file overrides it.
 | **Clear filters** | Appears in the empty state when a search/filter hides every card; resets search and filters. |
 | **Default Soul** (Souls tab) | Selects the Soul `spawn_teammate` uses when `agent_type` is omitted. The selector offers the bundled-default option, every valid Soul, and the persisted name marked `(not in catalog)` when it is stale. Choosing a Soul validates it against the live catalog and writes `<dirname(bindingsFile)>/preferences.json` atomically; choosing the bundled option clears the explicit selection, so `generalist` applies when present. The **Default** badge sits on the effective default (the selection, else the bundled `generalist`). A warning banner appears for a stale selection, no usable default, or a corrupt/malformed/unreadable preferences document. When the document itself is invalid, the page advertises no effective default and a default spawn fails with the reason instead of silently using `generalist`; an explicit `agent_type` is unaffected. |
 | **Soul card** | Click to open that document in the editor dialog. The badges are read-only status (see ["List-card badges"](#list-card-badges-read-only-status)); delete/undo happens inside the dialog. |
+| **Use default agent souls** (settings card switch and the Plugins page) | The packaged-defaults edit mode (config key `bundledEditable`, profile-wide). The same switch appears in the **Plugin settings & runtime** card and on the Plugins page: **Configure** on this bundle's `agent-soul-team` row opens the **Use Default Agent Souls** page, which carries the page description ("When on, the packaged default souls and orchestrator doctrine shipped with the plugin are the live definitions and open editable in Settings > Agent Soul. When off, they stay read-only defaults and you customize copies in the workspace.") and the switch labelled **Use default agent souls** (the bundle page's row summary reads "Edit the packaged default souls shipped with the plugin in place instead of copying them."). Status text: **On - packaged defaults are editable in place**, **Off - packaged defaults are read-only**, **Unavailable - bundled defaults are disabled (bundled: false)**, or **Unavailable - this profile cannot save this setting**; while saving it shows **Applying... the plugin reloads once**, then **Applied.** (a failure shows **Could not update the plugin configuration.**). Flipping the switch writes `bundledEditable` into the profile patch's row config (all other row keys are preserved) and the plugin reloads once. The switch is disabled while loading, saving, or applying, when `bundled: false`, or when the profile cannot persist the setting. |
 
-The page footer cards (**Plugin settings & runtime**, **Health**) are read-only reports — see
-["Read-only cards"](#read-only-cards).
+The page footer cards (**Plugin settings & runtime**, **Health**) are read-only reports apart from
+the **Use default agent souls** switch — see ["Read-only cards"](#read-only-cards).
 
 ---
 
@@ -96,10 +99,10 @@ The body must be non-empty; that is part of what makes a file valid.
 |---|---|
 | **Form / Raw** toggle | Form = the split editor above. Raw = the complete Markdown source in one textarea; Save validates it exactly like a form save. Use Raw for unusual YAML or to copy a whole file. |
 | **What the teammate will receive** preview | Read-only live previews of the composed persona and the catalog line, plus the resolved model and the slash-command status. Nothing is written. Use it to check what the model will actually see before spawning. |
-| **Save** | Validates the composed document, then writes the file atomically and re-scans the catalog. Errors appear inline (and in a summary) without writing. A stale draft that conflicts with an external edit answers a **conflict banner** with **Reload file** / **Overwrite**. |
+| **Save** | Validates the composed document, then writes the file atomically and re-scans the catalog. Errors appear inline (and in a summary) without writing. A stale draft that conflicts with an external edit answers a **conflict banner** with **Reload file** / **Overwrite**. With `bundledEditable` on, saving a packaged soul rewrites the package's `agents/` file in place. |
 | **Revert** | Discards the in-page changes and restores the last loaded file content (asks before discarding when the guard fires). |
 | **Duplicate** | Copies the document under a new name (default `<name>-copy`), preserving description, sections, and fields. Fails on an existing name or a bad name. |
-| **Delete** | Two-step confirm, then moves the file into the plugin trash (`<bindings dir>/trash`). The status banner offers **Undo**, which restores the newest deleted file. |
+| **Delete** | Two-step confirm, then moves the file into the plugin trash (`<bindings dir>/trash`). The status banner offers **Undo**, which restores the newest deleted file. With `bundledEditable` on, deleting a packaged soul moves the package file to the same workspace trash, and **Undo** restores it to the package. |
 | **Close / Escape / backdrop** | Closes the dialog. With unsaved edits, the guard asks **Discard changes** or **Keep editing**. |
 | **Reset size** (title row) | Restores the dialog's default size; the chosen size is remembered in `localStorage`. |
 
@@ -112,8 +115,10 @@ A recovered draft is offered when the page reloads with an unsaved draft in `loc
 
 Opened from the Orchestrator tab (**Edit orchestrator**); same resizable dialog, no delete (the file
 is optional). On a fresh install the tab shows the **Bundled** badge and the bundled-default hint:
-editing loads the packaged doctrine, and saving writes the workspace override at the path shown.
-Delete that workspace file to fall back to the bundled doctrine. Saving the definition does **not**
+editing loads the packaged doctrine, and by default saving writes the workspace override at the
+path shown (with the `bundledEditable` bundle config on, saving instead rewrites
+`defaults/orchestrator.md` in place, and a workspace file always wins). Delete that workspace file
+to fall back to the bundled doctrine. Saving the definition does **not**
 change a running mode — it is read the next time
 `/orchestrate` enables the mode (or when an active mode is re-applied after a Host reload / Lead
 creation).
@@ -187,7 +192,7 @@ variables stay literal.
 | **Edit orchestrator** | Opens the dialog described above. |
 | **Save / Revert / close** | Same validation, dirty guard, and dialog behavior as the soul editor. The file is single, so there are no duplicate/delete actions and no `expectedHash` conflicts. |
 | **Edit while the mode is on** | Safe but not hot-applied. Re-run `/orchestrate` (or reload the Host / re-create the Lead) to apply the new definition. A failed re-enable rolls back to the previous doctrine when the rollback succeeds (previousStateRestored=true), and if the rollback itself fails the mode ends inactive (previousStateRestored=false) and the error says so. |
-| **Bundled default** | When the tab shows the bundled doctrine (no workspace file), **Edit** loads it and **Save** creates a workspace override at the path shown. The dialog has no delete action for the packaged asset; delete the workspace file to fall back to the bundled default. |
+| **Bundled default** | When the tab shows the bundled doctrine (no workspace file), **Edit** loads it and **Save** creates a workspace override at the path shown. With `bundledEditable` on there is no **Bundled** badge: the shown path is the packaged file and **Save** rewrites it in place (a workspace file that appears while the dialog is open makes the save fail with a conflict instead of being clobbered). The dialog has no delete action for the packaged asset; delete the workspace file to fall back to the bundled default. |
 
 ---
 
@@ -198,7 +203,7 @@ These summarize a file; they are not editable.
 | Badge | Meaning |
 |---|---|
 | **Valid** / **Invalid** | Whether the file parses and validates. Invalid files stay listed and editable; the catalog and spawning skip them. |
-| **Bundled** | This soul comes from the plugin package (`agents/`) rather than a workspace directory. It is read-only in place: the editor disables **Save** and **Delete**, and **Duplicate** creates an editable workspace copy under the configured `dirs` (created on demand). A local soul with the same name shadows the bundled card. |
+| **Bundled** | This soul comes from the plugin package (`agents/`) rather than a workspace directory. By default it is read-only in place: the editor disables **Save** and **Delete**, and **Duplicate** creates an editable workspace copy under the configured `dirs` (created on demand). With `bundledEditable` on, the packaged souls open editable in place (Save rewrites the package file, Delete moves it to the workspace trash with Undo), report no badge, and keep package-relative labels. A local soul with the same name shadows the packaged card either way. |
 | `N tools` / `No tools` / `All tools` | The permission matrix: an allow-list of that size, an empty list (deny every inherited tool), or no list (inherit every inherited tool). |
 | **Model: …** | The resolved `provider/model` when it resolves, otherwise the raw declaration. The badge is absent when the soul inherits the Lead's model. |
 | **Context: fresh/fork** | The declared spawn context. Absent when the soul does not specify one. |
@@ -213,7 +218,10 @@ These summarize a file; they are not editable.
 ## Read-only cards
 
 - **Plugin settings & runtime** — one combined card: plugin name and version, workspace root,
-  configured soul directories (resolved), bindings path with the stored-bindings count, advertised
+  configured soul directories (resolved), the **Use default agent souls** switch (the card's one
+  live control — the toggle described under
+  ["Page-level controls"](#page-level-controls-both-tabs)), bindings path with the stored-bindings
+  count, advertised
   providers (or "The Host reports no providers."), command prefix (or "none"), default context,
   spawn providers (`fresh` / `fork`), definition/catalog budgets, the active scan time (or
   "never"), the live Teams and their registered soul commands (with member counts), and the
@@ -248,14 +256,14 @@ These summarize a file; they are not editable.
 | Body sections | `# Role Definition`, … | six canonical orchestrator sections |
 | Advanced → Extra frontmatter | unknown YAML keys | — |
 | Extra markdown | preamble body content (before the first canonical heading; the whole body when there is none) | extras: preamble, marker tail, noncanonical headings (moved after the canonical sections on save) |
-| Bundled vs workspace | `agents/` in the package (read-only) vs the configured workspace `dirs` | `defaults/orchestrator.md` in the package (read-only) vs the workspace `<dirname(bindingsFile)>/orchestrator.md` |
+| Bundled vs workspace | `agents/` in the package (read-only by default; editable in place with `bundledEditable`) vs the configured workspace `dirs` | `defaults/orchestrator.md` in the package (read-only by default; editable in place with `bundledEditable`) vs the workspace `<dirname(bindingsFile)>/orchestrator.md` |
 
 ## When an edit takes effect
 
 | Edit | Effect |
 |---|---|
 | Soul field/section saved | Next `spawn_teammate` using that `agent_type`; also next `/command` invocation. Running teammates are not changed. |
-| Bundled content (package upgrade) | The packaged souls (`agents/`) and doctrine (`defaults/orchestrator.md`) are read from the installed package; updating or reinstalling the bundle replaces them for every workspace, while local files still shadow the bundled copies. |
+| Bundled content (package upgrade) | The packaged souls (`agents/`) and doctrine (`defaults/orchestrator.md`) are read from the installed package; updating or reinstalling the bundle replaces them for every workspace — discarding any `bundledEditable` in-place edits — while local files still shadow the packaged copies. |
 | Default Soul changed | Next `spawn_teammate` that omits `agent_type`; the page re-reads the overview so the **Default** badge and warning move immediately. A selection that is not in the live catalog makes the next default spawn fail with an actionable error — it never silently falls back to `generalist`. A malformed or corrupt preferences document likewise advertises no effective default and fails the default spawn with its diagnostic; fix or clear it in the selector, or pass an explicit `agent_type`. |
 | Soul renamed | Old name stops resolving for spawn; the old file must be renamed or the new file saved under the new name (delete the old one via the dialog if needed). A command collision clears on the next catalog reconciliation (no Host reload). |
 | Colliding soul deleted or renamed | The stale/failed command entry is dropped and the remaining commands re-register immediately (the page reconciles on the next overview or mutation); no Host reload is needed. |

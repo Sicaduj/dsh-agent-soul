@@ -131,6 +131,18 @@ window.__ModuleLoader__.load({
       infoRoot: 'Workspace root',
       infoDirs: 'Soul directories',
       infoDirsEmpty: 'No soul directory resolves for this workspace.',
+      pageTitle: 'Use Default Agent Souls',
+      pageDescription: 'When on, the packaged default souls and orchestrator doctrine shipped with the plugin are the live definitions and open editable in Settings > Agent Soul. When off, they stay read-only defaults and you customize copies in the workspace.',
+      toggleLabel: 'Use default agent souls',
+      cardLabel: 'Use default agent souls',
+      summary: 'Edit the packaged default souls shipped with the plugin in place instead of copying them.',
+      statusOn: 'On - packaged defaults are editable in place',
+      statusOff: 'Off - packaged defaults are read-only',
+      statusUnavailable: 'Unavailable - bundled defaults are disabled (bundled: false)',
+      statusNotConfigurable: 'Unavailable - this profile cannot save this setting',
+      statusApplying: 'Applying... the plugin reloads once',
+      statusApplied: 'Applied.',
+      statusError: 'Could not update the plugin configuration.',
       infoBindings: 'Bindings file',
       infoBindingsCount: '{count} stored bindings',
       infoBindingsUnreadable: 'Count unavailable',
@@ -477,6 +489,18 @@ window.__ModuleLoader__.load({
       infoRoot: '工作区根目录',
       infoDirs: 'Soul 目录',
       infoDirsEmpty: '当前工作区没有解析出 Soul 目录。',
+      pageTitle: '使用默认 Agent Souls',
+      pageDescription: '开启后，插件自带的默认 soul 与编排章程即为生效定义，可在“设置 > Agent Soul”中直接编辑。关闭后，它们仍是只读默认项，请在 workspace 中自定义副本。',
+      toggleLabel: '使用默认 agent souls',
+      cardLabel: '使用默认 agent souls',
+      summary: '直接就地编辑插件自带的默认 soul，而无需复制。',
+      statusOn: '已开启 - 内置默认项可就地编辑',
+      statusOff: '已关闭 - 内置默认项为只读',
+      statusUnavailable: '不可用 - 内置默认已禁用（bundled: false）',
+      statusNotConfigurable: '不可用 - 当前配置无法保存该设置',
+      statusApplying: '正在应用…插件将重新加载一次',
+      statusApplied: '已应用。',
+      statusError: '无法更新插件配置。',
       infoBindings: '绑定文件',
       infoBindingsCount: '{count} 条已存绑定',
       infoBindingsUnreadable: '数量不可用',
@@ -823,6 +847,18 @@ window.__ModuleLoader__.load({
       infoRoot: 'ワークスペースのルート',
       infoDirs: 'Soul ディレクトリ',
       infoDirsEmpty: 'このワークスペースで解決される Soul ディレクトリはありません。',
+      pageTitle: '既定の Agent Souls を使用',
+      pageDescription: 'オンにすると、プラグイン同梱の既定のソウルとオーケストレーターのドクトリンが有効な定義となり、「設定 > Agent Soul」でそのまま編集できます。オフにすると読み取り専用の既定値となり、ワークスペースにコピーを作ってカスタマイズします。',
+      toggleLabel: '既定の agent souls を使用',
+      cardLabel: '既定の agent souls を使用',
+      summary: '同梱の既定のソウルをコピーせずにその場で編集します。',
+      statusOn: 'オン - 同梱の既定値をその場で編集できます',
+      statusOff: 'オフ - 同梱の既定値は読み取り専用です',
+      statusUnavailable: '利用不可 - 同梱の既定値が無効です（bundled: false）',
+      statusNotConfigurable: '利用不可 - この構成ではこの設定を保存できません',
+      statusApplying: '適用中…プラグインは一度再読み込みされます',
+      statusApplied: '適用しました。',
+      statusError: 'プラグインの構成を更新できませんでした。',
       infoBindings: 'バインディング ファイル',
       infoBindingsCount: '保存済みバインディング {count} 件',
       infoBindingsUnreadable: '件数を取得できません',
@@ -1169,6 +1205,18 @@ window.__ModuleLoader__.load({
       infoRoot: 'Workspace-Wurzel',
       infoDirs: 'Soul-Verzeichnisse',
       infoDirsEmpty: 'Für diesen Workspace wird kein Soul-Verzeichnis aufgelöst.',
+      pageTitle: 'Standard-Agent-Souls verwenden',
+      pageDescription: 'Wenn aktiviert, sind die mitgelieferten Standard-Souls und die Orchestrator-Doktrin des Plugins die aktiven Definitionen und lassen sich unter Einstellungen > Agent Soul direkt bearbeiten. Wenn deaktiviert, bleiben sie schreibgeschützte Vorgaben, und Sie passen Kopien im Arbeitsbereich an.',
+      toggleLabel: 'Standard-Agent-Souls verwenden',
+      cardLabel: 'Standard-Agent-Souls verwenden',
+      summary: 'Die mitgelieferten Standard-Souls direkt bearbeiten, statt sie zu kopieren.',
+      statusOn: 'An - mitgelieferte Vorgaben sind direkt bearbeitbar',
+      statusOff: 'Aus - mitgelieferte Vorgaben sind schreibgeschützt',
+      statusUnavailable: 'Nicht verfügbar - mitgelieferte Vorgaben sind deaktiviert (bundled: false)',
+      statusNotConfigurable: 'Nicht verfügbar - dieses Profil kann die Einstellung nicht speichern',
+      statusApplying: 'Wird angewendet… das Plugin lädt einmal neu',
+      statusApplied: 'Angewendet.',
+      statusError: 'Die Plugin-Konfiguration konnte nicht aktualisiert werden.',
       infoBindings: 'Bindungsdatei',
       infoBindingsCount: '{count} gespeicherte Bindungen',
       infoBindingsUnreadable: 'Anzahl nicht verfügbar',
@@ -1515,6 +1563,18 @@ window.__ModuleLoader__.load({
       infoRoot: 'Racine de l’espace de travail',
       infoDirs: 'Répertoires d’souls',
       infoDirsEmpty: 'Aucun répertoire d’souls n’est résolu pour cet espace de travail.',
+      pageTitle: 'Utiliser les Agent Souls par défaut',
+      pageDescription: 'Lorsque cette option est activée, les âmes par défaut fournies avec le plugin et la doctrine de l’orchestrateur sont les définitions actives et s’ouvrent à la modification dans Réglages > Agent Soul. Lorsqu’elle est désactivée, elles restent des valeurs par défaut en lecture seule et vous personnalisez des copies dans l’espace de travail.',
+      toggleLabel: 'Utiliser les agent souls par défaut',
+      cardLabel: 'Utiliser les agent souls par défaut',
+      summary: 'Modifier sur place les âmes par défaut fournies avec le plugin au lieu de les copier.',
+      statusOn: 'Activé - les valeurs par défaut fournies sont modifiables sur place',
+      statusOff: 'Désactivé - les valeurs par défaut fournies sont en lecture seule',
+      statusUnavailable: 'Indisponible - les valeurs par défaut fournies sont désactivées (bundled: false)',
+      statusNotConfigurable: 'Indisponible - ce profil ne peut pas enregistrer ce réglage',
+      statusApplying: 'Application… le plugin se recharge une fois',
+      statusApplied: 'Appliqué.',
+      statusError: 'Impossible de mettre à jour la configuration du plugin.',
       infoBindings: 'Fichier de liaisons',
       infoBindingsCount: '{count} liaisons stockées',
       infoBindingsUnreadable: 'Nombre indisponible',
@@ -1861,6 +1921,18 @@ window.__ModuleLoader__.load({
       infoRoot: 'Raíz del espacio de trabajo',
       infoDirs: 'Directorios de Souls',
       infoDirsEmpty: 'No se resuelve ningún directorio de Souls para este espacio de trabajo.',
+      pageTitle: 'Usar los Agent Souls predeterminados',
+      pageDescription: 'Cuando está activado, las almas predeterminadas incluidas con el plugin y la doctrina del orquestador son las definiciones activas y se abren para editar en Ajustes > Agent Soul. Cuando está desactivado, siguen siendo valores predeterminados de solo lectura y personalizas copias en el espacio de trabajo.',
+      toggleLabel: 'Usar los agent souls predeterminados',
+      cardLabel: 'Usar los agent souls predeterminados',
+      summary: 'Editar en el mismo lugar las almas predeterminadas incluidas con el plugin en lugar de copiarlas.',
+      statusOn: 'Activado - los valores predeterminados incluidos se editan en el mismo lugar',
+      statusOff: 'Desactivado - los valores predeterminados incluidos son de solo lectura',
+      statusUnavailable: 'No disponible - los valores predeterminados incluidos están desactivados (bundled: false)',
+      statusNotConfigurable: 'No disponible - este perfil no puede guardar este ajuste',
+      statusApplying: 'Aplicando… el plugin se recarga una vez',
+      statusApplied: 'Aplicado.',
+      statusError: 'No se pudo actualizar la configuración del plugin.',
       infoBindings: 'Archivo de vínculos',
       infoBindingsCount: '{count} vínculos guardados',
       infoBindingsUnreadable: 'Recuento no disponible',
@@ -2207,6 +2279,18 @@ window.__ModuleLoader__.load({
       infoRoot: 'Корень рабочей области',
       infoDirs: 'Каталоги Souls',
       infoDirsEmpty: 'Для этой рабочей области не найдено ни одного каталога Souls.',
+      pageTitle: 'Использовать Agent Souls по умолчанию',
+      pageDescription: 'Когда включено, встроенные души плагина и доктрина оркестратора по умолчанию являются действующими определениями и открываются для редактирования в «Настройки > Agent Soul». Когда выключено, это значения по умолчанию только для чтения, а копии настраиваются в рабочей области.',
+      toggleLabel: 'Использовать agent souls по умолчанию',
+      cardLabel: 'Использовать agent souls по умолчанию',
+      summary: 'Редактировать встроенные души плагина на месте, а не копировать их.',
+      statusOn: 'Включено — встроенные значения по умолчанию редактируются на месте',
+      statusOff: 'Выключено — встроенные значения по умолчанию только для чтения',
+      statusUnavailable: 'Недоступно — встроенные значения по умолчанию отключены (bundled: false)',
+      statusNotConfigurable: 'Недоступно — этот профиль не может сохранить настройку',
+      statusApplying: 'Применение… плагин перезагрузится один раз',
+      statusApplied: 'Применено.',
+      statusError: 'Не удалось обновить конфигурацию плагина.',
       infoBindings: 'Файл привязок',
       infoBindingsCount: 'Сохранено привязок: {count}',
       infoBindingsUnreadable: 'Количество недоступно',
@@ -2553,6 +2637,18 @@ window.__ModuleLoader__.load({
       infoRoot: 'Raiz do workspace',
       infoDirs: 'Diretórios de Souls',
       infoDirsEmpty: 'Nenhum diretório de Souls é resolvido para este workspace.',
+      pageTitle: 'Usar Agent Souls Padrão',
+      pageDescription: 'Quando ativado, as almas padrão incluídas no plugin e a doutrina do orquestrador são as definições ativas e abrem para edição em Configurações > Agent Soul. Quando desativado, continuam sendo padrões somente leitura e você personaliza cópias no espaço de trabalho.',
+      toggleLabel: 'Usar agent souls padrão',
+      cardLabel: 'Usar agent souls padrão',
+      summary: 'Editar no local as almas padrão incluídas no plugin em vez de copiá-las.',
+      statusOn: 'Ativado - os padrões incluídos são editáveis no local',
+      statusOff: 'Desativado - os padrões incluídos são somente leitura',
+      statusUnavailable: 'Indisponível - os padrões incluídos estão desativados (bundled: false)',
+      statusNotConfigurable: 'Indisponível - este perfil não pode salvar esta configuração',
+      statusApplying: 'Aplicando… o plugin recarrega uma vez',
+      statusApplied: 'Aplicado.',
+      statusError: 'Não foi possível atualizar a configuração do plugin.',
       infoBindings: 'Arquivo de vínculos',
       infoBindingsCount: '{count} vínculos salvos',
       infoBindingsUnreadable: 'Contagem indisponível',
@@ -4880,6 +4976,77 @@ window.__ModuleLoader__.load({
 }
 `
     /**
+     * Styles for the Plugins-page row configuration page. The Plugins page
+     * mounts that registration outside the Agent Soul page, whose single
+     * `<style>` element is not present there, so the entry ships its own
+     * token-only sheet. Every class is prefixed `agent-soul-cfg-`, and every
+     * color (the border color included) and radius comes from a `--dsw-*`
+     * theme token.
+     */
+    const CONFIG_STYLES = `
+.agent-soul-cfg-page {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-settings-card-fill);
+}
+.agent-soul-cfg-title {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+}
+.agent-soul-cfg-description {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.agent-soul-cfg-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.agent-soul-cfg-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+.agent-soul-cfg-switch-disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}
+.agent-soul-cfg-checkbox {
+  margin: 0;
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+.agent-soul-cfg-checkbox:focus-visible {
+  outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+.agent-soul-cfg-status {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+.agent-soul-cfg-status-error {
+  color: var(--dsw-alias-state-error-primary);
+}
+`
+    /**
      * Read one JSON response as the documented payload, raising the typed
      * failure shape for non-OK answers.
      * @param {Response} response - the fetch response.
@@ -5348,6 +5515,244 @@ window.__ModuleLoader__.load({
         if (root !== '' && roots.indexOf(root) === -1) roots.push(root)
       }
       return roots.length === 1 ? roots[0] : ''
+    }
+
+    /**
+     * Plugins-page row whose configuration this bundle contributes, keyed by
+     * `<package name>#<row id>` as the bundle's own patch declares the row.
+     */
+    const PLUGIN_ROW_CONFIG_KEY = '@local/dsh-agent-soul#agent-soul-team'
+
+    /** Route the packaged-defaults toggle reads and writes (profile-wide). */
+    const CONFIG_ROUTE = 'agent-soul/config'
+
+    /** Poll cadence after a successful write: the Loader reloads the row once. */
+    const CONFIG_POLL_INTERVAL_MS = 1200
+    const CONFIG_POLL_ATTEMPTS = 6
+
+    /**
+     * Normalize the `config` block of `GET/POST agent-soul/config`. A missing
+     * flag stays conservative: not editable, packaged catalog enabled, and
+     * never writable unless the Host said so.
+     * @param {any} payload - the route payload.
+     * @returns {{ bundledEditable: boolean, bundled: boolean, configurable: boolean } | null}
+     *   the normalized block, or null when the answer carries none.
+     */
+    function normalizeConfigBlock(payload) {
+      if (payload === null || typeof payload !== 'object') return null
+      const block = payload.config !== null && typeof payload.config === 'object' ? payload.config : null
+      if (block === null) return null
+      return {
+        bundledEditable: block.bundledEditable === true,
+        bundled: block.bundled !== false,
+        configurable: block.configurable === true,
+      }
+    }
+
+    /**
+     * The Host message for a failed read or write, or the localized fallback
+     * when the failure carried none.
+     * @param {Function} t - the bound translate function.
+     * @param {unknown} error - a thrown failure.
+     * @returns {string} display text.
+     */
+    function configFailureText(t, error) {
+      const failure = failureOf(error)
+      return failure.message === '' ? t('statusError') : failure.message
+    }
+
+    /**
+     * Read and write the packaged-defaults mode and project one display state.
+     *
+     * The write lands in the profile patch, so the Loader reloads this plugin
+     * row once; the hook therefore polls the read route a few times after a
+     * successful save and finishes on the applied state whether or not the
+     * reload was observed. Timers and late answers are dropped on unmount.
+     *
+     * @param {Function} t - the bound translate function.
+     * @returns {{ checked: boolean, disabled: boolean, status: string, error: boolean,
+     *   onChange: (event: any) => void }} the switch contract.
+     */
+    function useDefaultSoulsConfig(t) {
+      const [config, setConfig] = React.useState(null)
+      const [phase, setPhase] = React.useState('loading')
+      const [failure, setFailure] = React.useState('')
+      const alive = React.useRef(true)
+      const timer = React.useRef(null)
+
+      const load = React.useCallback(async function load() {
+        try {
+          const payload = await readJson(await fetch(CONFIG_ROUTE, { headers: { accept: 'application/json' } }))
+          if (!alive.current) return
+          const block = normalizeConfigBlock(payload)
+          if (block === null) {
+            setPhase('error')
+            setFailure(t('statusError'))
+            return
+          }
+          setConfig(block)
+          setFailure('')
+          setPhase('ready')
+        } catch (error) {
+          if (!alive.current) return
+          setPhase('error')
+          setFailure(configFailureText(t, error))
+        }
+      }, [t])
+
+      React.useEffect(function () {
+        alive.current = true
+        void load()
+        return function () {
+          alive.current = false
+          if (timer.current !== null) {
+            clearTimeout(timer.current)
+            timer.current = null
+          }
+        }
+      }, [load])
+
+      const poll = function poll(requested, attempt) {
+        if (!alive.current) return
+        timer.current = setTimeout(async function () {
+          timer.current = null
+          if (!alive.current) return
+          let block = null
+          let matched = false
+          try {
+            const payload = await readJson(await fetch(CONFIG_ROUTE, { headers: { accept: 'application/json' } }))
+            block = normalizeConfigBlock(payload)
+            matched = block !== null && block.bundledEditable === requested
+          } catch (error) {
+            block = null
+          }
+          if (!alive.current) return
+          if (block !== null) setConfig(block)
+          if (matched || attempt >= CONFIG_POLL_ATTEMPTS) {
+            setPhase('applied')
+            return
+          }
+          poll(requested, attempt + 1)
+        }, CONFIG_POLL_INTERVAL_MS)
+      }
+
+      const toggle = React.useCallback(async function toggle(next) {
+        if (config === null || config.bundled === false || !config.configurable) return
+        setPhase('saving')
+        setFailure('')
+        try {
+          const payload = await readJson(await fetch(CONFIG_ROUTE, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ bundledEditable: next === true }),
+          }))
+          if (!alive.current) return
+          const block = normalizeConfigBlock(payload)
+          if (block !== null) setConfig(block)
+          setPhase('applying')
+          poll(next === true, 1)
+        } catch (error) {
+          if (!alive.current) return
+          setPhase('error')
+          setFailure(configFailureText(t, error))
+        }
+      }, [config, t])
+
+      const busy = phase === 'loading' || phase === 'saving' || phase === 'applying'
+      const blocked = config === null || config.bundled === false || !config.configurable
+      const checked = config !== null && config.bundledEditable === true
+      let status = ''
+      if (phase === 'loading') status = t('statusLoading')
+      else if (phase === 'saving') status = t('statusSaving')
+      else if (phase === 'applying') status = t('statusApplying')
+      else if (phase === 'applied') status = t('statusApplied')
+      else if (phase === 'error') status = failure === '' ? t('statusError') : failure
+      else if (config === null) status = t('statusError')
+      else if (config.bundled === false) status = t('statusUnavailable')
+      else if (!config.configurable) status = t('statusNotConfigurable')
+      else status = config.bundledEditable ? t('statusOn') : t('statusOff')
+
+      return {
+        checked: checked,
+        disabled: busy || blocked,
+        status: status,
+        error: phase === 'error',
+        onChange: function (event) {
+          if (busy || config === null || config.bundled === false || !config.configurable) return
+          void toggle(event.target.checked)
+        },
+      }
+    }
+
+    /**
+     * The packaged-defaults switch inside the Settings card row. The row label
+     * already names the setting, so the checkbox carries that copy as its
+     * accessible name instead of a second visible label.
+     */
+    function DefaultSoulsCardControl(props) {
+      const t = typeof props.t === 'function' ? props.t : function (key) { return key }
+      const control = useDefaultSoulsConfig(t)
+      const inputId = React.useId() + '-default-souls'
+      return h('div', { className: 'agent-soul-stack' },
+        h('div', { className: 'agent-soul-checkbox-row' },
+          h('input', {
+            id: inputId,
+            className: 'agent-soul-checkbox',
+            type: 'checkbox',
+            checked: control.checked,
+            disabled: control.disabled,
+            'aria-label': t('toggleLabel'),
+            onChange: control.onChange,
+          })),
+        h('span', {
+          className: control.error ? 'agent-soul-field-error' : 'agent-soul-field-hint',
+          role: 'status',
+        }, control.status))
+    }
+
+    /**
+     * The row configuration page the Plugins page opens for this bundle's row.
+     * It draws its own title because that page shows the row's name above the
+     * contribution, and ships its own stylesheet because the Agent Soul page is
+     * not mounted there.
+     */
+    function DefaultSoulsConfigPage(props) {
+      const t = typeof props.t === 'function' ? props.t : function (key) { return key }
+      const control = useDefaultSoulsConfig(t)
+      const inputId = React.useId() + '-default-souls'
+      return h('section', { className: 'agent-soul-cfg-page', 'aria-label': t('pageTitle') },
+        h('style', { key: 'agent-soul-cfg-styles' }, CONFIG_STYLES),
+        h('h3', { className: 'agent-soul-cfg-title' }, t('pageTitle')),
+        h('p', { className: 'agent-soul-cfg-description' }, t('pageDescription')),
+        h('div', { className: 'agent-soul-cfg-control' },
+          h('label', {
+            className: 'agent-soul-cfg-switch' + (control.disabled ? ' agent-soul-cfg-switch-disabled' : ''),
+            htmlFor: inputId,
+          },
+            h('input', {
+              id: inputId,
+              className: 'agent-soul-cfg-checkbox',
+              type: 'checkbox',
+              checked: control.checked,
+              disabled: control.disabled,
+              onChange: control.onChange,
+            }),
+            h('span', null, t('toggleLabel'))),
+          h('p', {
+            className: 'agent-soul-cfg-status' + (control.error ? ' agent-soul-cfg-status-error' : ''),
+            role: 'status',
+          }, control.status)))
+    }
+
+    /**
+     * One `plugins.row.config` entry: the one-line summary the row page uses
+     * when the package description is absent, and the page itself otherwise.
+     * The branch is hook-free so the two views never share a hook order.
+     */
+    function DefaultSoulsConfigEntry(props) {
+      const t = typeof props.t === 'function' ? props.t : function (key) { return key }
+      if (props.view === 'summary') return t('summary')
+      return h(DefaultSoulsConfigPage, { t: t })
     }
 
     /**
@@ -8746,6 +9151,7 @@ window.__ModuleLoader__.load({
             infoRow(t('infoDirs'), resolvedDirs.length === 0
               ? muted(t('infoDirsEmpty'))
               : codeList(resolvedDirs)),
+            infoRow(t('cardLabel'), h(DefaultSoulsCardControl, { t: t })),
             infoRow(t('infoBindings'), h('div', { className: 'agent-soul-stack' },
               codeValue(bindingsPath),
               h('span', { className: 'agent-soul-muted' }, bindingsCount === null
@@ -9003,6 +9409,13 @@ window.__ModuleLoader__.load({
             label: function () { return ctx.locale.bind(NS)('nav') },
             locale: NS,
           }, AgentSoulPage)
+        })
+        ctx.slots.inject('plugins.row.config', function () {
+          return ctx.slots.register({
+            name: 'plugins.row.config',
+            key: PLUGIN_ROW_CONFIG_KEY,
+            locale: NS,
+          }, DefaultSoulsConfigEntry)
         })
         ctx.slots.inject('conversation.session.header.actions', function () {
           return ctx.slots.register({

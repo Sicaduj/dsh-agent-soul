@@ -44,10 +44,12 @@ handlers in `lib/gui-host.js` and must be checked against them.
 | P3 | dialog layout | full-width page + centered resizable editor dialog (persisted size), responsive label-above fields, sticky dialog footer |
 | P4 | orchestrator | single optional orchestrator definition, `/orchestrate` session mode (prompt doctrine + model/tool overrides), Orchestrator GUI tab, GET/POST routes, agent-tool actions |
 | RC | release remediation | reserved `lead` identity on every save/create/duplicate/spawn path; built-in-first command priority with handler-identity status (`registered` vs `collision`) and a `reason` on preview command status; orchestrator route validation (declaration layer plus live catalog) on every save path; actionable cold-resume refusals |
+| BE | bundled-editable authoring | opt-in `bundledEditable` mode: the packaged souls and packaged orchestrator doctrine become editable in place while keeping their packaged identity (see the phase entry at the end of this history) |
 
 The current release builds on P4 with the selectable default Soul (preferences route, state document,
 and Souls-tab selector), the soul-only delegation fences, and the durable-mode Session-header badge;
-see "Default Soul preference and soul-only delegation" below.
+see "Default Soul preference and soul-only delegation" below. The opt-in `bundledEditable` authoring
+mode is the newest phase entry, at the end of this history.
 
 ### Handler terms
 
@@ -102,12 +104,13 @@ roster change cannot move an in-flight save to another workspace.
 
 ## Host routes (lib/gui-host.js)
 
-Thirteen endpoints, registered as ten exact paths (the web server rejects duplicate
+Fifteen endpoints, registered as eleven exact paths (the web server rejects duplicate
 `(kind, path)` registrations, so `GET` and `POST /agent-soul/document` share one registration
-with method dispatch, as do `GET`/`POST /agent-soul/orchestrator` and
-`GET`/`POST /agent-soul/preferences`). P1 adds the parse, preview, duplicate, and restore
-endpoints; P4 adds the orchestrator document endpoints; the current release adds the default-Soul
-preference endpoints. Each is registered on
+with method dispatch, as do `GET`/`POST /agent-soul/orchestrator`,
+`GET`/`POST /agent-soul/preferences`, and `GET`/`POST /agent-soul/config`). P1 adds the parse,
+preview, duplicate, and restore endpoints; P4 adds the orchestrator document endpoints; the
+current release adds the default-Soul preference endpoints and the packaged-defaults config
+toggle pair. Each is registered on
 `ctx.webServer.register({ kind: 'exact', path, handler })` with the absolute paths below.
 Every handler first consults the composition's trust fence and answers 401/403 when it rejects:
 
@@ -136,24 +139,27 @@ Route names and payloads (the browser half addresses them without the leading sl
 | POST | `/agent-soul/preview` | teammate-prompt preview for a draft, write nothing | P1 |
 | POST | `/agent-soul/duplicate` | copy a document under a new name | P1 |
 | POST | `/agent-soul/restore` | restore one trashed document | P1 |
-| GET | `/agent-soul/orchestrator` | load the effective orchestrator definition (bundled default when the workspace file is absent and `bundled` is on; skeleton only when both are absent) | P4 |
-| POST | `/agent-soul/orchestrator` | save the orchestrator definition | P4 |
+| GET | `/agent-soul/orchestrator` | load the effective orchestrator definition (bundled default when the workspace file is absent and `bundled` is on; skeleton only when both are absent; with `bundledEditable` on, the packaged file is the editable effective document) | P4 |
+| POST | `/agent-soul/orchestrator` | save the orchestrator definition (with `bundledEditable` on and no workspace file, the packaged doctrine is rewritten in place; a workspace file that appears meanwhile answers `conflict`) | P4 |
 | GET | `/agent-soul/preferences` | load the default-Soul selection and the effective default | below |
 | POST | `/agent-soul/preferences` | validate and atomically persist the default-Soul selection (`name`, or null to clear) | below |
+| GET | `/agent-soul/config` | read the packaged-defaults mode (`bundledEditable`, `bundled`, `configurable`); plugin-wide, no `root` | below |
+| POST | `/agent-soul/config` | persist `bundledEditable` on the plugin's Loader row (profile patch; the plugin reloads once) | below |
 
 ### `GET /agent-soul/overview`
 
 200 body (example values are illustrative; `plugin.version` is read from the real manifest —
-`0.3.0` at this revision — and the no-`pluginMeta` fallback constant `PLUGIN_META_DEFAULTS` in
+`0.4.0` at this revision — and the no-`pluginMeta` fallback constant `PLUGIN_META_DEFAULTS` in
 `lib/gui-host.js` matches it):
 
 ```jsonc
 {
-  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.3.0", "root": "/abs/workspace" },
+  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.4.0", "root": "/abs/workspace" },
   "settings": {
     "dirs": [".dsh/agents"],
     "resolvedDirs": ["/abs/workspace/.dsh/agents"],
     "bundled": true,                                 // package catalog/docs fallback enabled
+    "bundledEditable": false,                        // effective in-place authoring mode (true only with bundled on + the flag)
     "bundledDir": "/abs/profile/node_modules/@local/dsh-agent-soul/agents",
     "bindingsFile": ".dsh/agent-soul/bindings.json",
     "bindingsPath": "/abs/workspace/.dsh/agent-soul/bindings.json",
@@ -184,6 +190,7 @@ Route names and payloads (the browser half addresses them without the leading sl
   "orchestrator": {                        // P4: effective definition summary
     "path": "/abs/workspace/.dsh/agent-soul/orchestrator.md",   // writable workspace target
     "configured": true, "bundled": true,   // bundled: packaged default is in effect
+    // (with bundledEditable and no workspace file: path/sourcePath are the packaged file, bundled: false)
     "sourcePath": "/abs/profile/node_modules/@local/dsh-agent-soul/defaults/orchestrator.md",
     "valid": true, "name": "orchestrator",
     "model": "", "modelResolved": null,
@@ -222,7 +229,9 @@ or cleared. An explicit `agent_type` does not read the preferences document.
   "file": "/abs/workspace/.dsh/agents/researcher.md",             // absolute
   "label": "researcher.md",                                       // root-relative (packaged: file name)
   "name": "researcher", "description": "Researches …",                // null when unparseable
-  "valid": true, "bundled": false,                                // true for the packaged read-only catalog
+  "valid": true,
+  "bundled": false,                                               // true: packaged soul read-only in place (the default)
+  "packageOwned": false,                                          // true: the file lives in the packaged agents/ catalog
   "tools": ["web_search", "web_fetch"],                // null = inherits every tool
   "model": "deepseek-flash",                                          // raw frontmatter model or null
   "modelResolved": "deepseek-official/deepseek-flash",                // null when unresolvable/inherited
@@ -254,14 +263,17 @@ created/renamed/deleted invocable soul needs no Host reload.
 200 `{ "document": DocumentDetail }`; 404 `{ ok: false, code: 'not-found', message }` when the file
 does not exist; 400 `{ ok: false, code: 'unsafe-path', message }` when it resolves outside every
 readable soul directory (or is not a `.md` file). The packaged bundled catalog is readable through
-this route and reports `bundled: true`; writes to those paths are refused instead.
+this route and, with `bundledEditable` off (the default), reports `bundled: true` and refuses
+writes; with the flag on, a packaged document reports `bundled: false` + `packageOwned: true` and
+is writable in place.
 
 ```jsonc
 // DocumentDetail
 {
   "file": "/abs/…/researcher.md",
   "label": "researcher.md",
-  "bundled": false,                               // true: packaged soul, read-only in place
+  "bundled": false,                               // true: packaged soul, read-only in place (the default)
+  "packageOwned": false,                          // true: file lives in the packaged agents/ catalog
   "sourcePath": "/abs/…/researcher.md",
   "source": "---\nname: researcher\n…",          // complete current file text
   "hash": "…",                                    // SHA-256 hex of `source`
@@ -308,9 +320,12 @@ atomically, rescans the catalog, and answers:
   `name: "lead" is reserved for the Team Lead`) is mirrored into `fieldErrors[field]` so the editor
   focuses that control. Nothing is written for an `invalid` save.
 
-A write aimed at a packaged bundled soul is refused as `unsafe-path` with a message telling the
-caller to duplicate the soul into a workspace soul directory (the GUI disables Save for such a
-document and offers **Duplicate** instead).
+With `bundledEditable` off (the default), a write aimed at a packaged bundled soul is refused as
+`unsafe-path` with a message telling the caller to duplicate the soul into a workspace soul
+directory (the GUI disables Save for such a document and offers **Duplicate** instead). With
+`bundledEditable` on, a package-owned target is a valid save target and the write lands in the
+package's `agents/` directory (the same atomic temp-file + `rename` as any other save);
+`create`/`duplicate` still write the configured workspace directories.
 
 ### `POST /agent-soul/create`
 
@@ -335,6 +350,37 @@ Body `{ "file": "<absolute path>" }` → 200 `{ "ok": true, "trashedFile": "…"
 the trash path the browser's Undo uses; it is omitted when the trash move failed and the file was
 hard-deleted), or 400
 `{ "ok": false, "code": "unsafe-path" | "not-found" | "invalid-request", "message": "…" }`.
+
+### `GET/POST /agent-soul/config`
+
+The packaged-defaults toggle's route pair. It is **plugin-wide** — the setting lives in the
+profile's Loader row config — so the requests carry no `root` and apply to every workspace.
+
+`GET` answers 200:
+
+```jsonc
+{ "ok": true, "config": { "bundledEditable": false, "bundled": true, "configurable": true } }
+```
+
+`bundledEditable` is the effective flag, `bundled` says whether the packaged catalog is enabled
+at all, and `configurable` says whether the Host `configEditor` service lists this plugin's row
+(`agent-soul-team`), i.e. whether this composition can persist a change.
+
+`POST` body `{ "bundledEditable": true }` persists the flag through the Host `configEditor` into
+the plugin's Loader row config — the profile patch's `agent-soul-team` row, every other row key
+preserved — and the Loader reloads the plugin once. Success answers
+`200 { "ok": true, "config": { "bundledEditable": true, "bundled": true, "configurable": true } }`.
+Failures:
+
+- `400 { ok: false, code: "invalid-request", message }` — malformed body, or `bundledEditable`
+  not a boolean.
+- `409 { ok: false, code: "bundled-disabled", message }` — `config.bundled` is `false`, so the
+  packaged catalog is disabled and there is nothing to toggle.
+- `409 { ok: false, code: "not-configurable", message }` — the `configEditor` service is missing,
+  or row `agent-soul-team` is not in the active profile; set `bundledEditable` in the profile
+  patch instead.
+- `409 { ok: false, code: "overridden", message }` — the config editor refused the edit (for
+  example a home patch or CLI overlay that overrides the profile row).
 
 ## Document layer (lib/admin.js)
 
@@ -454,6 +500,46 @@ status dot and a visible label. Its styles are an inline `style` object using on
 `--dsw-alias-*` / `--dsw-radius-*` tokens, so the page keeps exactly one `<style>` element and no
 literal colors.
 
+### Plugins-page row configuration (`plugins.row.config`)
+
+The same `apply` registers a third slot, `plugins.row.config`, keyed
+`'@local/dsh-agent-soul#agent-soul-team'` (`<package name>#<row id>`, matching the row the
+bundle's own patch declares), so the dsh-agent-soul bundle page's `agent-soul-team` row gains a
+**Configure** control that opens this contribution:
+
+```js
+ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
+  name: 'plugins.row.config',
+  key: '@local/dsh-agent-soul#agent-soul-team',
+  locale: NS,
+}, DefaultSoulsConfigEntry))
+```
+
+The entry draws the page titled exactly **Use Default Agent Souls** — its own title, because the
+Plugins page shows the row's name above the contribution — with the page description ("When on,
+the packaged default souls and orchestrator doctrine shipped with the plugin are the live
+definitions and open editable in Settings > Agent Soul. When off, they stay read-only defaults and
+you customize copies in the workspace.") and a switch labelled **Use default agent souls**. The
+`summary` view returns the one-line row summary (quoted below); the branch is hook-free so the two
+views never share a hook order.
+
+> Row summary copy (verbatim): "Edit the packaged default souls shipped with the plugin in place instead of copying them."
+
+The page ships its own token-only stylesheet (`CONFIG_STYLES`, `--dsw-alias-*` /
+`--dsw-radius-*` tokens only) because the Agent Soul page is not mounted there.
+
+Both the Plugins page and the Settings card share one hook (`useDefaultSoulsConfig`) over
+`GET`/`POST agent-soul/config` (see the route pair above). The switch is disabled while loading,
+saving, applying, or when the mode is unavailable (`bundled: false`) or not configurable. Status
+copy (all eight dictionaries): `statusOn` ("On - packaged defaults are editable in place"),
+`statusOff` ("Off - packaged defaults are read-only"), `statusUnavailable` ("Unavailable -
+bundled defaults are disabled (bundled: false)"), `statusNotConfigurable` ("Unavailable - this
+profile cannot save this setting"), `statusApplying` ("Applying... the plugin reloads once"),
+`statusApplied` ("Applied."), and `statusError` ("Could not update the plugin configuration.").
+After a successful write the hook polls the GET route (six attempts, 1200 ms apart) because the
+Loader reloads the plugin row once, and settles on the applied state whether or not the reload was
+observed; timers and late answers are dropped on unmount.
+
 Required UI (Settings → "Agent Soul"):
 - Header: title + one-sentence intro (what a soul is, that saving is live for the next spawn).
 - Toolbar: "New soul" button, "Refresh" button, and a status line (last scan/valid/invalid counts).
@@ -470,10 +556,11 @@ Required UI (Settings → "Agent Soul"):
 - Actions: Save (validates; shows returned diagnostics without losing edits), Delete (two-step
   inline confirm), dirty-state hint; success/error status line.
 - "Plugin settings & runtime" info card (one combined card): plugin name/version, workspace root,
-  resolved soul directories, bindings file + count, providers, command prefix, default context,
-  spawn providers, definition/catalog limits, scan time, live Team commands; plus the
-  delegation hint (`spawn_teammate({ …, agent_type: "<name>" })`) and a note that souls are plain
-  Markdown with no separate database.
+  resolved soul directories, the **Use default agent souls** switch row (the same
+  `useDefaultSoulsConfig` control as the Plugins page), bindings file + count, providers, command
+  prefix, default context, spawn providers, definition/catalog limits, scan time, live Team
+  commands; plus the delegation hint (`spawn_teammate({ …, agent_type: "<name>" })`) and a note
+  that souls are plain Markdown with no separate database.
 - Error/empty/loading states: no Host route (fetch failure) → readable error card; no souls →
   empty state with "New soul"; nothing selected → placeholder.
 - All copy through `t(...)`; accessible labels (`label` + `aria-label` on controls, `role="status"`
@@ -1095,3 +1182,43 @@ log line (`… cold resume refused for teammate "<name>": … (code SOUL_PLAN_UN
 carry the same cause. The shared subagent lifecycle's generic `NOT_RESUMABLE` wrapper message is not
 changed by the plugin; admission stays fail-closed. See [`INTERNALS.md`](INTERNALS.md) for the
 module-level behavior.
+
+## Bundled-editable authoring (`bundledEditable`, 0.4.0)
+
+Opt-in authoring mode for the packaged defaults; with the flag off (the default) every behavior in
+the phases above is unchanged.
+
+- **Config (`index.js`):** boolean `bundledEditable`, default `false`, validated with the other
+  keys. It is inert while `bundled` is false (the packaged catalog is not scanned), and activation
+  logs a one-time warning for that combination.
+- **Host (`lib/admin.js`):** package ownership is separated from read-only status. `resolveTarget`
+  computes canonical `packageOwned` and derives `bundled = packageOwned && !editable`; a
+  package-owned target is a valid write target when the flag is on. `DocumentSummary` and
+  `DocumentDetail` carry `packageOwned`; package-owned rows keep package-relative labels,
+  same-name shadowing by workspace souls, and non-claiming duplicate names in both modes. With the
+  flag on, save/delete/restore accept package targets (delete still trashes into the workspace
+  trash, and Undo/restore round-trip), `create`/`duplicate` still write the configured workspace
+  directories, and symlink aliases of the package directory keep their packaged identity.
+- **Host (`lib/orchestrator.js`):** with the flag on and no workspace `orchestrator.md`,
+  `readOrchestrator` reports the packaged `defaults/orchestrator.md` as the editable effective
+  document (`path` = `sourcePath` = the packaged file, `bundled: false`), and `saveOrchestrator`
+  rewrites that file atomically instead of creating a workspace override. A workspace file always
+  wins; one that appears while the save is in flight is re-checked just before the write and the
+  save answers `400 conflict` ("a workspace orchestrator definition appeared at …; reload and save
+  again") instead of clobbering it. A dedicated packaged-target path check (the exact packaged
+  path, real parent equal to the package's real `defaults/` directory, no symlink escape) replaces
+  the state-directory fence for that one target; every other target keeps the existing fence.
+- **Host (`lib/gui-host.js`):** the plugin-wide `GET`/`POST /agent-soul/config` pair reads and
+  persists `bundledEditable` through the Host `configEditor` into the plugin's Loader row config
+  (row `agent-soul-team`, profile patch, all other row keys preserved), and the Loader reloads the
+  plugin once (`400 invalid-request`; `409 bundled-disabled` / `not-configurable` / `overridden`).
+  The overview's `settings.bundledEditable` remains a read-only report of the effective flag.
+- **Browser (`client.js`):** a `plugins.row.config` contribution keyed
+  `@local/dsh-agent-soul#agent-soul-team` opens the **Use Default Agent Souls** page (switch
+  labelled **Use default agent souls**), and the "Plugin settings & runtime" card carries the same
+  switch row; both share `useDefaultSoulsConfig` over the config route and poll the read briefly
+  after a save to observe the one-time plugin reload.
+- **Risks (deliberate):** in-place edits land in the installed package directory and are lost if
+  the package is reinstalled or updated; the packaged catalog and doctrine are shared by every
+  workspace in the profile while bindings and trash stay per workspace; the packaged doctrine
+  becomes globally edited.

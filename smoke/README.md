@@ -66,6 +66,8 @@ closed output schema:
 node --test smoke/remediation-bindings.test.mjs smoke/remediation-admin.test.mjs
 ```
 
+15 `node:test` cases; all passed on 2026-11-07.
+
 ## Focused bundledEditable regressions
 
 `smoke/bundled-editable.test.mjs` covers the opt-in in-place authoring mode
@@ -99,6 +101,9 @@ removed afterwards. It runs 222 assertions and covers:
 ```sh
 node --test smoke/bundled-editable.test.mjs
 ```
+
+16 `node:test` cases and 222 counted assertions (set `AGENT_SOUL_ASSERTION_TALLY=1` to print the
+tally); all passed on 2026-11-07.
 
 ## Focused "Use Default Agent Souls" toggle regressions
 
@@ -138,6 +143,8 @@ involved. It runs 129 assertions and covers:
 node --test smoke/config-toggle.test.mjs
 ```
 
+8 `node:test` cases and 129 counted assertions (same tally env flag); all passed on 2026-11-07.
+
 The focused real-runtime harness boots fresh headless CLI processes with scripted models and
 `claimTeamToolRow: false`. It never installs or repairs the real profile. By default it creates a
 new run root under the OS temporary directory; set `QAS_RUN_ROOT` to retain evidence in a chosen
@@ -149,6 +156,19 @@ QAS_RUN_ROOT=/path/to/new/disposable-run \
 DSH_CHECKOUT=/path/to/deepseek-harness \
 node smoke/remediation-runtime.mjs --target candidate --only all
 ```
+
+Give `QAS_RUN_ROOT` a **symlink-free** path (on macOS use `/private/tmp/...` or a directory under
+your home, not `/tmp/...` or the default OS temporary directory): the runner compares its expected
+workspace paths literally while the CLI reports the session's canonical working directory, so a
+run root under a symlinked prefix fails the exact-path check `F001.bundled.workspace-file-path`
+even though the plugin answered correctly. The runner throws on the first failed check, so a
+symlinked run **stops there** — the remaining checks do not pass, they never run. Observed on
+2026-11-07 (macOS, default `DSH_CHECKOUT`): `--target candidate --only all` passed all **169**
+checks with a canonical run root; with a symlinked run root (`/tmp/...`; the default OS temporary
+directory behaves the same) the run stopped at `F001.bundled.workspace-file-path` with **131 pass
+/ 1 fail and 37 checks not executed**. The later `F001.valid`/`F001.invalid` variants compare
+`workspace-file-path` and `exact-source-path` the same literal way, so those checks share the
+defect and would fail identically if the run reached them.
 
 It primes two real plugin stores in separate processes before concurrently spawning through a
 shared absolute bindings file, then uses actual process recreation to check cold resume and

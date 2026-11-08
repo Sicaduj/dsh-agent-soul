@@ -137,6 +137,13 @@ Agent Team (Lead, optionally the orchestrator)
 Leave `bundledEditable` out (or set it `false`) to keep the 0.3 read-only behavior. See
 [Configuration](#configuration) for the flag's scope and its risks.
 
+**Release status (2026-11-07).** This authoring mode and its GUI controls — the **Use default agent
+souls** switch, the Plugins-page **Use Default Agent Souls** page, and in-place editing of the
+packaged catalog and doctrine — are merged to `main` and are part of 0.4.0 (PRs #4–#6, merged
+2026-11-07; there are no git tags, so "released" means merged to the default branch). On a
+0.3.0-or-earlier installation, the packaged souls and `defaults/orchestrator.md` are always
+read-only and those controls do not exist — skip the `bundledEditable` paragraphs in this README.
+
 ## Requirements and install
 
 ### Requirements
@@ -153,22 +160,24 @@ Leave `bundledEditable` out (or set it `false`) to keep the 0.3 read-only behavi
 - Node.js **>= 24.9.0**, which is the Harness runtime requirement. The plugin itself has no
   dependencies and imports only `node:` builtins and its own relative files.
 
-The bundled souls inherit the Lead's routed model unless their definition pins a route. Only
-`adversarial-red-team-verifier` declares one; the other bundled definitions omit
-`model`/`provider`/`reasoning-effort`, so they spawn with whatever route the Lead uses:
+Each bundled definition's frontmatter is the authority for its route. Most currently carry no
+`model`/`provider` override and inherit the Lead's route; only `adversarial-red-team-verifier`
+keeps a deployment-specific one. Spawning a routed soul requires the matching provider and
+advertised model/effort in your profile; that is an additional prerequisite, not provided by the
+base Agent Teams bundle:
 
 | Soul | Route |
 |---|---|
-| `generalist` | Inherits the Lead (bundled default Soul) |
-| `researcher` | Inherits the Lead |
-| `adversarial-red-team-verifier` | `kimi-code-bridge/k3.1-pro`; no reasoning effort pinned |
-| `software-engineer` | Inherits the Lead |
-| `scribe` | Inherits the Lead |
+| `generalist` | No explicit route; inherits the Lead (bundled default Soul) |
+| `researcher` | No explicit route; inherits the Lead |
+| `adversarial-red-team-verifier` | `kimi-code-bridge/k3.1-pro` with `max` reasoning effort |
+| `software-engineer` | No explicit route; inherits the Lead |
+| `scribe` | No explicit route; inherits the Lead |
 
-An unavailable provider/model affects only that spawn: it does not invalidate the file or prevent
-other souls from working. A workspace copy can pin its own route with `model`, `provider`, and
-`reasoning-effort` when a soul should not follow the Lead; review provider costs before selecting a
-paid route.
+An unavailable provider/model makes only the affected spawn fail; it does not invalidate the file or
+prevent other souls from working. Before relying on these examples in another deployment, either
+configure the named route or remove its `model`/`provider`/`reasoning-effort` fields to inherit the
+Lead. Review provider costs before selecting a paid route.
 
 ### Install and enable
 
@@ -385,13 +394,14 @@ or unreadable preferences document. Until the document is fixed, no effective de
 and a default spawn fails instead of starting a generic child; an explicit `agent_type` still works.
 
 **Default Soul resolution.** A spawn resolves an explicit `agent_type` first, and that path does not
-read the preferences document. Without `agent_type`, a usable preferences document is required: the
-persisted selection is used only when that name exists in the live catalog, otherwise the bundled
-`generalist` (when present), otherwise the spawn fails with an actionable error — there is no
-generic fallback. A stale selection fails rather than silently using `generalist`. A corrupt,
-malformed, or unsupported preferences document is reported as a warning and fails the default spawn
-with the reason; a document (or state directory) that cannot be read at all fails the spawn with its
-path. Selecting the bundled option clears the explicit selection.
+read the preferences document. Without `agent_type` the preferences document decides the default: a
+persisted selection is used only when that name exists in the live catalog — a stale selection fails
+the spawn and never falls back to `generalist` — while no explicit selection (a missing document, or
+one cleared by selecting the bundled option) uses the bundled `generalist` when present. When
+neither a selection nor the bundled `generalist` is usable, the default spawn fails with an
+actionable error — there is no generic fallback. A corrupt, malformed, or unsupported preferences
+document is reported as a warning and fails the default spawn with the reason; a document (or state
+directory) that cannot be read at all fails the spawn with its path.
 
 Each card can show:
 
@@ -400,7 +410,7 @@ Each card can show:
 | **Valid / Invalid** | Whether the file parses and validates as a soul. |
 | **Default** | The Soul `spawn_teammate` uses when `agent_type` is omitted (explicit selection, else bundled `generalist`). |
 | **N tools / All tools / No tools** | The permission matrix: `N` selected, `*` (inherit all), or `[]` (deny all inherited). |
-| **Model: …** | The resolved route when it resolves, otherwise the raw `model:` value. |
+| **Model: …** | The resolved route when it resolves, otherwise the raw `model:` value; the badge is absent when the soul inherits the Lead's model. |
 | **Context: fresh/fork** | The soul's default spawn context. |
 | **/name** | The registered slash command (only when the soul is user-invocable and this soul's own handler is registered; a name owned by another command shows **Command collision** instead). |
 | **N saved · last used … · in use by …** | Durable bindings for this soul name, the newest binding time, and live teammates whose Session has a binding for it. |
@@ -531,14 +541,18 @@ packaged file as the editable definition (no **Bundled** badge) and **Save** rew
 
 ### Which workspace does the page edit?
 
-The page edits one workspace at a time. On each request the Host chooses, most specific first:
+The page edits one workspace at a time. The Web GUI pins one Session's workspace — the Session
+currently in view, or the sole listed one in a single-workspace installation: the browser sends its
+committed working directory, and the Host accepts it only when it is one of the live candidates
+below. Without such a pin the Host chooses, most specific first:
 
 1. a live top-level Session's committed working directory (teammates are skipped);
 2. the deployment root captured at plugin activation;
 3. `workingDirectory.defaultDirectory`, then `process.cwd()`.
 
-The first candidate whose configured soul directories **exist** wins; with no live Session the
-page falls back to the deployment directory. The chosen root is shown in the settings card. This is
+Without a pin, the first candidate whose configured soul directories **exist** wins, falling back to
+the first candidate — with no live Session, the deployment directory; a pinned root is used as-is.
+The chosen root is shown in the settings card. This is
 why a Harness process launched from an unrelated folder does not hide the files in the workspace you
 are actually editing. Soul directories are resolved per workspace: a Team in another workspace
 sees its own catalog until you make `dirs` absolute.
@@ -599,7 +613,7 @@ and preserved by the GUI as extra frontmatter.
 | `tools` | no | inherit all | Permission matrix for inherited tools. Omit or `*` = inherit everything; a list (or comma-separated string) = allow exactly those inherited tools; `[]` = hide every inherited tool. Names are tool names visible in the session, e.g. `read`, `grep`, `bash`, `web_search`. **Do not list Team tools** (`spawn_teammate`, `send_message`, `list_agents`, `wait_agent`, `interrupt_agent`, `team_task_*`, `list_agent_souls`); they are Agent-scoped and cannot be restricted. The GUI save validator and spawn both reject them. The Lead-only `manage_agent_souls` tool is likewise rejected because it cannot be delegated. |
 | `model` | no | inherit Lead | A model id (`deepseek-flash`), a full route (`deepseek-official/deepseek-flash`), or an id resolved against the providers' advertised catalogs. Omitted = inherit the Lead's model. An unresolvable declaration makes the spawn fail; it does not make the file invalid. |
 | `provider` | no | — | Provider route when `model` has no `provider/` prefix. If `model` already has a prefix, a different `provider` is a configuration error. |
-| `reasoning-effort` | no | provider default | A provider/model reasoning effort id. Validated against the model when the LLM catalog advertises efforts; if it cannot be verified, a warning is logged and the route is used. |
+| `reasoning-effort` | no | provider default | A provider/model reasoning effort id. Validated against the model when the LLM catalog advertises efforts; if it cannot be verified, a warning is logged and the route is used. Declare it **together with a model**: a soul carrying only `reasoning-effort` (no model) is refused at GUI save and fails at spawn; unlike the orchestrator definition, where effort-without-model is valid and ignored. |
 | `user-invocable` | no | `false` | `true` also registers one human slash command for this soul on the Lead's session. The bundled souls omit this key, so they are AI-only until you opt in. |
 | `context` | no | `defaultContext` (`fresh`) | Spawn context: `fresh` (clean context) or `fork` (inherits the Lead's completed turns). The fallback order is an explicit `context` argument to `spawn_teammate`, then this key, then the `defaultContext` config key. The GUI's "Not specified" maps to omitted. These are the only two runtime values — the editor offers "Not specified", `fresh`, and `fork`, and never writes a literal `none`. |
 
@@ -611,8 +625,10 @@ YAML tips:
   inherited tools.
 - Unknown keys do not make a file invalid, but they also do not affect behavior unless the GUI keeps
   them in extra frontmatter. Use the known keys for behavior.
-- `description` must be one line. Split long prose into a shorter trigger sentence here and put the
-  detail in the body.
+- Write `description` as one line — a recommendation, not a parser rule: the parser does not
+  enforce single-line (a double-quoted scalar may contain escaped newlines) and the catalog
+  collapses whitespace, while the YAML subset cannot express a multi-line plain scalar. Split long
+  prose into a shorter trigger sentence here and put the detail in the body.
 
 ### Authoring tips
 
@@ -1174,7 +1190,7 @@ editor size under `dsh.agent-soul.editor-size`. They are not shared with other b
 | **Orchestrator definition is invalid** | Diagnostics in the Orchestrator tab: gate mode, retries, booleans, model/provider (a conflicting route, provider without model, an empty model id), body. A `reasoning-effort` alone is ignored at enable and is not an error. | Fix the named field. Invalid saves write nothing; the mode stays off or keeps its previous state. |
 | **Model is unresolved** | The raw model/provider and the live providers; whether the `llm` service is available. | Use a model id the providers advertise, or write the full `provider/model` route. A different `provider` plus a prefixed model is an error. |
 | **A tool is not allowed / tools list is rejected** | The name is visible in the live Lead's catalog; it is not a Team tool. | Use the GUI picker or `list_agent_souls`; remove Team tool names from soul `tools`; use `*` or `[]` deliberately. |
-| **YAML errors in the editor** | Tabs, block scalars, nested mappings, inline mappings (`{}`), malformed flow lists, multi-line descriptions. | Use the supported YAML subset; quote tricky scalars; keep descriptions on one line. |
+| **YAML errors in the editor** | Tabs, block scalars, nested mappings, inline mappings (`{}`), malformed flow lists, a description wrapped across plain lines (the subset has no multi-line plain scalars). | Use the supported YAML subset; quote tricky scalars; keep the description on one line (recommended, not enforced). |
 | **A new file does not appear** | There is no filesystem watcher. | Press **Refresh** in the page, or trigger a spawn/list/command (each rescans). |
 | **Save conflict (409)** | The file changed on disk since it was loaded. | **Reload file** to discard local edits, or **Overwrite** to save with the current server hash. |
 | **`/orchestrate off` did not restore the model or title** | The mode was already on after a Host reload, so the runtime has no captured original route/title; the Session had no prior title at enable; you renamed the Session during the mode; or the profile mounts no session-title service. | Expected limitation: select the model again, or rename the Session. The pre-reload route cannot be recovered, a human rename is deliberately preserved, and with no prior title or no title service nothing was renamed to restore. |
@@ -1277,15 +1293,23 @@ The plugin is plain ESM JavaScript with **zero dependencies**, no bare imports, 
 inline-style browser artifact. `node --check` must pass for `index.js`, every `lib/*.js`, and
 `client.js`.
 
-This bundle ships **no unit-test suite**: there is no `tests/` directory, so `node --test
-tests/*.test.mjs` matches nothing and exits 0 without running a single test — an exit code of 0 from
-that command is not verification. The verification that exists is syntax
-checking plus the end-to-end smoke harness:
+There is no `tests/` directory: `node --test tests/*.test.mjs` matches nothing and exits 0 without
+running a single test — an exit code of 0 from that command is not verification. The verification
+that exists is syntax checking, the focused keyless module suites under `smoke/` (run with
+`node --test`; per-suite coverage and assertion counts live in [`smoke/README.md`](smoke/README.md),
+the testing authority), and the end-to-end smoke harness:
 
 ```sh
 node --check index.js
 for f in lib/*.js; do node --check "$f" || exit 1; done
 node --check client.js
+
+# focused module suites (keyless; temporary directories only)
+node --test smoke/remediation-bindings.test.mjs smoke/remediation-admin.test.mjs
+node --test smoke/bundled-editable.test.mjs
+node --test smoke/config-toggle.test.mjs
+
+# end-to-end harness
 node smoke/run-smoke.mjs
 ```
 
@@ -1345,6 +1369,7 @@ module.
 | [`lib/admin.js`](lib/admin.js) | Document layer: split/compose/validate, scan, path safety, trash. |
 | [`lib/gui-host.js`](lib/gui-host.js) | Authenticated Host JSON routes and overview. |
 | [`lib/orchestrator.js`](lib/orchestrator.js) | Orchestrator document, `/orchestrate`, mode runtime. |
+| [`lib/orchestrator-mode.js`](lib/orchestrator-mode.js) | Shared durable orchestrator-mode fold: the pure command-log state machine read by both `/orchestrate` and the session projection behind the header badge. |
 | [`lib/admin-tool.js`](lib/admin-tool.js) | `manage_agent_souls` Lead tool. |
 | [`client.js`](client.js) | Settings → Agent Soul browser artifact. |
 | [`cordis.patch.yml`](cordis.patch.yml) | Profile patch and row config. |

@@ -7,7 +7,7 @@
  *
  * This file is a classic browser artifact, not a module: it registers a lazy
  * factory with the page module loader and takes React from the browser module
- * table. The Host half (`lib/gui-host.js`) owns the ten JSON route paths this
+ * table. The Host half (`lib/gui-host.js`) owns the eleven JSON route paths this
  * page calls; they are documented in `docs/GUI-INTERNALS.md`.
  *
  * All visible copy flows through the slot-bound `t` of the

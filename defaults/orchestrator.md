@@ -1,6 +1,5 @@
 ---
 name: orchestrator
-reasoning-effort: max
 plan-first: true
 gate-mode: strict
 max-retries: 10

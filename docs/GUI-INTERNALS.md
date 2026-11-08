@@ -16,8 +16,9 @@ and the focused `node:test` suites add direct coverage of these surfaces —
 `smoke/config-toggle.test.mjs` drives the real `lib/gui-host.js` route handlers and evaluates the
 real `client.js` artifact only for registration/locale/source contracts (no hooks, DOM, fetch,
 timers, or rendered interaction), `smoke/bundled-editable.test.mjs` covers the packaged-editable document
-layer plus the GUI save conflict mapping, and `smoke/remediation-admin.test.mjs` covers the
-agent-tool output schema. Route and payload shapes below are still derived from the source
+layer plus the GUI save conflict mapping, `smoke/remediation-admin.test.mjs` covers the
+agent-tool output schema, and `smoke/gui-fixes.test.mjs` covers the client artifact contracts and
+live-route validation/recovery fixes. Route and payload shapes below are still derived from the source
 handlers in `lib/gui-host.js` and should be checked against them when in doubt.
 
 ### Module map
@@ -65,6 +66,10 @@ packaged souls and the packaged doctrine keep the 0.3.0 read-only authoring beha
 editing; the documented editing fences hold) — other 0.4.0 changes, such as the bundled-soul
 route-inheritance change from PR #5, still apply and are not reverted by leaving the flag off.
 
+**Working-tree fixes.** The D01–D18 review fixes (including D15b) and their focused suites are
+present in the current working tree, not in that release history. Behavior described in the sections
+below may therefore differ from a published 0.4.0 installation.
+
 ### Handler terms
 
 | Term | Meaning here |
@@ -74,13 +79,13 @@ route-inheritance change from PR #5, still apply and are not reverted by leaving
 | **Catalog** | the scanned, validated set of every `*.md` under the configured soul directories, plus the packaged `agents/` catalog when `bundled` is enabled (the default) |
 | **Binding** | plugin-owned durable record in the resolved `bindingsFile` itself (default `<workspace>/.dsh/agent-soul/bindings.json`) mapping a teammate's child Session to the soul that shaped it (persona, tools, model, context) |
 | **Preferences** | plugin-owned `preferences.json` beside the bindings file: the explicit default-Soul selection plus the effective default, its source, validity, and warning |
-| **Draft / baseline** | Form-mode Soul fields/sections persisted in browser localStorage, plus the in-memory file state the editor loaded; Raw, Orchestrator, New/Paste, and Undo state are not persisted |
+| **Draft / baseline** | A Soul draft persisted in browser localStorage: form fields/sections, Form/Raw mode, raw source, and the base file hash, plus the in-memory file state the editor loaded; Orchestrator, New/Paste, and Undo state are not persisted |
 | **`expectedHash`** | optimistic-concurrency token: the hash the editor believes is on disk; a mismatch answers `409 conflict` with `currentHash`/`currentModifiedAt` |
 | **`expectedMissing`** | explicit no-replace precondition for recreating a file that was absent at conflict time; a newly appeared target answers `409 conflict` instead of being overwritten |
 | **Command status** | live check of the soul's slash command against the workspace-matched Lead: `registered`, `ai-only`, `invalid-name`, `collision`, `no-live-lead`. With a per-Lead registration record, `registered` means this soul's own handler is the effective one; `collision` means the name is invocable but another handler owns it (the built-in `/orchestrate`) or registration failed. |
 | **Health** | catalog-wide budgets and scan findings: definition count, catalog characters, duplicate names, invalid files, diagnostics |
 | **Orchestrator mode** | per-session mode turned on with `/orchestrate`; applies the effective orchestrator doctrine (the workspace `<dirname(bindingsFile)>/orchestrator.md` when present, else the packaged `defaults/orchestrator.md` when `bundled` is on), model, and tool matrix to that session's Lead, announces activation, and renames the Session title when the optional service is available and a prior title exists |
-| **Trash** | recoverable delete directory beside the bindings file (`<dirname bindingsFile>/trash`); when `trashedFile` is returned, Undo restores that exact entry to its original path. The hard-delete fallback has no `trashedFile` or Undo and is an irreversible defect |
+| **Trash** | recoverable delete directory beside the bindings file (`<dirname bindingsFile>/trash`), real-path fenced to the real workspace (or the real shared-state directory for an absolute bindings file) before any move; when `trashedFile` is returned, Undo restores that exact entry to its original path. An unsafe state path or a trash creation/move failure preserves the source and returns `unsafe-path`/`invalid-request`; there is no hard-delete fallback, so no `trashedFile`/Undo exists for a failed delete |
 
 `index.js` wires both halves: the document layer and parser serve both the GUI and the agent tool
 (the "one operation, two callers" practice). Their save contracts are not identical: the GUI adds
@@ -108,9 +113,11 @@ last-write-wins saves without the GUI semantic validator.
 ## Which workspace the GUI edits (lib/gui-host.js)
 
 The browser derives the current main Session's committed working directory and pins that root for
-the Soul editor session (a later Session switch does not move those unsaved edits). The
-Orchestrator loader instead reruns on `sessionRoot` change and can reset its dirty draft without a
-guard; see the current persistence limits below. The page reads the root through
+the Soul editor session (a later Session switch does not move those unsaved edits). The Orchestrator
+load is tied to the tab and its load function, not to `sessionRoot`; a Session-root association
+adopted while the root is still unpinned re-reads the definition only when the draft is clean, so a
+dirty Orchestrator draft is never replaced. See the current persistence limits below. The page reads
+the root through
 `props.useSessions(...)`: the page's own `props.sessionId` summary first, then the Session summary
 whose `retainedBy.mainView` count is positive. Every overview/document GET carries `?root=`, and
 every POST body carries `root`; a sole listed workspace is the compatibility fallback when no
@@ -372,9 +379,14 @@ soul directory is configured), and
 ### `POST /agent-soul/delete`
 
 Body `{ "file": "<absolute path>" }` → 200 `{ "ok": true, "trashedFile": "…" }` (`trashedFile` is
-the trash path the browser's Undo uses; it is omitted when the trash move failed and the file was
-hard-deleted), or 400
+the trash path the browser's Undo uses), or 400
 `{ "ok": false, "code": "unsafe-path" | "not-found" | "invalid-request", "message": "…" }`.
+The trash/state path is fenced to the real workspace (or real shared-state directory) before any
+move, so a symlinked `.dsh`/`.dsh/agent-soul`, a dangling link, or a trash-directory symlink that
+leaves that boundary answers `unsafe-path` and the source is untouched. A trash creation or
+no-replace move failure is `400 invalid-request` naming the trash location and stating the document
+was not deleted; the source stays byte-identical, no `trashedFile` is returned, and there is no
+hard-delete fallback.
 
 ### `GET/POST /agent-soul/config`
 
@@ -577,21 +589,24 @@ The page ships its own token-only stylesheet (`CONFIG_STYLES`, `--dsw-alias-*` /
 `--dsw-radius-*` tokens only) because the Agent Soul page is not mounted there.
 
 Both the Plugins page and the Settings card share the `useDefaultSoulsConfig` hook implementation
-over `GET`/`POST agent-soul/config` (see the route pair above), not one reactive state store. Each
-mounted control has its own React state, so the overview, document/orchestrator views, and another
-mounted switch can remain stale until the affected view is refreshed or reopened/remounted. The
-switch is disabled while loading, saving, applying, or when the mode is unavailable
-(`bundled: false`) or not configurable. Status copy (all eight dictionaries): `statusOn`
-("On - packaged defaults are editable in place"), `statusOff` ("Off - packaged defaults are
-read-only"), `statusUnavailable` ("Unavailable - bundled defaults are disabled (bundled: false)"),
-`statusNotConfigurable` ("Unavailable - this profile cannot save this setting"), `statusApplying`
-("Applying... the plugin reloads once"), `statusApplied` ("Applied."), and `statusError`
-("Could not update the plugin configuration."). A normal successful `configEditor.edit` validates
-and reconciles the write. The hook then polls GET (six attempts, 1200 ms apart) for the one Loader
-reload, but polling exhaustion sets `Applied` even when no GET matched the requested value. Treat
-that status as the end of polling, not proof of the effective flag; refresh/reopen and inspect GET
-when polling, transport, or subsequent changes are in doubt. Timers and late answers are dropped on
-unmount.
+over `GET`/`POST agent-soul/config` (see the route pair above) and one module-level state record.
+Every mounted control subscribes to that record, so a write started in one updates the other and no
+control can show a value another has already replaced; a control that mounts later reads the current
+record on mount. A settled write — verified or not — notifies the page, which re-reads the overview,
+the Orchestrator definition only when that tab was opened and its draft is clean, and the open
+document only when it is clean, without stealing an in-flight operation. The switch is disabled
+while loading, saving, applying, or when the mode is unavailable (`bundled: false`) or not
+configurable. Status copy (all eight dictionaries): `statusOn` ("On - packaged defaults are
+editable in place"), `statusOff` ("Off - packaged defaults are read-only"), `statusUnavailable`
+("Unavailable - bundled defaults are disabled (bundled: false)"), `statusNotConfigurable`
+("Unavailable - this profile cannot save this setting"), `statusApplying` ("Applying... the plugin
+reloads once"), `statusApplied` ("Applied."), `statusUnverified` ("Saved, but the reload was not
+confirmed. Reload the page to verify the new value."), and `statusError` ("Could not update the
+plugin configuration."). A normal successful `configEditor.edit` validates and reconciles the
+write. The hook then polls GET (six attempts, 1200 ms apart) for the one Loader reload. A poll only
+reports `applied` after a read shows the requested value; exhaustion, a failed read, or a mismatch
+reports `unknown` (the localized unverified status) and still notifies the page, and a control that
+unmounts mid-write leaves that honest unknown state. Timers and late answers are dropped on unmount.
 
 Required UI (Settings → "Agent Soul"):
 - Header: title + one-sentence intro (what a soul is, that saving is live for the next spawn).
@@ -651,23 +666,25 @@ focus (the saved and previewed paths both carry it).
 
 ### Current persistence and response-shape limits
 
-Only two browser-state categories persist: dirty Form-mode Soul `fields`/`sections` under
-`dsh.agent-soul.draft:<absolute file>`, and dialog size under `dsh.agent-soul.editor-size`. Raw
-source/mode, Orchestrator edits, New/Paste inputs, and Undo state are memory-only. Save or copy
-unfinished work before reload; after a delete, retain the returned `trashedFile` and original `file`
-if later API recovery may be needed rather than relying on the transient Undo banner.
+Two browser-state categories persist: a Soul draft under
+`dsh.agent-soul.draft:<absolute file>` (form fields/sections, Form/Raw mode, raw source, and the
+base file hash; older form-only records remain readable), and dialog size under
+`dsh.agent-soul.editor-size`. Orchestrator edits, New/Paste inputs, and Undo state are memory-only,
+so save or copy unfinished work before reload; after a delete, retain the returned `trashedFile`
+and original `file` if later API recovery may be needed rather than relying on the transient Undo
+banner.
 
-Opening the Orchestrator tab calls `loadOrchestrator`, which replaces its draft and baseline. The
-effect also depends on `sessionRoot`, so a session-root change can reset a dirty Orchestrator draft
-without the dirty guard; save or copy it before changing the session association. This and the
-following response-shape limitation are source-derived and were not reproduced in a rendered
-browser.
+Opening the Orchestrator tab calls `loadOrchestrator`, which replaces its draft and baseline. That
+effect is keyed to the active tab, not to `sessionRoot`; the one root-adoption effect re-reads the
+definition for a newly pinned root only when the Orchestrator draft is clean, so a Session-root
+change cannot reset dirty edits. Ordinary Orchestrator saves remain last-write-wins.
 
-A successful overview response with malformed JSON or an unexpected shape is not consistently
-rejected: `readJson` can return `null`, `loadOverview` stores the payload without a schema check,
-and list/settings fallbacks become empty. The page can therefore show empty or loading-like states
-instead of the typed fetch-error card. Do not treat an empty overview as proof that no Souls exist
-without checking the Host response.
+A successful overview response is validated before it replaces the rendered state: `documents`
+must be an array and `plugin`, `settings`, and `runtime` must be objects (the catalog blocks are
+also summarized as `catalogs`). A malformed 200 answer (including one where `readJson` returns
+`null`) becomes a typed `invalid-response` error card with the localized headline; it never falls
+through to the empty-catalog or loading view, and the last good rows stay visible when one existed.
+These boundaries are source- and route-test evidence, not a rendered-browser reproduction.
 
 ## Agent tool (index.js / lib/admin-tool.js)
 
@@ -692,8 +709,11 @@ document analysis (`analyzeOrchestrator`) plus `orchestratorRouteDiagnostics(def
 deps.resolveModel)` — so a contradictory or unresolvable route is refused with no write. It calls the same document layer functions (`listDocuments`,
 `readDocument` with raw source, `saveDocumentSource` for raw-markdown saves, `createDocument`,
 `deleteDocument`) with `root = deps.rootOf(agent)`, so both callers share parsing and storage.
-The agent save does not supply the GUI's semantic validator, so direct packaged renames need the
-unique-name precaution in [`INTERNALS.md`](INTERNALS.md).
+The agent save does not supply the GUI's semantic tool/model validator, but it still goes through
+the shared document layer's packaged-name collision guard: a packaged save/create/duplicate/restore
+cannot take another packaged document's name (local-over-bundled shadowing stays legal), and a
+genuine duplicate packaged name is reported by the catalog diagnostic instead of being silently
+dropped. See [`INTERNALS.md`](INTERNALS.md).
 `save` accepts **raw markdown** (`source`) instead of the split form: parse and validate it, then
 write; return `{ ok, file, diagnostics }`.
 
@@ -725,13 +745,13 @@ token-only styles. Phases are history: everything in the P0–P4 sections is sti
   Diagnostics with `field` set are additionally mirrored into a `fieldErrors` object in the route
   response: `{ fieldErrors: { name?, description?, tools?, model?, provider?, reasoningEffort?, context?, body? } }`.
 - The GUI routes build that validator from live state: tool names must be outside
-  `TEAM_TOOL_NAMES` and inside the live Lead's restrictable catalog when that catalog is nonempty; a
-  non-empty `model`/`provider`/`reasoning-effort` declaration must resolve through
-  `deps.resolveModel`; a `name` already used by another valid document in the same catalog is a
-  duplicate. **Current validation gap:** an empty live tool catalog skips unknown-name validation
-  (`available.size > 0` is required), so an empty catalog is not proof that every listed tool is
-  valid. Team and Lead-only names are still rejected, and spawn-time validation can reject the Soul
-  later. This is source-derived API behavior, not a browser-reproduced result.
+  `TEAM_TOOL_NAMES` and, whenever `catalogs.source === 'live-lead'`, inside that Lead's restrictable
+  catalog. A live-but-empty catalog therefore rejects every non-Team name with the explanation that
+  the Lead reports no restrictable tools; only a missing catalog (`source: 'none'`) skips the
+  membership check. Team and Lead-only names are always rejected, a non-empty
+  `model`/`provider`/`reasoning-effort` declaration must resolve through `deps.resolveModel`, and a
+  `name` already used by another valid document in the same catalog is a duplicate. Spawn-time
+  validation remains the final boundary.
 
 ### Host: overview catalogs
 
@@ -756,6 +776,13 @@ sorted `TEAM_TOOL_NAMES` list: those tools are Agent-scoped and never restrictab
 soul must not name them; the orchestrator matrix *may* name them, and the browser uses this list
 to explain them as always-available instead of flagging them as unknown.
 
+The browser validates the whole overview payload before rendering it: `documents` must be an
+array and `plugin`, `settings`, and `runtime` must be objects (`catalogs` is read from the same
+snapshot). A 200 answer with malformed JSON (where `readJson` yields `null`) or a missing required
+block becomes a typed `invalid-response` error card, not an empty catalog or a loading skeleton; the
+last good rows stay visible when one exists. The route's own 200 payload satisfies this contract, so
+the validation only rejects a Host/transport mismatch.
+
 ### Routes: conflict status and field errors
 
 `POST /agent-soul/document` accepts `expectedHash` and answers **409** for a conflict:
@@ -773,12 +800,13 @@ No new route is introduced in P0.
 - Unsaved-changes guard: switching the selected document, refreshing, starting a new soul, or
   unloading the page while dirty asks for confirmation in-page (a small inline banner with
   **Discard changes / Keep editing**, never `window.confirm`); `beforeunload` also warns.
-- Draft recovery: the dirty Form-mode Soul draft is saved to `localStorage` (key
-  `dsh.agent-soul.draft:<file>`) as fields+sections; Raw source/mode is not persisted. Reopening
-  the document offers
-  **Restore draft / Discard draft** in the editor when the stored draft differs from the file and
-  was saved after it (an older draft is suppressed).
-  Saving or deleting clears the entry.
+- Draft recovery: a dirty Soul draft is saved to `localStorage` (key
+  `dsh.agent-soul.draft:<file>`) as form fields and sections, the Form/Raw mode, the raw source when
+  that mode is dirty, and the base file hash. Older form-only records restore as form drafts. A
+  raw-only draft (the form snapshot is unchanged) is still offered and restores into Raw mode.
+  Reopening the document offers **Restore draft / Discard draft** when the stored draft differs from
+  the file and was saved after it (an older draft is suppressed). Saving or deleting clears the
+  entry.
 - Conflict recovery: a 409 shows an inline banner with **Reload file** (re-open, discarding edits)
   and **Overwrite** (save again with the server's `currentHash` as `expectedHash`; when the file was
   removed and `currentHash` is null the page sends `expectedMissing: true` with no `expectedHash`,
@@ -788,8 +816,8 @@ No new route is introduced in P0.
   summary above the form that focuses the first invalid field; every save diagnostic also stays
   listed in the existing diagnostics block.
 - Search and filters above the list: free-text match on name, description, `sourcePath`, label, and
-  absolute file path — not the Markdown body; filter chips **All / User-invocable / AI-only /
-  Invalid**; sort toggle **Name / Updated**.
+  file name/absolute path — not the Markdown body; the placeholder in all eight dictionaries says so;
+  filter chips **All / User-invocable / AI-only / Invalid**; sort toggle **Name / Updated**.
 - Sticky action bar in the editor (Save / Revert / Delete + dirty badge) that stays visible while
   the form scrolls; **Revert** restores the last loaded file content.
 - Empty-state now names the scan root and resolved directories, with copy buttons, so a wrong root
@@ -814,16 +842,20 @@ Every mutation still goes through `lib/admin.js` and the same authenticated rout
 - `duplicateDocument({ config, root, file, name })`: read the source, split it, replace the `name`
   field, compose+validate, write `<first dir>/<name>.md`, return `{ ok, document }` with the same
   400 codes as create plus `not-found` for a missing source.
-- `deleteDocument` becomes recoverable: move the file into a trash directory and return
-  `{ ok: true, file, trashedFile }`. Trash location: the directory beside the configured bindings
-  file (`<dirname(bindingsFile)>/trash`; the default config yields
-  `<root>/.dsh/agent-soul/trash/`), filename
-  `<timestamp>-<original basename>`; create it on demand. A trash failure falls back to the current
-  hard delete and still answers `{ ok: true }` (no `trashedFile`, hence no Undo/restore entry).
-  This irreversible fallback is a current defect, not a preferred recovery path.
-- `restoreDocument({ config, root, trashedFile, file })`: both paths must pass the existing path
-  safety (trashed file inside the trash directory, target inside a configured soul directory);
-  move the file back. `{ ok, document }` or `not-found`/`unsafe-path`/`exists`.
+- `deleteDocument` becomes recoverable: fence the state/trash path to the real workspace (or
+  real shared-state directory) before any move, then move the file into the trash directory and
+  return `{ ok: true, file, trashedFile }`. Trash location: the directory beside the configured
+  bindings file (`<dirname(bindingsFile)>/trash`; the default config yields
+  `<root>/.dsh/agent-soul/trash/`), filename `<timestamp>-<original basename>`; create it on demand.
+  An escaping symlinked state path returns `{ ok: false, code: 'unsafe-path', message }`; a trash
+  creation or no-replace move failure returns `{ ok: false, code: 'invalid-request', message }`
+  naming the trash location. Both leave the source byte-identical; there is never a hard-delete
+  fallback, so no `trashedFile`/Undo entry exists for that attempt. Fix the path/symlink/
+  permissions/device issue and retry.
+- `restoreDocument({ config, root, trashedFile, file })`: the state/trash path is first
+  real-path fenced to the real workspace (or real shared-state directory); then both paths must pass
+  the existing path safety (trashed file inside the trash directory, target inside a configured soul
+  directory); move the file back. `{ ok, document }` or `not-found`/`unsafe-path`/`exists`.
 
 ### Host routes (`lib/gui-host.js`)
 
@@ -886,8 +918,10 @@ Four new endpoints (still exact registrations, trust fence first, JSON, no-store
   line; invalid content shows diagnostics instead.
 - **Raw Markdown mode** — a Form / Raw toggle in the editor. Raw mode edits the full file text and
   saves through `POST /agent-soul/document` with `source` + `expectedHash`; switching modes while
-  dirty goes through the P0 discard guard. Raw source and the selected mode are memory-only, so save
-  or copy them before a reload instead of relying on Form draft recovery.
+  dirty goes through the P0 discard guard. The draft record persists the selected mode, the raw
+  source when that mode is dirty, and the base file hash, so reopening offers a raw draft when it is
+  newer than the file and restores it into Raw mode. Older form-only draft records still restore as
+  form drafts.
 - **Paste / import Markdown** — "Paste Markdown" opens a panel; `POST /agent-soul/parse` fills the
   draft fields/sections (dirty) when a document is selected, or the parsed content is offered as the
   starting source for a new soul (create with `source`).
@@ -909,8 +943,10 @@ plus full locale coverage.
 ### Host (`lib/bindings.js`, `lib/gui-host.js`)
 
 - `createBindingStore` gains `async list(root)` → `Array<{ childId, name, tools, model, context, sourceLabel, savedAt }>`
-  (detached copies of every retained binding for that root, newest first; loading/corruption rules
-  unchanged).
+  (detached copies of every retained binding for that root, newest first). Each call re-reads the
+  durable document; unreadable/corrupt/unsupported/unsafe documents reject with their typed error,
+  and a partially malformed document lists its valid rows with a warning (see
+  [`INTERNALS.md`](INTERNALS.md)).
 - `GET /agent-soul/overview` documents gain:
   - `usage: { storedCount: number, lastUsedAt: number | null, activeMembers: string[] }` — retained
     bindings whose record `name` equals the soul name (the store keeps only the newest 500 records
@@ -1040,17 +1076,19 @@ soul catalog text; unknown variables stay literal).
   `orchestrate` command. `invocation.rawInput` empty → enable; trimmed `off|exit|stop|disable` →
   disable; anything else → enable, then `agent.followup(…)` queues the trimmed text as the next
   ordinary user message (`{ id: randomUUID(), role: 'user', content: [{ type: 'text', text }],
-  source: { kind: 'user' } }`). Queue failure after a first enable attempts to revert the mode and
-  answers an error. A model-restore failure can instead leave the live bundle active while the
-  command error folds durable mode off; the returned text can contain only the queue error. When the
-  mode was already active (live bundle, or durable state after a reload), the command attempts to
-  restore the pre-invocation bundle/title, falling back to the freshly applied bundle when recreation
-  fails. A captured-model restore failure after successful bundle recreation is only logged, so the
-  result can claim the mode was kept with mixed doctrine/route state. A durably active mode with no
-  live bundle keeps the fresh bundle. Inspect/repair actual live state after these compound failures;
-  they are not covered by real-runtime orchestrator activation tests. Missing/invalid definition →
-  error result, mode unchanged. See [`INTERNALS.md`](INTERNALS.md) for the complete rollback
-  contract.
+  source: { kind: 'user' } }`). A queue failure reports the queue error plus the state the handler
+  observed. A first enable is reverted by disabling it (reported as `the mode was reverted`); if
+  that disable's model restore also fails, the error reports `active=true, modelRestored=false`, the durable log folding
+  off, and `/orchestrate off` as the retry. A disable with an inactive or unconfirmed result reports
+  `active=false` or `active=unknown`. When the mode was already active (live bundle, or durable
+  state after a reload), the command restores its pre-invocation snapshot and reports an exact kept
+  mode, the previous doctrine on the newly applied route (with the available model-capture
+  recovery), an explicit fallback to the freshly applied bundle, an inactive result, or an
+  unconfirmed result. A durably active mode with no live bundle has no snapshot and keeps the fresh
+  bundle, reported as such. The handler-level fault tests use an in-memory Agent double, not a full
+  real Host lifecycle, and these paths remain best-effort; inspect/repair actual live state after a
+  compound failure. Missing/invalid definition → error result, mode unchanged. See
+  [`INTERNALS.md`](INTERNALS.md) for the complete rollback contract.
 - Durable mode: `modeOf(agent)` folds `agent.session` events via `eventAt(seq)`: every
   `command/run` whose `data.name === 'orchestrate'` records `data.args` in order (off-words ⇒ off,
   every other argument form — bare command or a `<task>` — ⇒ on); a run whose paired `command/done`
@@ -1284,13 +1322,20 @@ tool, which appends the plugin's bounded cold-resume refusal sink:
 ]
 ```
 
-The intended matching unreadable-binding message is not guaranteed: current binding read/cache
-defects can mislabel unreadable input as `missing-binding` (see [`INTERNALS.md`](INTERNALS.md)). The
-plugin's `send_message` error text and the Host
+The cause is typed rather than collapsed into "missing": a durable binding read distinguishes
+`missing-binding`, `unreadable-binding`, `corrupt-binding`, `unsupported-binding`, and
+`unsafe-binding-path` (see [`INTERNALS.md`](INTERNALS.md)). Every `get`/`list`/`size` re-reads the
+durable document, so a plan read before it became corrupt, unreadable, unsupported, unsafe, or
+partially malformed is not served; `get` refuses the whole document (partial malformed included).
+`list`/`size` reject a document-level failure and, for a partially malformed document, return the
+valid rows/count with the warning. The only in-memory exception is this process's unpersisted local
+`set`/`delete` for that child; it is not durable and `list`/`size` still reject an unusable
+document. A mutation never rewrites the untrusted bytes, a malformed snapshot is refused with
+`E_BINDING_INVALID_RECORD`, and an external repair is observed on the next call without a new store.
+The plugin's `send_message` error text and the Host
 log line (`… cold resume refused for teammate "<name>": … (code SOUL_PLAN_UNAVAILABLE, reason …)`)
 carry the same cause. The shared subagent lifecycle's generic `NOT_RESUMABLE` wrapper message is not
-changed by the plugin; admission stays fail-closed. See [`INTERNALS.md`](INTERNALS.md) for the
-module-level behavior.
+changed by the plugin; admission stays fail-closed.
 
 ## Bundled-editable authoring (`bundledEditable`, 0.4.0)
 
@@ -1305,12 +1350,14 @@ packaged doctrine keep the 0.3.0 read-only authoring behavior (no in-place editi
 - **Host (`lib/admin.js`):** package ownership is separated from read-only status. `resolveTarget`
   computes canonical `packageOwned` and derives `bundled = packageOwned && !editable`; a
   package-owned target is a valid write target when the flag is on. `DocumentSummary` and
-  `DocumentDetail` carry `packageOwned`; package-owned rows keep package-relative labels,
-  same-name shadowing by workspace souls, and non-claiming duplicate names in both modes. With the
-  flag on, save/delete/restore accept package targets (delete still trashes into the workspace
-  trash when possible, with Undo/restore only after a successful move; trash failure hard-deletes
-  irreversibly with no Undo), `create`/`duplicate` still write the configured workspace
-  directories, and symlink aliases of the package directory keep their packaged identity.
+  `DocumentDetail` carry `packageOwned`; package-owned rows keep package-relative labels and
+  same-name shadowing by workspace souls. A package-owned target may not take another packaged
+  document's name: the shared document layer refuses that save/create/duplicate/restore while a
+  workspace soul may still shadow a packaged name. With the flag on, save/delete/restore accept
+  package targets (delete trashes into the workspace trash; Undo/restore exists only after a
+  successful move, and a trash failure preserves the source and returns an error with no Undo),
+  `create`/`duplicate` still write the configured workspace directories, and symlink aliases of the
+  package directory keep their packaged identity.
 - **Host (`lib/orchestrator.js`):** with the flag on and no workspace `orchestrator.md`,
   `readOrchestrator` reports the packaged `defaults/orchestrator.md` as the editable effective
   document (`path` = `sourcePath` = the packaged file, `bundled: false`), and `saveOrchestrator`
@@ -1328,10 +1375,11 @@ packaged doctrine keep the 0.3.0 read-only authoring behavior (no in-place editi
 - **Browser (`client.js`):** a `plugins.row.config` contribution keyed
   `@local/dsh-agent-soul#agent-soul-team` opens the **Use Default Agent Souls** page (switch
   labelled **Use default agent souls**), and the "Plugin settings & runtime" card carries the same
-  switch row; both share the hook implementation, but not reactive state, over the config route and
-  poll briefly after a save. Polling exhaustion can display **Applied** without a matching GET;
-  refresh/reopen the affected control to confirm the effective flag after uncertain polling,
-  transport, or subsequent changes.
+  switch row; both share one module-level state record over the config route, so a write in either
+  control updates the other. A settled write refreshes the overview and clean editor views, and an
+  unverified result is labeled as such. Polling reports **Applied** only after a read shows the
+  requested value; exhaustion/mismatch/unmount reports the unverified state. Refresh/reopen the
+  affected view if an unverified result needs confirmation.
 - **Risks (deliberate):** in-place edits land in the installed package directory and are lost if
   the package is reinstalled or updated; the packaged catalog and doctrine are shared by every
   workspace in the profile while bindings and trash stay per workspace; the packaged doctrine

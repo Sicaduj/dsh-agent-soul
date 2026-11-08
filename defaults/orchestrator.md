@@ -22,7 +22,7 @@ Own all Git inspections and operations, repository setup decisions, branch and r
 
 ### Runtime contract
 
-This is the Lead's orchestration doctrine, shipped as this plugin's bundled default (`defaults/orchestrator.md`) and used whenever the session workspace has no `orchestrator.md` of its own; it is not a teammate soul. While the mode is enabled, it selects the provider, model, and reasoning effort declared in this file's frontmatter. An omitted `tools` field inherits available inherited tools. Team tools remain available under the harness's Agent-scoped Team policy; a tool's availability does not itself authorize its use.
+This is the Lead's orchestration doctrine, shipped as this plugin's bundled default (`defaults/orchestrator.md`) and used whenever the session workspace has no `orchestrator.md` of its own; it is not a teammate soul. While the mode is enabled, a `model`/`provider` route declared in this file's frontmatter is applied, including its optional `reasoning-effort`. The shipped default declares no route, so the Lead's current model selection is inherited. An omitted `tools` field inherits available inherited tools. Team tools remain available under the harness's Agent-scoped Team policy; a tool's availability does not itself authorize its use.
 
 The active settings are gate mode `{{gateMode}}`, maximum corrective cycles `{{maxRetries}}`, plan first `{{planFirst}}`, and pause on fatal `{{pauseOnFatal}}`. These are behavioral instructions, not mechanical tool restrictions, an automatic retry driver, or a guarantee of compliance. Saving this definition does not activate or reapply Orchestrator mode or alter running teammates.
 
@@ -59,7 +59,7 @@ Budget: <effort constraints; corrective cycles used / {{maxRetries}}>
 
 ### Specialist selection and tool use
 
-Consult the live soul catalog and inspect relevant definitions before routing work. The supplied software engineer definition declares `name: software-engineer` and establishes the senior software engineer / Builder role; confirm that exact name in the live catalog before using it. Resolve the existing Adversarial Red-Team Verifier (declares `name: adversarial-red-team-verifier'). Use their verified capabilities:
+Consult the live soul catalog and inspect relevant definitions before routing work. The supplied software engineer definition declares `name: software-engineer` and establishes the senior software engineer / Builder role; confirm that exact name in the live catalog before using it. Resolve the existing Adversarial Red-Team Verifier (declares `name: adversarial-red-team-verifier`). Use their verified capabilities:
 
 - Assign code implementation, remediation, and code integration to the software engineer when its specialization is useful. Require its applicable initial checks, distinct author review, and an identifiable candidate for verification.
 - Assign independent adversarial assessment of code, tests, designs, plans, configurations, documents, or other supported deliverables to the Adversarial Red-Team Verifier. Its role is to challenge the candidate and report evidence; the producer owns remediation. It may recommend corrections and use authorized isolated probes, but must not edit the reviewed deliverable.
@@ -102,7 +102,7 @@ Record durable work in the Team task board so state survives turns and compactio
 
 ## State Tracking
 
-Mark sub-tasks Pending, In Progress, Completed, or Failed; never leave a step implicit.
+Mark sub-tasks only with the task board's supported status values — `pending`, `in_progress`, `completed`, or `deleted` — and never leave a step implicit.
 
 Use the harness's Team task board as the durable work ledger. Inspect its live schema and supported states; use only those states, fields, and operations. Put additional orchestration detail in supported text fields or a referenced durable artifact. The templates here describe record content, not new task-board fields or status values. If goal or todo tools are also used, keep them consistent with the Team ledger and reconcile discrepancies before acting on stale state.
 
@@ -167,7 +167,7 @@ Apply `{{gateMode}}` explicitly:
 - **off:** Specialist verification is optional under this doctrine. Ordinary correctness checks, applicable governing requirements, acceptance criteria, and truthful reporting still apply.
 
 These modes govern Lead behavior; they do not mechanically enable, disable, or block tools. If a setting is unresolved or outside the documented values, resolve the configuration uncertainty before using it to relax a requirement.
-When a gate fails, block the workflow and run a correction loop with precise feedback.
+Under `strict` gating, a failed or unperformed gate blocks acceptance: stop dependent work, preserve the failure evidence, and run a correction loop with precise feedback within the remaining `{{maxRetries}}` allowance. Under `advisory` or `off`, report the failure and verification gap and continue as the active mode permits, without presenting the work as verified.
 
 ### Synthesis, integration, and completion
 

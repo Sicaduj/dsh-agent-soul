@@ -31,7 +31,7 @@ import { installSoulAdminTool } from './lib/admin-tool.js'
 import { resolveGuiRoot } from './lib/admin.js'
 import { createCatalog } from './lib/soul.js'
 import { applyTeammateSoul, createAdmissionDiagnostics, createPendingSpawns, SoulPlanUnavailableError } from './lib/apply.js'
-import { createBindingStore } from './lib/bindings.js'
+import { assertBindingFileSpec, createBindingStore } from './lib/bindings.js'
 import { createCompositionGuard } from './lib/composition.js'
 import { createSoulCommandSync } from './lib/commands.js'
 import { installGui } from './lib/gui-host.js'
@@ -163,7 +163,17 @@ export function normalizeConfig(raw, logger) {
   if (input.maxPromptChars !== undefined) {
     config.maxPromptChars = integerValue(input.maxPromptChars, 'maxPromptChars', 1000, 200000)
   }
-  if (input.bindingsFile !== undefined) config.bindingsFile = stringValue(input.bindingsFile, 'bindingsFile')
+  if (input.bindingsFile !== undefined) {
+    config.bindingsFile = stringValue(input.bindingsFile, 'bindingsFile')
+    // One rule for every plugin-owned state document: a relative bindings file
+    // is workspace-owned and may not escape its root, while an absolute one is
+    // explicit shared state used verbatim for every workspace. The lexical check
+    // here runs before any root is known; the binding store fences the resolved
+    // path again against the real workspace root (resolving symbolic links)
+    // before any I/O, and the preferences/orchestrator documents resolve the
+    // same spec and apply the same fence.
+    assertBindingFileSpec(config.bindingsFile)
+  }
   if (input.freshProvider !== undefined) config.freshProvider = stringValue(input.freshProvider, 'freshProvider')
   if (input.forkProvider !== undefined) config.forkProvider = stringValue(input.forkProvider, 'forkProvider')
   if (input.interrupt !== undefined) {

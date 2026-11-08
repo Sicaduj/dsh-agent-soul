@@ -1,6 +1,6 @@
 /** Keyless real CLI/Agent Teams remediation probes. Never loads a paid provider. */
 import fs, { appendFileSync } from 'node:fs'
-import fsp, { readFile, writeFile } from 'node:fs/promises'
+import fsp, { readFile, rename, writeFile } from 'node:fs/promises'
 import { syncBuiltinESMExports } from 'node:module'
 import { isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -145,6 +145,19 @@ async function readProbe(): Promise<void> {
       && message.includes('bundled') && message.includes('sourcePath') && message.includes('additionalProperties'))
   }
 }
+/**
+ * Publish one readiness barrier atomically: readers see either no document or
+ * the complete JSON, never a truncated in-progress write. The temporary file
+ * stays in the same directory so rename() is atomic.
+ *
+ * @param path - absolute barrier path owned by the runner.
+ * @param value - JSON-serializable readiness observation.
+ */
+async function publishReady(path: string, value: unknown): Promise<void> {
+  const temporary = `${path}.${process.pid}.tmp`
+  await writeFile(temporary, JSON.stringify(value))
+  await rename(temporary, path)
+}
 async function runMain(): Promise<void> {
   emit('root-start', { leadSessionId: lead().id, cwd: process.cwd(), sanitized: {
     canaryAbsent: process.env.QAS_CANARY_SECRET === undefined,
@@ -159,7 +172,7 @@ async function runMain(): Promise<void> {
     check(`F002.${LABEL}.priming-roster-child`, true, typeof row('primer')?.id === 'string')
     check(`F002.${LABEL}.priming-no-child-request`, 0, requests.length)
     emit('store-primed', { leadSessionId: lead().id, primerSessionId: row('primer')?.id, outcome: primer })
-    await writeFile(process.env.QAS_READY!, JSON.stringify({ pid: process.pid, leadSessionId: lead().id }))
+    await publishReady(process.env.QAS_READY!, { pid: process.pid, leadSessionId: lead().id })
     await waitFile(process.env.QAS_GO!)
     return spawn('accepted-worker')
   }

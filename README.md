@@ -168,24 +168,24 @@ merged-feature release notes above are unchanged.
 - Node.js **>= 24.9.0**, which is the Harness runtime requirement. The plugin itself has no
   dependencies and imports only `node:` builtins and its own relative files.
 
-Each bundled definition's frontmatter is the authority for its route. Most currently carry no
-`model`/`provider` override and inherit the Lead's route; only `adversarial-red-team-verifier`
-keeps a deployment-specific one. Spawning a routed soul requires the matching provider and
-advertised model/effort in your profile; that is an additional prerequisite, not provided by the
-base Agent Teams bundle:
+Each bundled definition's frontmatter is the authority for its route. All five bundled souls
+currently carry no `model`/`provider` override and inherit the Lead's route, so the bundled catalog
+requires no additional model provider. If you configure an explicit route, spawning that soul
+requires the matching provider and advertised model/effort in your profile; that is an additional
+prerequisite, not provided by the base Agent Teams bundle:
 
 | Soul | Route |
 |---|---|
 | `generalist` | No explicit route; inherits the Lead (bundled default Soul) |
 | `researcher` | No explicit route; inherits the Lead |
-| `adversarial-red-team-verifier` | `kimi-code-bridge/k3.1-pro` with `max` reasoning effort |
+| `adversarial-red-team-verifier` | No explicit route; inherits the Lead |
 | `software-engineer` | No explicit route; inherits the Lead |
 | `scribe` | No explicit route; inherits the Lead |
 
-An unavailable provider/model makes only the affected spawn fail; it does not invalidate the file or
-prevent other souls from working. Before relying on these examples in another deployment, either
-configure the named route or remove its `model`/`provider`/`reasoning-effort` fields to inherit the
-Lead. Review provider costs before selecting a paid route.
+An unavailable explicitly configured provider/model makes only the affected spawn fail; it does not
+invalidate the file or prevent other souls from working. Configure that route in the destination
+profile or remove its `model`/`provider`/`reasoning-effort` fields to inherit the Lead. Review provider
+costs before selecting a paid route.
 
 ### Install and enable
 

@@ -26,10 +26,8 @@ instead and carry no badge. The orchestrator tab shows the bundled doctrine unti
 overrides it.
 
 What the package currently ships (0.4.0): the souls `adversarial-red-team-verifier`, `generalist`,
-`researcher`, `scribe`, and `software-engineer`. Only `adversarial-red-team-verifier` declares a
-route (`model: k3.1-pro`, `provider: kimi-code-bridge`, `reasoning-effort: max`); the other four
-declare no `model`/`provider` and **inherit the Lead's model** (their catalog line reads
-`model: inherit`). `generalist`, `researcher`, and `software-engineer` declare `context: fresh`;
+`researcher`, `scribe`, and `software-engineer`. All five declare no `model`/`provider` override
+and **inherit the Lead's model** (their catalog line reads `model: inherit`). `generalist`, `researcher`, and `software-engineer` declare `context: fresh`;
 `scribe` and `adversarial-red-team-verifier` declare no context. None is `user-invocable`. The
 packaged orchestrator doctrine declares `plan-first: true`, `gate-mode: strict`, `max-retries: 10`,
 `pause-on-fatal: true` and no model/provider/reasoning-effort, so the mode runs on the Lead's own

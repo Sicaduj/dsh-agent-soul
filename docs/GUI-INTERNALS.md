@@ -9,10 +9,15 @@ authoritative reference for maintainers changing those surfaces; end-user onboar
 
 **Reading order for a newcomer:** the module map below → the workspace-root rules → the route
 inventory → the phase that owns the surface you are touching (P0–P4 sections are append-only
-history; earlier phases are still live) → the hard rules. This tree ships **no unit-test suite**;
-the executable verification is the `smoke/` harness (host-side spawn/command/binding behavior —
-it does not cover these routes), so every route and payload below is derived from the source
-handlers in `lib/gui-host.js` and must be checked against them.
+history; earlier phases are still live) → the hard rules. The executable verification lives in
+the `smoke/` harness (invocation and scope: [`../smoke/README.md`](../smoke/README.md)): the
+keyless `smoke/run-smoke.mjs` run covers host-side spawn/command/binding behavior end to end,
+and the focused `node:test` suites add direct coverage of these surfaces —
+`smoke/config-toggle.test.mjs` drives the real `lib/gui-host.js` route handlers **and** the real
+`client.js` artifact, `smoke/bundled-editable.test.mjs` covers the packaged-editable document
+layer plus the GUI save conflict mapping, and `smoke/remediation-admin.test.mjs` covers the
+agent-tool output schema. Route and payload shapes below are still derived from the source
+handlers in `lib/gui-host.js` and should be checked against them when in doubt.
 
 ### Module map
 
@@ -30,7 +35,7 @@ handlers in `lib/gui-host.js` and must be checked against them.
 | `lib/orchestrator.js` | single orchestrator definition: parse/validate/compose, `/orchestrate` command, session-scoped mode runtime (prompt sections, model/tool overrides, rollback) |
 | `lib/orchestrator-mode.js` | shared pure durable-mode fold + Host session projection definition (`agentSoulOrchestrator`); the only place off-words and command-log settlement semantics live |
 | `lib/admin-tool.js` | Lead tool `manage_agent_souls` (document + orchestrator actions) over the same layers |
-| `client.js` | classic browser artifact: Settings → "Agent Soul" page (Souls + Orchestrator tabs, dialogs) plus the Session-header Orchestrator-mode badge |
+| `client.js` | classic browser artifact: Settings → "Agent Soul" page (Souls + Orchestrator tabs, dialogs), the Plugins-page row-config contribution ("Use Default Agent Souls" toggle), and the Session-header Orchestrator-mode badge |
 | `index.js` | Cordis wiring: deps, creation fence, per-agent install (tools/commands/catalog/tool/orchestrator reapply), GUI install |
 | `locale/` | package-level display metadata (en, zh); the eight in-page browser dictionaries live only in `client.js` |
 
@@ -44,12 +49,20 @@ handlers in `lib/gui-host.js` and must be checked against them.
 | P3 | dialog layout | full-width page + centered resizable editor dialog (persisted size), responsive label-above fields, sticky dialog footer |
 | P4 | orchestrator | single optional orchestrator definition, `/orchestrate` session mode (prompt doctrine + model/tool overrides), Orchestrator GUI tab, GET/POST routes, agent-tool actions |
 | RC | release remediation | reserved `lead` identity on every save/create/duplicate/spawn path; built-in-first command priority with handler-identity status (`registered` vs `collision`) and a `reason` on preview command status; orchestrator route validation (declaration layer plus live catalog) on every save path; actionable cold-resume refusals |
-| BE | bundled-editable authoring | opt-in `bundledEditable` mode: the packaged souls and packaged orchestrator doctrine become editable in place while keeping their packaged identity (see the phase entry at the end of this history) |
+| BE | bundled-editable authoring (**0.4.0**, merged to main 2026-11-07) | opt-in `bundledEditable` mode: the packaged souls and packaged orchestrator doctrine become editable in place while keeping their packaged identity (see the phase entry at the end of this history) |
 
-The current release builds on P4 with the selectable default Soul (preferences route, state document,
-and Souls-tab selector), the soul-only delegation fences, and the durable-mode Session-header badge;
-see "Default Soul preference and soul-only delegation" below. The opt-in `bundledEditable` authoring
-mode is the newest phase entry, at the end of this history.
+**Release status (2026-11-07).** There are no git tags; "released" here means merged to the default
+branch `main`. Everything through P4 plus the selectable default Soul (preferences route, state
+document, and Souls-tab selector), the soul-only delegation fences, and the durable-mode
+Session-header badge is released there — see "Default Soul preference and soul-only delegation"
+below. The BE phase is released as of 2026-11-07 (PRs #4–#6): the opt-in `bundledEditable` authoring
+mode, its `GET`/`POST /agent-soul/config` route pair, the Plugins-page "Use Default Agent Souls"
+contribution, the `0.4.0` version bump, and the `smoke/bundled-editable.test.mjs` /
+`smoke/config-toggle.test.mjs` suites are all merged to `main` (the newest phase entry, at the end
+of this history) and are 0.4.0 additions absent in 0.3.0. With the flag off (the default) the
+packaged souls and the packaged doctrine keep the 0.3.0 read-only authoring behavior (no in-place
+editing; the documented editing fences hold) — other 0.4.0 changes, such as the bundled-soul
+route-inheritance change from PR #5, still apply and are not reverted by leaving the flag off.
 
 ### Handler terms
 
@@ -66,7 +79,7 @@ mode is the newest phase entry, at the end of this history.
 | **Command status** | live check of the soul's slash command against the workspace-matched Lead: `registered`, `ai-only`, `invalid-name`, `collision`, `no-live-lead`. With a per-Lead registration record, `registered` means this soul's own handler is the effective one; `collision` means the name is invocable but another handler owns it (the built-in `/orchestrate`) or registration failed. |
 | **Health** | catalog-wide budgets and scan findings: definition count, catalog characters, duplicate names, invalid files, diagnostics |
 | **Orchestrator mode** | per-session mode turned on with `/orchestrate`; applies the effective orchestrator doctrine (the workspace `<dirname(bindingsFile)>/orchestrator.md` when present, else the packaged `defaults/orchestrator.md` when `bundled` is on), model, and tool matrix to that session's Lead, announces activation, and renames the Session title when the optional service is available and a prior title exists |
-| **Trash** | recoverable delete directory beside the bindings file (`<dirname bindingsFile>/trash`); Undo moves the newest entry back |
+| **Trash** | recoverable delete directory beside the bindings file (`<dirname bindingsFile>/trash`); Undo restores the exact entry the delete reported (`trashedFile`) to its original path |
 
 `index.js` wires both halves: the document layer is also used by an agent tool, so the same
 operation serves the GUI and the agent (the "one operation, two callers" practice).
@@ -80,19 +93,23 @@ operation serves the GUI and the agent (the "one operation, two callers" practic
   template, take React from `require('react')`, and declare `dsh.client` in `package.json`.
 - Do not touch files outside your write scope. Do not install packages, do not modify `~/.dsh`,
   and do not run `plugin_manager`.
-- Tests, when present, are `node:test` and use temp dirs under `os.tmpdir()`; never the real
-  workspace `.dsh`. (This tree currently ships no `tests/` directory; the executable checks are
-  `node --check` plus the keyless `smoke/run-smoke.mjs` harness.)
+- Tests are `node:test` and use temp dirs under `os.tmpdir()`; never the real workspace `.dsh`.
+  (There is no `tests/` directory; the executable checks are `node --check`, the focused
+  `node --test smoke/*.test.mjs` suites, and the keyless `smoke/run-smoke.mjs` harness —
+  invocation and scope live in [`../smoke/README.md`](../smoke/README.md).)
 - Writes are atomic: replacement uses a same-directory temp file + `rename`; no-replace creation
   uses a temp file + hard link (`EEXIST` refuses to clobber). All paths must resolve inside a
-  configured soul directory.
+  configured soul directory — or the packaged `agents/` directory when `bundledEditable` is on
+  (packaged files are read-only targets otherwise).
 
 ## Which workspace the GUI edits (lib/gui-host.js)
 
-The browser derives the current main Session's committed working directory from the Session summary
-whose `retainedBy.mainView` count is positive, then pins that root for the editor session. Every
-overview/document GET carries `?root=`, and every POST body carries `root`; a sole listed workspace
-is the compatibility fallback when no main-view association exists.
+The browser derives the current main Session's committed working directory and pins that root for
+the editor session (a later Session switch never moves unsaved edits). The page reads it through
+`props.useSessions(...)`: the page's own `props.sessionId` summary first, then the Session summary
+whose `retainedBy.mainView` count is positive. Every overview/document GET carries `?root=`, and
+every POST body carries `root`; a sole listed workspace is the compatibility fallback when no
+main-view association exists.
 
 The Host authorizes each requested root against current candidates: live top-level Session working
 directories (teammates are skipped), the deployment root captured at activation, then
@@ -109,8 +126,8 @@ Fifteen endpoints, registered as eleven exact paths (the web server rejects dupl
 with method dispatch, as do `GET`/`POST /agent-soul/orchestrator`,
 `GET`/`POST /agent-soul/preferences`, and `GET`/`POST /agent-soul/config`). P1 adds the parse,
 preview, duplicate, and restore endpoints; P4 adds the orchestrator document endpoints; the
-current release adds the default-Soul preference endpoints and the packaged-defaults config
-toggle pair. Each is registered on
+default-Soul release adds the preference endpoints; the packaged-defaults config toggle pair is
+part of 0.4.0 (see "Release status (2026-11-07)"). Each is registered on
 `ctx.webServer.register({ kind: 'exact', path, handler })` with the absolute paths below.
 Every handler first consults the composition's trust fence and answers 401/403 when it rejects:
 
@@ -149,8 +166,9 @@ Route names and payloads (the browser half addresses them without the leading sl
 ### `GET /agent-soul/overview`
 
 200 body (example values are illustrative; `plugin.version` is read from the real manifest —
-`0.4.0` at this revision — and the no-`pluginMeta` fallback constant `PLUGIN_META_DEFAULTS` in
-`lib/gui-host.js` matches it):
+`0.4.0` at this revision (the 0.4.0 version bump, merged to `main` 2026-11-07; 0.3.0 manifests
+report `0.3.0`; earlier manifests report their own versions and predate the authoring mode) — and
+the no-`pluginMeta` fallback constant `PLUGIN_META_DEFAULTS` in `lib/gui-host.js` matches it):
 
 ```jsonc
 {
@@ -242,7 +260,8 @@ or cleared. An explicit `agent_type` does not read the preferences document.
   "modifiedAt": 1793461007624,
   "diagnostics": [{ "message": "…" }],                                // empty for a valid document
   "commandStatus": { "name": "researcher", "status": "registered", "message": "…" }, // P2: live registration check
-  "usage": { "storedCount": 1, "lastUsedAt": 1793461007624, "activeMembers": ["alpha"] } // P2
+  "usage": { "storedCount": 1, "lastUsedAt": 1793461007624, "activeMembers": ["alpha"] }, // P2
+  "catalogLine": "- researcher — Researches … (tools: …; model: …; command: /researcher)" // P2; '' for invalid rows
 }
 ```
 
@@ -404,13 +423,21 @@ export function composeDocument(input) // -> { source, valid, diagnostics }
   // sections: { role, inputs, rules, output, extraMarkdown }
 
 // Scan every configured directory for *.md (valid or not), sorted by label.
-export async function listDocuments({ config, root }) // -> { dirs, documents: DocumentSummary[], diagnostics, scannedAt }
+export async function listDocuments({ config, root, logger }) // -> { dirs, documents: DocumentSummary[], diagnostics, scannedAt }
 
-export async function readDocument({ config, root, file })          // -> { ok, document? , code?, message? }
-export async function saveDocument({ config, root, file, fields, sections }) // -> { ok, document?, code?, message?, diagnostics? }
-export async function createDocument({ config, root, name })        // -> { ok, document?, code?, message? }
-export async function deleteDocument({ config, root, file })        // -> { ok, code?, message? }
+export async function readDocument({ config, root, file })          // -> { ok, document?, code?, message? }
+export async function saveDocument({ config, root, file, fields, sections,
+  expectedHash, expectedMissing, validate }) // -> { ok, document?, code?, message?, diagnostics? }
+export async function saveDocumentSource({ config, root, file, source,
+  expectedHash, expectedMissing, validate }) // raw-markdown save; -> { ok, file, diagnostics, document? }
+export async function createDocument({ config, root, name, source, validate }) // source/validate optional; -> { ok, document?, code?, message? }
+export async function duplicateDocument({ config, root, file, name, validate }) // -> { ok, document?, code?, message? }
+export async function deleteDocument({ config, root, file })        // -> { ok, file, trashedFile?, code?, message? }
+export async function restoreDocument({ config, root, trashedFile, file }) // -> { ok, document?, code?, message? }
 ```
+
+`documentHash`, `canonicalSkeleton`, `bundledSoulsDir`, and `bundledEditableEnabled` are
+exported too (referenced by the P0 and BE sections).
 
 Composition rules (must round-trip):
 - Frontmatter canonical order: `name`, `description`, `tools`, `model`, `provider`,
@@ -430,7 +457,9 @@ Composition rules (must round-trip):
   `{ ok, file, diagnostics }` for the Lead tool.
 - Path safety: a target must be a `.md` file whose resolved path is inside one of the resolved
   soul directories; for existing files, `realpath(dirname)` must also stay inside (no symlink
-  escapes). Reject `..` traversal and non-`.md` targets.
+  escapes). Reject `..` traversal and non-`.md` targets. The packaged `agents/` directory keeps its
+  packaged identity under every alias spelling (the canonical ownership check runs first): it is
+  writable only when `bundledEditable` is on, and read-only otherwise.
 
 ## Browser half (client.js)
 
@@ -470,8 +499,9 @@ ctx.slots.inject('settings.section', () => ctx.slots.register({
 `NS = 'settings.agentSoul'`; register the locale dictionaries with
 `ctx.locale.register(NS, { en, zh, ja, de, fr, es, ru, pt })` (the base page starts with `en` and
 `zh`; P2 adds the remaining six)
-inside `apply` (automatic cleanup with the plugin). The page component receives `t` (the bound
-translate function) and `close` props.
+inside `apply` (automatic cleanup with the plugin). The page component consumes the bound `t`
+translate function plus `props.useSessions(...)` and `props.sessionId` (workspace-root pinning);
+the settings shell's `close` callback is passed to the section but currently unused.
 
 ### Session-header Orchestrator badge
 
@@ -604,9 +634,14 @@ commands. Actions: `list`, `get` (`file`), `save` (`file`, `source` raw markdown
 through the Plugin Manager and reports the manual fix when that service is unavailable),
 `get_orchestrator` and `save_orchestrator` (`source` raw markdown) for the P4 definition.
 `get_orchestrator` answers the **effective** document: when the workspace file is absent and
-`bundled` is enabled it returns `bundled: true` plus `sourcePath` for the packaged default and a
-message saying a save writes the workspace target; `save_orchestrator` always writes that workspace
-target. Its output schema is canonical JSON Schema (object-level `required`
+`bundled` is enabled, it reports the packaged default (`bundled: true` plus `sourcePath`, with a
+message saying a save writes the workspace target) while `bundledEditable` is off, or the packaged
+file itself as the editable effective document (`path` = `sourcePath`) when it is on. The
+`save_orchestrator` write target depends on the same flag: **off** (the default and the 0.3
+behavior) writes the workspace definition at `<dirname(bindingsFile)>/orchestrator.md`; **on** with
+no workspace file yet rewrites the **packaged** `defaults/orchestrator.md` in place — a shared,
+upgrade-fragile package-state write — while an existing workspace file always wins.
+Its output schema is canonical JSON Schema (object-level `required`
 arrays, never author-style per-property `required: true`), because the tools registry validates it
 at registration. `save_orchestrator` runs the same two validation layers as the GUI save — the
 document analysis (`analyzeOrchestrator`) plus `orchestratorRouteDiagnostics(definition,
@@ -662,9 +697,11 @@ token-only styles. Phases are history: everything in the P0–P4 sections is sti
 }
 ```
 
-Tools are the first live Team Lead's visible, restrictable tool definitions (visible tools minus
-`TEAM_TOOL_NAMES`, descriptions truncated to 200 chars), `source` is `'none'` with empty arrays when
-no live Lead exists or the tools service is unavailable. Models come from `llm.listProviders()` +
+Tools are the visible, restrictable tool definitions of the Lead that speaks for the workspace the
+page edits (the same workspace-matched Lead the command-status check uses, with the first live
+Lead as fallback; visible tools minus `TEAM_TOOL_NAMES` and the Lead-only `manage_agent_souls`,
+descriptions truncated to 200 chars), `source` is `'none'` with empty arrays when no live Lead
+exists or the tools service is unavailable. Models come from `llm.listProviders()` +
 `llm.listModels(provider)` with every rejection degrading to an empty list. `teamTools` is the
 sorted `TEAM_TOOL_NAMES` list: those tools are Agent-scoped and never restrictable, so a teammate
 soul must not name them; the orchestrator matrix *may* name them, and the browser uses this list
@@ -707,8 +744,10 @@ No new route is introduced in P0.
 - Empty-state now names the scan root and resolved directories, with copy buttons, so a wrong root
   or an empty folder is self-explanatory.
 - Skeleton placeholders while the overview or a document loads.
-- Every new string is added to the `en` and `zh` dictionaries; the documented relative paths are
-  nine at this phase (the default-Soul release adds the tenth).
+- Every new string is added to the `en` and `zh` dictionaries; the documented route paths are
+  four at this phase (five method-endpoints), growing to eight paths / nine endpoints at P1,
+  nine/eleven at P4, ten/thirteen at the default-Soul release, and eleven/fifteen with the
+  0.4.0 config pair.
 
 ## P1 — editing power
 
@@ -903,7 +942,8 @@ all of it inside the same shell).
   inline forms. Closing a dirty create/import dialog goes through the same guard.
 - The list, empty state (root/dirs copy), skeletons, locales (all eight), token-only styles, one
   inline `<style>`, no imports/dependencies, and the documented relative fetch paths are unchanged
-  (nine paths at that phase; the default-Soul release adds the tenth).
+  (eight paths / nine endpoints at that phase; P4 brings nine/eleven, the default-Soul release
+  ten/thirteen, and the 0.4.0 config pair eleven/fifteen).
 
 ## P4 — Orchestrator soul (session-scoped, command-activated)
 
@@ -1185,8 +1225,10 @@ module-level behavior.
 
 ## Bundled-editable authoring (`bundledEditable`, 0.4.0)
 
-Opt-in authoring mode for the packaged defaults; with the flag off (the default) every behavior in
-the phases above is unchanged.
+Opt-in authoring mode for the packaged defaults, merged to `main` 2026-11-07 as part of 0.4.0
+(see "Release status (2026-11-07)"); with the flag off (the default) the packaged souls and the
+packaged doctrine keep the 0.3.0 read-only authoring behavior (no in-place editing), while other
+0.4.0 changes — such as the bundled-soul route-inheritance change from PR #5 — still apply.
 
 - **Config (`index.js`):** boolean `bundledEditable`, default `false`, validated with the other
   keys. It is inert while `bundled` is false (the packaged catalog is not scanned), and activation

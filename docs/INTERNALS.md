@@ -89,7 +89,7 @@ share the application path.
 
 | File | Role | Main exports / entry points |
 |---|---|---|
-| [`index.js`](../index.js) | Cordis plugin entry; config normalization; deps; creation fence; veto-only admission and lifecycle-safe per-Agent installation; pre-existing-Agent activation policy | `name`, `inject`, `normalizeConfig(raw, logger)`, `resolveRoot(ctx, agent)`, `apply(ctx, rawConfig)` |
+| [`index.js`](../index.js) | Cordis plugin entry; config normalization; deps; creation fence; veto-only admission and lifecycle-safe per-Agent installation; pre-existing-Agent activation policy | `name`, `inject`, `normalizeConfig(raw, logger)`, `resolveRoot(ctx, agent)`, `createDeps(ctx, config, catalog, bindings, pending, logger)`, `apply(ctx, rawConfig)` |
 | [`lib/soul.js`](../lib/soul.js) | Soul parser/validator (including the reserved `lead` identity), persona composition, catalog discovery and prompt text | `parseFrontmatter`, `parseSoulMarkdown`, `composePersona`, `catalogPromptText`, `createCatalog` |
 | [`lib/model.js`](../lib/model.js) | Resolve a frontmatter `model`/`provider`/`reasoning-effort` into one route | `resolveModelRoute(raw, services)` |
 | [`lib/spawn.js`](../lib/spawn.js) | Spawn orchestration shared by the tool and slash commands; default-Soul resolution; soul-only creation fence; list/command operations | `commandNameFor`, `nextTeammateName`, `assertSoulOnlyTeamChild`, `spawnTeamMember`, `describeSouls`, `spawnSoulFromCommand` |
@@ -104,14 +104,17 @@ share the application path.
 | [`lib/orchestrator-mode.js`](../lib/orchestrator-mode.js) | Shared pure durable-mode fold and Host session projection definition used by the runtime read and the Session-header badge | `ORCHESTRATE_COMMAND_NAME`, `ORCHESTRATOR_MODE_PROJECTION_KEY`, `ORCHESTRATOR_MODE_STATE_VERSION`, `orchestratorModeNext`, `orchestratorModeInit`, `orchestratorModeFold`, `orchestratorModeOf`, `orchestratorModeView`, `orchestratorModeStateSchema`, `orchestratorModeViewSchema`, `orchestratorModeDefinition` |
 | [`lib/gui-host.js`](../lib/gui-host.js) | Authenticated JSON routes, overview assembly, workspace-root selection, command/usage/health status | `createGuiRoutes(deps)`, `installGui(pluginCtx, deps)` |
 | [`lib/admin-tool.js`](../lib/admin-tool.js) | Lead-only `manage_agent_souls` tool over the document/orchestrator layers | `installSoulAdminTool(agent, scope, deps)` |
-| [`client.js`](../client.js) | Classic browser artifact: Settings → "Agent Soul" page (Souls + Orchestrator tabs, dialogs, locale dictionaries; both editors share the live provider/model catalog pickers) plus the Session-header Orchestrator-mode badge | `window.__ModuleLoader__.load({ id, factory(require) { … } })` |
+| [`client.js`](../client.js) | Classic browser artifact: Settings → "Agent Soul" page (Souls + Orchestrator tabs, dialogs, locale dictionaries; both editors share the live provider/model catalog pickers) plus the Plugins-page row config (the **Use Default Agent Souls** toggle) and the Session-header Orchestrator-mode badge | `window.__ModuleLoader__.load({ id, factory(require) { … } })` |
 | [`locale/`](../locale/) | Package locale metadata (`en`, `zh`); the page's eight full dictionaries are inside `client.js` | JSON metadata |
 | [`smoke/run-smoke.mjs`](../smoke/run-smoke.mjs) | Keyless end-to-end harness: real headless DSH plus a scripted LLM adapter | runner |
 | [`smoke/soul-llm.ts`](../smoke/soul-llm.ts) | Scripted test-double LLM adapter for the smoke harness | adapter |
 | [`smoke/contract.mjs`](../smoke/contract.mjs) | Shared expected Team-tool contract for the smoke run | `TEAM_TOOL_NAMES`, `expectedSoulTools` |
 
-This tree ships no `tests/` directory, no unit-test suite, and no test glob:
-[`package.json`](../package.json) ships no test pattern in its `files` list.
+This tree ships no `tests/` directory and no test glob or test script:
+[`package.json`](../package.json) has no `scripts` section and ships no test pattern in its `files`
+list (the `smoke/*.mjs` suites and [`smoke/README.md`](../smoke/README.md) are listed there).
+Focused keyless `node:test` suites live under `smoke/` instead — details in *Testing expectations*
+below.
 
 ## Configuration and shared deps
 
@@ -318,7 +321,9 @@ direct duplicate adds no roster member, pending plan, or binding.
 
 - `lib/soul.js` scans configured directories recursively for `*.md`, skips dot entries and
   `node_modules`, limits depth to 8, and sorts entries for stable output. Missing directories are
-  not diagnostics. With `bundled` enabled (the default) the package `agents/` directory is scanned
+  not diagnostics. One refresh reads at most 1000 files across all configured directories (one
+  diagnostic when the budget stops the scan), and a soul file larger than 1 MiB is skipped before
+  it is read (its own diagnostic). With `bundled` enabled (the default) the package `agents/` directory is scanned
   last, after the configured directories, so installs expose the bundled souls in every workspace;
   a local definition with the same name shadows the bundled one and the duplicate diagnostic is
   suppressed for the shadowed packaged copy. Each file is strict-parsed; a file with any diagnostic
@@ -562,7 +567,7 @@ Unrelated commands never enter this lock.
   `stateNote` mirrors the actual outcome: restore success (and the durable-no-live case, where
   `restore()` is never called) appends `; the already-active mode was kept`, while a both-fail
   restoration appends `; cannot restore the previous orchestrator state; orchestrator mode is
-  inactive` (`lib/orchestrator.js:2645-2653`). Only a mode this invocation started is reverted
+  inactive` (`lib/orchestrator.js:2876-2885`). Only a mode this invocation started is reverted
   (`runtime.disable`), so a first-enable run settles as `command/done kind: "error"` (its note is
   `; the mode was reverted`) and
   `modeOf` agrees.
@@ -971,9 +976,10 @@ at activation, named in the `installTeamTools` failure message, exposed as the o
    activation, `SoulPlanUnavailableError` is the one failure class the loop swallows for
    pre-existing Agents; every other creation path lets it reject.
 5. For each member:
+   - Lead only, first: refresh the catalog so the later registrations see fresh definitions;
    - every member: `installTeamTools` (Team tools + policy/identity; the Lead also gets the catalog
      section);
-   - Lead: refresh the catalog, install the built-in `/orchestrate` **first**, then reconcile the
+   - Lead: install the built-in `/orchestrate` **first**, then reconcile the
      soul commands, install `manage_agent_souls`, then `orchestrator.reapplyIfActive(agent)` (the
      built-in-first order is what prevents a soul named `orchestrate` from shadowing it on a fresh
      Lead);
@@ -989,9 +995,10 @@ at activation, named in the `installTeamTools` failure message, exposed as the o
 
 1. every installed member record (reverse disposers),
 2. the orchestrator runtime (dispose every bundle; restore every captured model),
-3. the catalog cache,
-4. pending spawns,
-5. the binding store, flushing pending writes.
+3. the soul-command reconciler (every Lead's slash-command bundle),
+4. the catalog cache,
+5. pending spawns,
+6. the binding store, flushing pending writes.
 
 The GUI routes are registered through their own `ctx.effect` calls inside `installGui`, so they
 dispose with the plugin child. The `/orchestrate` command registration is a child injection disposed
@@ -1033,8 +1040,10 @@ service into the plugin's own Loader row (`agent-soul-team`) in the profile patc
 key is preserved — and the Loader reloads the plugin row once. A refused POST answers 400
 `invalid-request` (bad body) or 409 `bundled-disabled` / `not-configurable` / `overridden`.
 
-The browser derives the current main Session root from `retainedBy.mainView`, pins it for the editor
-session, and sends it on every route. The Host authorizes the requested root against live top-level
+The browser derives the current workspace root from the page's own `props.sessionId` summary
+first, then the Session summary with a positive `retainedBy.mainView`, then a sole listed
+workspace as the compatibility fallback; it pins that root for the editor session and sends it on
+every route. The Host authorizes the requested root against live top-level
 Session/deployment candidates and pins it for the whole request; unknown roots answer 403. Legacy
 requests without a root still choose the first candidate whose configured soul directories exist.
 Command status is checked against the Lead whose Session directory equals the pinned root (falling
@@ -1120,14 +1129,16 @@ back to the first live Lead), which keeps concurrent Sessions from reporting fal
 
 ## Testing expectations
 
-This tree ships **no unit-test suite**: there is no `tests/` directory and no test glob is shipped
-in `package.json`. `node --test tests/*.test.mjs` runs **0 tests** and exits 0 (the unmatched glob
+This tree ships no `tests/` directory and no test glob or test script in
+`package.json`. `node --test tests/*.test.mjs` runs **0 tests** and exits 0 (the unmatched glob
 reaches Node unchanged), so that command proves nothing. **Orchestrator mode activation still has no
 automated end-to-end coverage in this candidate**: the smoke harness does not activate `/orchestrate`,
 but it does verify the bundled-default resolution that makes the command available in any workspace
 (direct module checks against a brand-new empty workspace, plus the `bundled: false` strict path).
 
-The executable checks are syntax checks plus the keyless end-to-end harness:
+The executable checks are `node --check`, the focused `node:test` suites under `smoke/` — 39 cases
+across the four `*.test.mjs` modules (remediation-bindings + remediation-admin 15,
+bundled-editable 16, config-toggle 8) — and the keyless end-to-end harness:
 
 ```sh
 node --check index.js
@@ -1137,7 +1148,7 @@ node --test smoke/
 node smoke/run-smoke.mjs
 ```
 
-If a `node:test` suite is added, the established style is temp directories under `os.tmpdir()`,
+When adding a new `node:test` suite, the established style is temp directories under `os.tmpdir()`,
 fake service objects for Agent/Tool/Command scopes, real Harness prompt-rendering checks, and no
 writes to the real workspace `.dsh` or `state/`.
 
@@ -1166,17 +1177,18 @@ toggle is covered by [`smoke/config-toggle.test.mjs`](../smoke/config-toggle.tes
 fifteen-endpoint/eleven-path route pair, GET's effective-flag report, POST persistence through the
 plugin row, every POST refusal code, and the connection trust fence. Per-module counts live in
 [`../smoke/README.md`](../smoke/README.md) — 222 counted assertions for
-`bundled-editable.test.mjs` and 129 for `config-toggle.test.mjs` (39 `node:test` cases in total,
-all passing) — and `node smoke/run-smoke.mjs` stays at **41/41 checks**. Orchestrator mode
+`bundled-editable.test.mjs` and 129 for `config-toggle.test.mjs` (those two run 24 `node:test`
+cases; `node --test smoke/` runs 39 with the remediation suites included, all 39 passing) — and `node smoke/run-smoke.mjs` stays at **41/41 checks**. Orchestrator mode
 activation still has no automated end-to-end coverage in this candidate. See [`../smoke/README.md`](../smoke/README.md).
 
 ## Sharp edges
 
 - **Two root resolvers.** `index.js#resolveRoot` (used for catalog, bindings, commands, tool roots)
   is: session committed working directory → `workingDirectory.defaultDirectory` → `process.cwd()`.
-  The browser separately pins the current main Session root through `retainedBy.mainView`; the Host
+  The browser separately pins the workspace root from its own `props.sessionId` summary first, then
+  the Session with a positive `retainedBy.mainView`, then a sole listed workspace; the Host
   authorizes it against live top-level/deployment candidates. Legacy rootless GUI calls still use
-  the first candidate with a soul directory, so their no-main-view fallback can differ.
+  the first candidate with a soul directory, so their no-pin fallback can differ.
 - **Workspace-matched Lead.** `leadForGui` prefers the live Lead whose Session directory equals the
   GUI root, then falls back to the first Lead. Command status uses this Lead's command registry so
   multiple live Sessions do not produce false collisions; with no match the fallback can still be
@@ -1253,8 +1265,11 @@ activation still has no automated end-to-end coverage in this candidate. See [`.
 - **The catalog line and `commandPrefix`.** Catalog creation receives the configured prefix and
   renders `/<prefix><name>`, matching the command registry and GUI catalog lines. A collision on
   that exact prefixed name is still reported rather than retried.
-- **No rendered visual or interaction test.** Nothing in this candidate checks the browser
-  artifact as text or renders it; browser layout and interaction must be verified manually.
+- **No rendered visual or interaction test.** No test renders the browser artifact or validates
+  real browser layout and interaction; those must be checked manually in a real browser. Static
+  source-contract coverage of the artifact does exist (`smoke/config-toggle.test.mjs` loads the
+  real `client.js` and asserts its registration/source contract — see
+  [`../smoke/README.md`](../smoke/README.md) and [`GUI-INTERNALS.md`](GUI-INTERNALS.md)).
 
 ## Ownership and write scope
 

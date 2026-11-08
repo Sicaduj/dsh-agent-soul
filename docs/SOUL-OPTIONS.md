@@ -9,7 +9,7 @@ The page is **Settings → Agent Soul** in the Harness Web GUI and has two tabs:
 
 | Tab | What you edit | One file per… |
 |---|---|---|
-| **Souls** | A catalog of teammate definitions | teammate soul (`agents/*.md`) |
+| **Souls** | A catalog of teammate definitions | teammate soul (packaged `agents/*.md`, or one file per soul in the configured workspace `dirs`) |
 | **Orchestrator** | The single Lead orchestration definition | workspace (`<dirname(bindingsFile)>/orchestrator.md`); falls back to the bundled `defaults/orchestrator.md` |
 
 Editing writes the Markdown file on disk. The **next spawn** (souls) or the **next
@@ -23,6 +23,16 @@ place — use **Duplicate** to create an editable workspace copy. With **Use def
 on (config key `bundledEditable`, with `bundled: true`), the packaged souls open editable in place
 instead and carry no badge. The orchestrator tab shows the bundled doctrine until a workspace file
 overrides it.
+
+What the package currently ships (0.4.0): the souls `adversarial-red-team-verifier`, `generalist`,
+`researcher`, `scribe`, and `software-engineer`. Only `adversarial-red-team-verifier` declares a
+route (`model: k3.1-pro`, `provider: kimi-code-bridge`, `reasoning-effort: max`); the other four
+declare no `model`/`provider` and **inherit the Lead's model** (their catalog line reads
+`model: inherit`). `generalist`, `researcher`, and `software-engineer` declare `context: fresh`;
+`scribe` and `adversarial-red-team-verifier` declare no context. None is `user-invocable`. The
+packaged orchestrator doctrine declares `plan-first: true`, `gate-mode: strict`, `max-retries: 10`,
+`pause-on-fatal: true` and no model/provider/reasoning-effort, so the mode runs on the Lead's own
+route.
 
 ---
 
@@ -58,7 +68,7 @@ the size is remembered) and has a **Form / Raw** mode switch.
 | Field | Maps to | What it does |
 |---|---|---|
 | **Name** | frontmatter `name` | The identity used in `agent_type`, the Lead's catalog bullet, and the slash command name. Required, lower-kebab-case, at most 64 characters, unique within the catalog. `lead` is reserved for the Team Lead: a save or preview refuses it without writing and shows `name: "lead" is reserved for the Team Lead` on the name control; create and duplicate refuse it as an invalid name and create nothing. `leadership`, `lead-review`, and `lead-2` remain valid. The teammate's own name (`spawn_teammate({ name })`) is separate, chosen at spawn time, and also cannot be `lead` or an already-used roster name. |
-| **Description** | frontmatter `description` | The **orchestration trigger**: the Lead reads this text to decide when to use the soul. Required, non-empty, one line, at most 2000 characters. It is also the catalog line shown in the Lead's prompt (truncated to 600 characters). Write "what it does + when to use it". |
+| **Description** | frontmatter `description` | The **orchestration trigger**: the Lead reads this text to decide when to use the soul. Required, non-empty, at most 2000 characters; write it as one line (the parser does not enforce single-line, and the catalog collapses whitespace). It is also the catalog line shown in the Lead's prompt (truncated to 600 characters). Write "what it does + when to use it". |
 
 ### Routing group
 
@@ -67,7 +77,7 @@ the size is remembered) and has a **Form / Raw** mode switch.
 | **Tools** chip picker | frontmatter `tools` | The teammate's **permission matrix** over inherited (preset/global) tools. Chips light up for names the live Lead's catalog reports. **Inherit every tool** (pressed) = allow every inherited tool (`tools:` omitted / `*`). Pressing it off leaves an empty list (`tools: []`) = hide every inherited tool. Selecting chips builds an explicit allow-list. Team tools are never listed: they are Agent-scoped, cannot be restricted, and stay available to every teammate. Lead-only `manage_agent_souls` is also excluded and rejected because it cannot be delegated. |
 | **Tools (comma-separated)** (Advanced) | same `tools` | The raw form of the same value. `*` (what the field shows when the file omits `tools`) = inherit all; an empty value = deny all (composes `tools: []`); `a, b` = allow exactly `a` and `b`. Useful for tools the GUI text input accepts but the live catalog does not currently show. Stays in sync with the chips. |
 | **Provider** / **Model** selects | frontmatter `provider`, `model` | Route this teammate's model. Empty = inherit the Lead's model. The provider list comes from the live `llm` catalog; the model list is filtered by the chosen provider. Picking a model auto-fills its provider when none is set. A configured route that is not in the live catalog stays selectable (marked "not in catalog") instead of being lost. A declared model that cannot be resolved makes the spawn fail, it does not invalidate the file — though the GUI save refuses an unresolvable declaration while a live catalog is available. |
-| **Reasoning effort** | frontmatter `reasoning-effort` | Optional provider/model effort id (e.g. `high`). Validated against the model when the LLM catalog advertises efforts; otherwise used with a warning. Empty = provider default. |
+| **Reasoning effort** | frontmatter `reasoning-effort` | Optional provider/model effort id (e.g. `high`). Validated against the model when the LLM catalog advertises efforts; otherwise used with a warning. Empty = provider default. Declare it **together with a model**: a soul carrying only `reasoning-effort` is refused at save and fails at spawn (the effort needs a model to validate against). This differs from the orchestrator definition, where an effort with no model/provider is valid and ignored — see below. |
 | **Context** | frontmatter `context` | Starting context for the teammate. **Not specified** = no value in the file, so spawn resolution uses the call's `context` argument, then the plugin's `defaultContext` (`fresh` by default). **fresh** = clean session without the Lead's history (best for independent work; the default). **fork** = the teammate's session inherits the Lead's completed turns (shared continuity, larger prompt). No other value is accepted; a literal `none` is invalid in raw YAML. |
 | **User-invocable** checkbox | frontmatter `user-invocable` | When checked, the Lead's session registers one slash command for this soul (`/researcher`), letting a person start the teammate directly. Default off (AI-only), and every bundled soul omits the key — set it and save to opt in. Command names can collide with existing commands; the card reports `Command collision`. The built-in `/orchestrate` is installed first on every Lead and always wins its name, so a soul named `orchestrate` needs `commandPrefix: agent-` to become `/agent-orchestrate` (a config change takes effect after the next Host/bundle reload). Deleting or renaming the colliding soul re-registers the remaining commands without a Host reload. |
 
@@ -102,7 +112,7 @@ The body must be non-empty; that is part of what makes a file valid.
 | **Save** | Validates the composed document, then writes the file atomically and re-scans the catalog. Errors appear inline (and in a summary) without writing. A stale draft that conflicts with an external edit answers a **conflict banner** with **Reload file** / **Overwrite**. With `bundledEditable` on, saving a packaged soul rewrites the package's `agents/` file in place. |
 | **Revert** | Discards the in-page changes and restores the last loaded file content (asks before discarding when the guard fires). |
 | **Duplicate** | Copies the document under a new name (default `<name>-copy`), preserving description, sections, and fields. Fails on an existing name or a bad name. |
-| **Delete** | Two-step confirm, then moves the file into the plugin trash (`<bindings dir>/trash`). The status banner offers **Undo**, which restores the newest deleted file. With `bundledEditable` on, deleting a packaged soul moves the package file to the same workspace trash, and **Undo** restores it to the package. |
+| **Delete** | Two-step confirm, then moves the file into the plugin trash (`<bindings dir>/trash`). The status banner offers **Undo**, which restores the exact entry the delete reported (`trashedFile`) to its original path. With `bundledEditable` on, deleting a packaged soul moves the package file to the same workspace trash, and **Undo** restores it to the package. |
 | **Close / Escape / backdrop** | Closes the dialog. With unsaved edits, the guard asks **Discard changes** or **Keep editing**. |
 | **Reset size** (title row) | Restores the dialog's default size; the chosen size is remembered in `localStorage`. |
 

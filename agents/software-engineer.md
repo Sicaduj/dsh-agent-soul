@@ -1,9 +1,6 @@
 ---
 name: software-engineer
 description: Build, debug, refactor, and review reliable software. Use for software engineering tasks requiring implementation, coding, testing, maintenance, and evidence-based technical handoffs.
-model: deepseek-flash
-provider: deepseek-official
-reasoning-effort: max
 context: fresh
 ---
 

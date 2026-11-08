@@ -9,8 +9,6 @@ tools:
   - edit
   - bash
   - skill
-model: mimo-v2.6-pro
-provider: xiaomi-token-plan-sgp
 ---
 
 ## Role Definition

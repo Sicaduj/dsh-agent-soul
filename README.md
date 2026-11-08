@@ -153,22 +153,22 @@ Leave `bundledEditable` out (or set it `false`) to keep the 0.3 read-only behavi
 - Node.js **>= 24.9.0**, which is the Harness runtime requirement. The plugin itself has no
   dependencies and imports only `node:` builtins and its own relative files.
 
-The bundled definitions preserve their deployment-specific model routes. Spawning one requires the
-matching provider and advertised model/effort in your profile; these are additional prerequisites,
-not provided by the base Agent Teams bundle:
+The bundled souls inherit the Lead's routed model unless their definition pins a route. Only
+`adversarial-red-team-verifier` declares one; the other bundled definitions omit
+`model`/`provider`/`reasoning-effort`, so they spawn with whatever route the Lead uses:
 
-| Soul | Required route |
+| Soul | Route |
 |---|---|
-| `generalist` | No explicit route; inherits the Lead (bundled default Soul) |
-| `researcher` | `xiaomi-token-plan-sgp/mimo-v2.6-pro` |
-| `adversarial-red-team-verifier` | `kimi-code-bridge/k3.1-pro` with `max` reasoning effort |
-| `software-engineer` | `deepseek-official/deepseek-flash` with `max` reasoning effort |
-| `scribe` | `xiaomi-token-plan-sgp/mimo-v2.6-pro` |
+| `generalist` | Inherits the Lead (bundled default Soul) |
+| `researcher` | Inherits the Lead |
+| `adversarial-red-team-verifier` | `kimi-code-bridge/k3.1-pro`; no reasoning effort pinned |
+| `software-engineer` | Inherits the Lead |
+| `scribe` | Inherits the Lead |
 
-An unavailable provider/model makes only the affected spawn fail; it does not invalidate the file or
-prevent other souls from working. Before relying on these examples in another deployment, either
-configure the named route or remove its `model`/`provider`/`reasoning-effort` fields to inherit the
-Lead. Review provider costs before selecting a paid route.
+An unavailable provider/model affects only that spawn: it does not invalidate the file or prevent
+other souls from working. A workspace copy can pin its own route with `model`, `provider`, and
+`reasoning-effort` when a soul should not follow the Lead; review provider costs before selecting a
+paid route.
 
 ### Install and enable
 

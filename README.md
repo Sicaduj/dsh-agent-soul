@@ -113,6 +113,30 @@ Agent Team (Lead, optionally the orchestrator)
 > patch) to `<workspace>/.dsh/agent-soul/`; copy `state/bindings.json` there to keep existing
 > cold-resume bindings, or restate the old paths in a profile patch.
 
+> **Upgrading from 0.3.** 0.4.0 adds the opt-in `bundledEditable` authoring mode and changes
+> nothing by default: the packaged souls and packaged orchestrator doctrine stay read-only unless
+> you turn the mode on. The no-YAML way is the GUI toggle — the **Use default agent souls** switch
+> in the **Plugin settings & runtime** card (Settings → Agent Soul), or the Plugins page
+> (**Configure** on this bundle's `agent-soul-team` row → the **Use Default Agent Souls** page).
+> The toggle writes the profile patch's row config (all other row keys preserved) and reloads the
+> plugin once. To set the key in YAML instead, note that a profile patch that restates a row's
+> `config` **replaces the whole config object** rather than merging into it, so when you add
+> `bundledEditable: true` restate every key the row relies on — the shipped `freshProvider`,
+> `forkProvider`, and `claimTeamToolRow` values included — as in this complete row:
+
+```yaml
+- id: agent-soul-team
+  name: '@local/dsh-agent-soul'
+  config:
+    freshProvider: spawn
+    forkProvider: fork
+    claimTeamToolRow: true
+    bundledEditable: true
+```
+
+Leave `bundledEditable` out (or set it `false`) to keep the 0.3 read-only behavior. See
+[Configuration](#configuration) for the flag's scope and its risks.
+
 ## Requirements and install
 
 ### Requirements
@@ -261,12 +285,17 @@ relative to each workspace root. See [Configuration](#configuration).
    cards, with `generalist` marked as the default while no explicit selection exists. Every bundled
    soul is AI-only, so the cards show the **AI-only** command status until you turn on
    **User-invocable** for one. Cards that come from the package rather than the workspace carry a
-   **Bundled** badge and are read-only in place: use **Duplicate** to create an editable workspace
-   copy (the configured `.dsh/agents` directory is created on demand).
+   **Bundled** badge and are read-only in place by default: use **Duplicate** to create an editable
+   workspace copy (the configured `.dsh/agents` directory is created on demand). With the
+   **Use default agent souls** switch on (config key `bundledEditable` — see
+   [Configuration](#configuration)) the packaged cards open editable in place instead and carry no
+   badge.
 2. **Inspect one, then customize a copy.** Click `researcher`. The editor dialog shows each Markdown
    section separately, the tool matrix, the model route, and a live **"What the teammate will
-   receive"** preview. The bundled documents are read-only, so **Save** is disabled on them: click
-   **Duplicate** to create an editable workspace copy (for example `researcher-copy`), which opens
+   receive"** preview. By default the packaged documents are read-only, so **Save** is disabled on
+   them (with **Use default agent souls** on they save back to the package instead — see
+   [Configuration](#configuration)): click **Duplicate** to create an editable workspace copy (for
+   example `researcher-copy`), which opens
    the saved copy in the editor. Edit it and click **Save**; the next spawn uses the file on disk.
    (You can also start from **New soul**.)
 3. **Let the Lead delegate.** In a chat with an Agent Team, ask the Lead to research a question, or
@@ -306,7 +335,8 @@ relative to each workspace root. See [Configuration](#configuration).
    explicit choice, so `generalist` applies again when present.
 6. **Try orchestrator mode.** Open the **Orchestrator** tab and review the supplied doctrine — a
    fresh install shows the bundled default with a **Bundled** badge, so there is no file to create
-   first. Type `/orchestrate` in that session — or `/orchestrate <task>` to
+   first (with **Use default agent souls** on the packaged doctrine is editable in place and
+   carries no badge). Type `/orchestrate` in that session — or `/orchestrate <task>` to
    enable the mode and submit the task as the next message in one step. A successful enable answers
    with the **ORCHESTRATOR MODE ACTIVE** block; a failed enable answers with the error: a failure
    before any state is touched leaves the mode unchanged (a failed first enable leaves it off); a
@@ -437,10 +467,15 @@ shows the one-line profile patch that fixes it. Bars turn red past the limit; a 
 names a file opens it in the editor. Health is informative: it does not block saving.
 
 **Plugin settings & runtime card.** Shows the workspace root being edited, resolved soul
-directories, bindings file and count, LLM providers, command prefix, default context, spawn
-providers, scan limits, last scan time, live Team Leads with member counts and their registered
-soul commands, and the delegation example. These values are read-only; changing them is a bundle
-configuration change.
+directories, the **Use default agent souls** switch (status **On - packaged defaults are editable
+in place**, **Off - packaged defaults are read-only**, or an unavailable status when `bundled:
+false` or the profile cannot save the setting), bindings file and count, LLM providers, command
+prefix, default context, spawn providers, scan limits, last scan time, live Team Leads with member
+counts and their registered soul commands, and the delegation example. Everything but the switch
+is read-only; changing the other values is a bundle configuration change. The switch is the
+packaged-defaults edit mode (config key `bundledEditable`); the same toggle lives on the Plugins
+page (**Configure** on this bundle's `agent-soul-team` row → the **Use Default Agent Souls** page),
+and flipping it rewrites the profile patch's row config and reloads the plugin once.
 
 ### Orchestrator tab
 
@@ -448,7 +483,8 @@ The **Orchestrator** tab shows the single orchestrator definition:
 
 - **Definition card:** file path, configured/not-created state, valid/invalid badge, a **Bundled**
   badge when the packaged `defaults/orchestrator.md` is the effective definition (with a hint that
-  explains the fallback and that saving writes a workspace override), and when
+  explains the fallback and that saving writes a workspace override — unless **Use default agent
+  souls** is on, which edits the packaged file in place), and when
   configured: name, model, tools, plan-first, gate mode, max retries, and pause-on-fatal badges,
   plus diagnostics.
 - **Activation hint:** applies only after `/orchestrate` (or `/orchestrate <task>`, which also
@@ -461,9 +497,11 @@ The **Orchestrator** tab shows the single orchestrator definition:
   **Provider**/**Model** dropdowns fed by the live catalog (the same pickers as the soul editor,
   with an explicit *inherit* option that keeps the Lead's own route). Team tools in the tools list
   are called out as **always available and non-restrictable**, not flagged as unknown. There is no
-  delete; the file is optional. Editing a bundled default and saving creates the workspace override
-  at the shown path — the packaged asset itself is never modified; delete the workspace file to fall
-  back to the bundled doctrine.
+  delete; the file is optional. By default, editing a bundled default and saving creates the
+  workspace override at the shown path — the packaged asset itself is never modified; delete the
+  workspace file to fall back to the bundled doctrine. With **Use default agent souls** on
+  (`bundledEditable: true`) saving instead rewrites the packaged doctrine in place (a workspace
+  file still wins — see [Configuration](#configuration)).
 - **Create default orchestrator** composes a new definition in the browser and saves it, valid by
   construction. It appears only when there is no effective definition at all — no workspace file and
   no bundled default (for example with `bundled: false`). Three different sources of defaults exist
@@ -485,8 +523,11 @@ Saving the definition does not apply it to a currently active mode. It is read t
 mode is enabled (or re-applied after a Host reload / Lead creation).
 
 On a fresh installation the tab shows the packaged doctrine with a **Bundled** badge, so
-`/orchestrate` works in any workspace without creating files. Save to copy it into the workspace
-first if you want to customize it; delete the workspace file to return to the packaged default.
+`/orchestrate` works in any workspace without creating files. By default, save to copy it into the
+workspace first if you want to customize it; delete the workspace file to return to the packaged
+default. With **Use default agent souls** on (`bundledEditable: true`) the tab instead shows the
+packaged file as the editable definition (no **Bundled** badge) and **Save** rewrites
+`defaults/orchestrator.md` in place; a workspace `orchestrator.md` of your own always wins.
 
 ### Which workspace does the page edit?
 
@@ -706,9 +747,12 @@ With the default configuration that is `<workspace>/.dsh/agent-soul/orchestrator
 file is optional. When it is absent and `bundled` is enabled (the default), the packaged doctrine
 [`defaults/orchestrator.md`](defaults/orchestrator.md) is the effective definition — so `/orchestrate`
 works immediately after installation, in any workspace. The GUI's Orchestrator tab shows that
-doctrine with a **Bundled** badge and a hint; **Edit** loads it and saving writes the workspace
-override at the path above. Delete the workspace file to fall back to the bundled default. Set
-`bundled: false` to require a workspace-owned file: `/orchestrate` then reports the missing path
+doctrine with a **Bundled** badge and a hint; **Edit** loads it and by default saving writes the
+workspace override at the path above (with **Use default agent souls** on — `bundledEditable: true`
+— saving instead rewrites the packaged doctrine in place; a workspace file still wins). Delete the
+workspace file to fall back to
+the bundled default. Set `bundled: false` to require a workspace-owned file: `/orchestrate` then
+reports the missing path
 instead of enabling. The definition is read when the mode is enabled (or re-applied after a Host
 reload / Lead creation); saving it from the GUI does not hot-apply it to an already-running mode.
 
@@ -1045,18 +1089,28 @@ portable default:
 
 To deploy workspace-specific or shared content, restate `config` in a profile patch (or edit the
 bundle patch) with the keys below; the row may also set `dirs`, `bindingsFile`, and the optional
-limits explicitly:
+limits explicitly. A profile patch's `config` for the row **replaces the whole config object**
+rather than merging into it, so restate every key you rely on (including the shipped
+`freshProvider`, `forkProvider`, and `claimTeamToolRow` values):
 
 ```yaml
+- id: agent-soul-team
+  name: '@local/dsh-agent-soul'
+  config:
+    freshProvider: spawn
+    forkProvider: fork
+    claimTeamToolRow: true
+    bundled: true
+    bundledEditable: false
     dirs:
       - .dsh/agents
     bindingsFile: .dsh/agent-soul/bindings.json
-    bundled: true
 ```
 
 | Key | Default | Accepted values | Meaning |
 |---|---|---|---|
 | `bundled` | `true` | Boolean | Ship the package's own `agents/` catalog and `defaults/orchestrator.md` doctrine into every workspace. When true, a workspace with no local definition still lists the bundled souls and `/orchestrate` enables anywhere right after installation, without setup. Set `false` for strictly workspace-scoped content: the catalog then contains only configured directories, and `/orchestrate` refuses when the workspace file is absent. |
+| `bundledEditable` | `false` | Boolean | Opt-in authoring mode for the packaged defaults. Requires `bundled: true`; with `bundled: false` the flag is inert and activation logs a warning. When `true`, the packaged `agents/` souls open editable in **Settings → Agent Soul**: **Save** rewrites the package's Markdown atomically, **Delete** moves the file to the workspace trash (Undo/restore work as usual), and labels stay package-relative; a workspace soul with the same name still shadows the packaged row, same-name duplicates remain allowed, and new/duplicated souls still land in the configured `dirs`. The **Orchestrator** tab likewise edits the packaged `defaults/orchestrator.md` in place when the workspace has no `orchestrator.md` of its own (a workspace file always wins, and one that appears mid-edit makes the save fail with a conflict instead of clobbering it). The GUI toggles this key through the plugin's Loader row config: the **Use default agent souls** switch in the Agent Soul settings card and on the Plugins page (**Configure** on this bundle's `agent-soul-team` row → **Use Default Agent Souls**) writes the profile patch's row config (all other row keys preserved) and reloads the plugin once; the switch is disabled when `bundled` is `false` or the profile cannot save the setting. **Risks:** in-place edits land in the installed package directory and are lost if the package is reinstalled or updated; the packaged catalog and doctrine are shared by every workspace in the profile while bindings and trash stay per workspace. |
 | `dirs` | `['.dsh/agents']` | Non-empty array of non-empty strings; absolute, `~/…`, or workspace-relative | Local soul directories per workspace. Missing directories are fine, and the GUI creates the first workspace-relative one on demand when saving a new soul. When `bundled` is on, the package catalog is appended after these directories and a local name shadows the bundled one. |
 | `commandPrefix` | `''` | `/^[a-z0-9_-]*$/` | Prefix for human commands. `agent-` gives `/agent-researcher`. |
 | `maxDefinitions` | `64` | Integer 1–1000 | Maximum valid definitions kept per root; extra valid files become a diagnostic. |
@@ -1075,7 +1129,8 @@ configuration that is `<workspace>/.dsh/agent-soul/preferences.json`.
 
 Unknown keys log a warning and are ignored. Invalid values fail activation with a message naming the
 key; there is no half-applied configuration. The Settings page shows the active values read-only
-because the plugin is plain JavaScript without an interactive config schema. Change the row in
+(except the **Use default agent souls** switch) because the plugin is plain JavaScript without an
+interactive config schema. Change the row in
 [`cordis.patch.yml`](cordis.patch.yml) (or restate its `config` from your profile's patch) and reload
 the profile bundle. These values apply to all workspaces in that profile; relative paths resolve
 against each workspace root.
@@ -1094,7 +1149,7 @@ against each workspace root.
 | **Host reload / bundle toggle** | The plugin is re-created; the catalog and preferences are read from disk again; active orchestrator mode is re-applied from the session log without re-capturing the previous model or Session title. |
 | **Page refresh** | The browser artifact reloads. Unsaved drafts remain in `localStorage` and are offered for recovery. |
 | **Delete a soul** | The file moves to `<dirname(bindingsFile)>/trash/<YYYYMMDDTHHMMSSmmmZ>-<original filename>` (a `<pid>.<counter>-` suffix is added on a name collision); **Undo delete** moves it back. If the trash write fails, the file is hard-deleted and no Undo is offered. |
-| **Switch workspace** | Soul directories, bindings, and the writable orchestrator definition resolve per workspace. The GUI edits one workspace at a time and shows which root it chose. The packaged catalog and doctrine are the same in every workspace unless `bundled: false`; local files shadow them per workspace. |
+| **Switch workspace** | Soul directories, bindings, and the writable orchestrator definition resolve per workspace. The GUI edits one workspace at a time and shows which root it chose. The packaged catalog and doctrine are the same in every workspace unless `bundled: false`; local files shadow them per workspace, and with `bundledEditable: true` an in-place edit of a packaged file is shared by every workspace in the profile (bindings and trash stay per workspace). |
 | **Orchestrator mode** | Derived from the session command log, so it survives a page/Host reload and is reapplied when the session's Lead is created. It is never a profile default. |
 
 The GUI keeps these browser-only values: drafts under `dsh.agent-soul.draft:<file>` and the
@@ -1110,11 +1165,11 @@ editor size under `dsh.agent-soul.editor-size`. They are not shared with other b
 | **Spawn says `unknown agent soul`** | The exact `name`; catalog scan diagnostics; duplicate names. | Use a name from `list_agent_souls`. Fix the file's diagnostics. Rename one of the duplicates. |
 | **A soul file is invalid with `name: "lead" is reserved for the Team Lead`** | The file uses the Team Lead's reserved identity. | Rename the file and its frontmatter `name`; `leadership`, `lead-review`, and `lead-2` are valid. An invalid file on disk stays visible in the page but is excluded from the catalog and cannot spawn. |
 | **Command status is `Command collision`** | Whether another command already uses the prefixed name — notably the built-in `/orchestrate`, which always wins — the live Lead for this workspace, and the registration reason returned as `command.reason` by the preview. | Rename the soul or set `commandPrefix` (e.g. `agent-`) and reload; deleting or renaming the colliding soul clears it without a Host reload. The Lead can run `manage_agent_souls({ action: "diagnose" })` for the registry view. |
-| **Command is missing or says AI-only** | `user-invocable`; the command-name syntax; whether a live Lead exists; the page's command status. | If the soul is bundled (read-only), **Duplicate** it first; then set `user-invocable: true` on the workspace copy, use a lower-kebab-case name/prefix, open a Team session, refresh. |
+| **Command is missing or says AI-only** | `user-invocable`; the command-name syntax; whether a live Lead exists; the page's command status. | If the soul is a packaged default (read-only unless **Use default agent souls** is on), **Duplicate** it first; then set `user-invocable: true` on the workspace copy, use a lower-kebab-case name/prefix, open a Team session, refresh. |
 | **`/orchestrate` is not found** | You are in a Lead session (not a teammate); the plugin is active; the command is lowercase. | Use `/orchestrate` in the Team's chat. Teammates do not receive the command. |
 | **`/orchestrate` says no definition** | The path shown; the settings card's `bundled` value and bindings file; whether the package's `defaults/orchestrator.md` was installed. | With the default `bundled: true` this should not happen in a complete install: the packaged default is used. If it does, the package asset is missing (reinstall the bundle) or `bundled` is `false` — create the file at the shown path from the Orchestrator tab, restore the bundled asset, or re-enable bundled defaults. |
-| **The Orchestrator tab shows a Bundled badge** | That is expected on a fresh install: the effective doctrine is the package default. | Save from the editor to create a workspace override at the shown path; delete that file (or the plugin's saved copy) to fall back to the bundled doctrine. |
-| **A soul card shows a Bundled badge and the editor will not save** | Bundled souls are read-only package assets. | Use **Duplicate** in the editor to create an editable copy under the configured workspace `dirs` (created on demand). A local soul with the same name shadows the bundled card. |
+| **The Orchestrator tab shows a Bundled badge** | That is expected on a fresh install: the effective doctrine is the package default (with **Use default agent souls** on there is no badge and the packaged file itself is the editable path). | By default, save from the editor to create a workspace override at the shown path; delete that file (or the plugin's saved copy) to fall back to the bundled doctrine. With **Use default agent souls** on (`bundledEditable: true`), **Save** rewrites the packaged doctrine in place. |
+| **A soul card shows a Bundled badge and the editor will not save** | By default (**Use default agent souls** off, `bundledEditable: false`) packaged souls are read-only package assets. | Use **Duplicate** in the editor to create an editable copy under the configured workspace `dirs` (created on demand). To edit packaged souls in place instead, turn on **Use default agent souls** — the switch in the Agent Soul settings card, or the Plugins page (**Configure** on this bundle's `agent-soul-team` row → **Use Default Agent Souls**) — or set `bundledEditable: true` (with `bundled: true`) in the row config and reload; see [Configuration](#configuration) for the package-directory and shared-catalog risks. A local soul with the same name shadows the bundled card. |
 | **`/orchestrate <task>` enabled the mode but no task ran** | The command result text; a queue failure is reported as an error. A first enable is reverted; an already-active mode is not reverted — a live bundle is restored to its pre-invocation state when the snapshot can be recreated (otherwise the freshly applied bundle is kept instead when possible, and only if both restorations fail is the live mode left inactive), while a durably active mode with no live bundle keeps the freshly applied bundle. | Send the task as a normal message after `/orchestrate`; the queued form needs a live Lead Agent that accepts input. |
 | **Orchestrator definition is invalid** | Diagnostics in the Orchestrator tab: gate mode, retries, booleans, model/provider (a conflicting route, provider without model, an empty model id), body. A `reasoning-effort` alone is ignored at enable and is not an error. | Fix the named field. Invalid saves write nothing; the mode stays off or keeps its previous state. |
 | **Model is unresolved** | The raw model/provider and the live providers; whether the `llm` service is available. | Use a model id the providers advertise, or write the full `provider/model` route. A different `provider` plus a prefixed model is an error. |

@@ -55,6 +55,7 @@ const DEFAULT_DIRS = ['.dsh/agents']
 const CONFIG_KEYS = new Set([
   'dirs',
   'bundled',
+  'bundledEditable',
   'commandPrefix',
   'maxDefinitions',
   'maxPromptChars',
@@ -123,6 +124,7 @@ export function normalizeConfig(raw, logger) {
   const config = {
     dirs: DEFAULT_DIRS,
     bundled: true,
+    bundledEditable: false,
     commandPrefix: '',
     maxDefinitions: 64,
     maxPromptChars: 12000,
@@ -142,6 +144,12 @@ export function normalizeConfig(raw, logger) {
   if (input.bundled !== undefined) {
     if (typeof input.bundled !== 'boolean') throw new TypeError('agent-soul config.bundled must be a boolean')
     config.bundled = input.bundled
+  }
+  if (input.bundledEditable !== undefined) {
+    if (typeof input.bundledEditable !== 'boolean') {
+      throw new TypeError('agent-soul config.bundledEditable must be a boolean')
+    }
+    config.bundledEditable = input.bundledEditable
   }
   if (input.commandPrefix !== undefined) {
     if (typeof input.commandPrefix !== 'string' || !/^[a-z0-9_-]*$/u.test(input.commandPrefix)) {
@@ -256,6 +264,9 @@ export function createDeps(ctx, config, catalog, bindings, pending, logger) {
 export async function apply(ctx, rawConfig) {
   const logger = ctx.logger('agent-soul')
   const config = normalizeConfig(rawConfig, logger)
+  if (config.bundledEditable && config.bundled === false) {
+    logger.warn('agent-soul: config.bundledEditable is ignored while config.bundled is false (the packaged catalog is disabled)')
+  }
   const catalog = createCatalog({
     dirs: config.dirs,
     bundled: config.bundled,

@@ -133,15 +133,27 @@ function leadChunks(options: GenerateOptions): StreamChunk[] {
   const spawnTool = options.tools.find(tool => tool.name === 'spawn_teammate')
   const spawnProperties = spawnTool?.parameters['properties'] as Record<string, unknown> | undefined
   const listTool = options.tools.find(tool => tool.name === 'list_agent_souls')
+  // The runner seeds removable canaries into its own environment before this
+  // child starts; each one must be absent from the real child process env. A
+  // provider key may be present only as the empty override the runner writes.
+  const envScrub = {
+    credentialCanaryAbsent: process.env.SMOKE_CANARY_CREDENTIAL === undefined
+      && process.env.SMOKE_CANARY_SECRET === undefined,
+    proxyCanaryAbsent: process.env.HTTP_PROXY === undefined
+      && process.env.HTTPS_PROXY === undefined
+      && process.env.ALL_PROXY === undefined,
+    loaderCanaryAbsent: !String(process.env.NODE_OPTIONS ?? '').includes('SMOKE_CANARY')
+      && process.env.DYLD_INSERT_LIBRARIES === undefined,
+    providerKeyEmpty: process.env.DEEPSEEK_API_KEY === '',
+  }
   observe({
     kind: 'lead',
     model: options.model,
     spawnHasAgentType: spawnProperties !== undefined && Object.hasOwn(spawnProperties, 'agent_type'),
     hasListSouls: listTool !== undefined,
     catalogInPrompt: systemTextOf(options, messages).includes('Available teammate souls'),
-    environmentScrubbed: process.env.SMOKE_CANARY_SECRET === undefined
-      && process.env.HTTP_PROXY === undefined
-      && !String(process.env.NODE_OPTIONS ?? '').includes('SMOKE_CANARY'),
+    envScrub,
+    environmentScrubbed: Object.values(envScrub).every(Boolean),
     latestCalls: latestAssistantCalls(messages),
   })
   if (!calls.includes('spawn_teammate')) {
@@ -186,6 +198,10 @@ async function runCommandProbe(peer: string): Promise<void> {
     const names = descriptors.map((descriptor: any) => descriptor.name)
     observation.commands = names
     observation.registered = names.includes('probe-cli')
+    // The built-in orchestrator command is part of the plugin's surface: the
+    // runner asserts its presence explicitly instead of relying on incidental
+    // output that merely mentioned /orchestrate.
+    observation.orchestrateRegistered = names.includes('orchestrate')
     if (observation.registered === true) {
       const executed = await runtime.commands.execute(
         lead,

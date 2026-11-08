@@ -124,6 +124,7 @@ window.__ModuleLoader__.load({
       errorCodeNotFound: 'The file no longer exists. Refresh the list.',
       errorCodeUnsafePath: 'That path is outside the configured soul directories.',
       errorCodeInvalidRequest: 'The Host rejected the request as malformed.',
+      errorCodeInvalidResponse: 'The Host answered with an unexpected payload. Refresh the page or retry.',
       errorUnknown: 'The request failed ({code}).',
       diagnosticsHeading: 'Diagnostics',
       scanDiagnosticsHeading: 'Scan diagnostics',
@@ -143,6 +144,7 @@ window.__ModuleLoader__.load({
       statusNotConfigurable: 'Unavailable - this profile cannot save this setting',
       statusApplying: 'Applying... the plugin reloads once',
       statusApplied: 'Applied.',
+      statusUnverified: 'Saved, but the reload was not confirmed. Reload the page to verify the new value.',
       statusError: 'Could not update the plugin configuration.',
       infoBindings: 'Bindings file',
       infoBindingsCount: '{count} stored bindings',
@@ -174,7 +176,7 @@ window.__ModuleLoader__.load({
       statusCreating: 'Creating…',
       statusOpening: 'Opening…',
       searchLabel: 'Search souls',
-      searchPlaceholder: 'Search name, description or source',
+      searchPlaceholder: 'Search name, description, source path or file name',
       filterLabel: 'Filter souls',
       filterAll: 'All',
       filterUser: 'User-invocable',
@@ -482,6 +484,7 @@ window.__ModuleLoader__.load({
       errorCodeNotFound: '文件已不存在，请刷新列表。',
       errorCodeUnsafePath: '该路径不在配置的 Soul 目录内。',
       errorCodeInvalidRequest: 'Host 判定请求格式不合法。',
+      errorCodeInvalidResponse: 'Host 返回了无法识别的数据，请刷新页面或重试。',
       errorUnknown: '请求失败（{code}）。',
       diagnosticsHeading: '诊断信息',
       scanDiagnosticsHeading: '扫描诊断',
@@ -501,6 +504,7 @@ window.__ModuleLoader__.load({
       statusNotConfigurable: '不可用 - 当前配置无法保存该设置',
       statusApplying: '正在应用…插件将重新加载一次',
       statusApplied: '已应用。',
+      statusUnverified: '已保存，但未能确认插件重载。请刷新页面确认新的值。',
       statusError: '无法更新插件配置。',
       infoBindings: '绑定文件',
       infoBindingsCount: '{count} 条已存绑定',
@@ -532,7 +536,7 @@ window.__ModuleLoader__.load({
       statusCreating: '创建中…',
       statusOpening: '打开中…',
       searchLabel: '搜索 Soul',
-      searchPlaceholder: '按名称、描述或来源搜索',
+      searchPlaceholder: '按名称、描述、来源路径或文件名搜索',
       filterLabel: '筛选 Soul',
       filterAll: '全部',
       filterUser: '可手动调用',
@@ -840,6 +844,7 @@ window.__ModuleLoader__.load({
       errorCodeNotFound: 'ファイルはすでに存在しません。一覧を更新してください。',
       errorCodeUnsafePath: 'そのパスは設定された Soul ディレクトリの外です。',
       errorCodeInvalidRequest: 'Host がリクエストを不正として拒否しました。',
+      errorCodeInvalidResponse: 'Host が想定外の応答を返しました。ページを更新するか再試行してください。',
       errorUnknown: 'リクエストに失敗しました（{code}）。',
       diagnosticsHeading: '診断',
       scanDiagnosticsHeading: 'スキャン診断',
@@ -859,6 +864,7 @@ window.__ModuleLoader__.load({
       statusNotConfigurable: '利用不可 - この構成ではこの設定を保存できません',
       statusApplying: '適用中…プラグインは一度再読み込みされます',
       statusApplied: '適用しました。',
+      statusUnverified: '保存しましたが、再読み込みを確認できませんでした。ページを更新して新しい値を確認してください。',
       statusError: 'プラグインの構成を更新できませんでした。',
       infoBindings: 'バインディング ファイル',
       infoBindingsCount: '保存済みバインディング {count} 件',
@@ -890,7 +896,7 @@ window.__ModuleLoader__.load({
       statusCreating: '作成中…',
       statusOpening: '開いています…',
       searchLabel: 'Soul を検索',
-      searchPlaceholder: '名前、説明、ソースを検索',
+      searchPlaceholder: '名前、説明、ソースパス、ファイル名を検索',
       filterLabel: 'Soul を絞り込む',
       filterAll: 'すべて',
       filterUser: '手動呼び出し可',
@@ -1198,6 +1204,7 @@ window.__ModuleLoader__.load({
       errorCodeNotFound: 'Die Datei existiert nicht mehr. Aktualisiere die Liste.',
       errorCodeUnsafePath: 'Dieser Pfad liegt außerhalb der konfigurierten Soul-Verzeichnisse.',
       errorCodeInvalidRequest: 'Der Host hat die Anfrage als fehlerhaft abgelehnt.',
+      errorCodeInvalidResponse: 'Der Host hat eine unerwartete Antwort geliefert. Bitte die Seite aktualisieren oder erneut versuchen.',
       errorUnknown: 'Die Anfrage ist fehlgeschlagen ({code}).',
       diagnosticsHeading: 'Diagnosen',
       scanDiagnosticsHeading: 'Scan-Diagnosen',
@@ -1217,6 +1224,7 @@ window.__ModuleLoader__.load({
       statusNotConfigurable: 'Nicht verfügbar - dieses Profil kann die Einstellung nicht speichern',
       statusApplying: 'Wird angewendet… das Plugin lädt einmal neu',
       statusApplied: 'Angewendet.',
+      statusUnverified: 'Gespeichert, aber das Neuladen wurde nicht bestätigt. Bitte die Seite neu laden, um den neuen Wert zu prüfen.',
       statusError: 'Die Plugin-Konfiguration konnte nicht aktualisiert werden.',
       infoBindings: 'Bindungsdatei',
       infoBindingsCount: '{count} gespeicherte Bindungen',
@@ -1248,7 +1256,7 @@ window.__ModuleLoader__.load({
       statusCreating: 'Wird erstellt…',
       statusOpening: 'Wird geöffnet…',
       searchLabel: 'Souls durchsuchen',
-      searchPlaceholder: 'Name, Beschreibung oder Quelle durchsuchen',
+      searchPlaceholder: 'Name, Beschreibung, Quellpfad oder Dateiname durchsuchen',
       filterLabel: 'Souls filtern',
       filterAll: 'Alle',
       filterUser: 'Manuell aufrufbar',
@@ -1556,6 +1564,7 @@ window.__ModuleLoader__.load({
       errorCodeNotFound: 'Le fichier n’existe plus. Actualisez la liste.',
       errorCodeUnsafePath: 'Ce chemin est hors des répertoires d’souls configurés.',
       errorCodeInvalidRequest: 'L’hôte a rejeté la requête comme mal formée.',
+      errorCodeInvalidResponse: 'L’hôte a renvoyé une réponse inattendue. Actualisez la page ou réessayez.',
       errorUnknown: 'La requête a échoué ({code}).',
       diagnosticsHeading: 'Diagnostics',
       scanDiagnosticsHeading: 'Diagnostics de scan',
@@ -1575,6 +1584,7 @@ window.__ModuleLoader__.load({
       statusNotConfigurable: 'Indisponible - ce profil ne peut pas enregistrer ce réglage',
       statusApplying: 'Application… le plugin se recharge une fois',
       statusApplied: 'Appliqué.',
+      statusUnverified: 'Enregistré, mais le rechargement n’a pas été confirmé. Rechargez la page pour vérifier la nouvelle valeur.',
       statusError: 'Impossible de mettre à jour la configuration du plugin.',
       infoBindings: 'Fichier de liaisons',
       infoBindingsCount: '{count} liaisons stockées',
@@ -1606,7 +1616,7 @@ window.__ModuleLoader__.load({
       statusCreating: 'Création…',
       statusOpening: 'Ouverture…',
       searchLabel: 'Rechercher des souls',
-      searchPlaceholder: 'Rechercher par nom, description ou source',
+      searchPlaceholder: 'Rechercher par nom, description, chemin de source ou nom de fichier',
       filterLabel: 'Filtrer les souls',
       filterAll: 'Toutes',
       filterUser: 'Appelable manuellement',
@@ -1914,6 +1924,7 @@ window.__ModuleLoader__.load({
       errorCodeNotFound: 'El archivo ya no existe. Actualiza la lista.',
       errorCodeUnsafePath: 'Esa ruta está fuera de los directorios de Souls configurados.',
       errorCodeInvalidRequest: 'El Host rechazó la solicitud por estar mal formada.',
+      errorCodeInvalidResponse: 'El Host devolvió una respuesta inesperada. Actualiza la página o vuelve a intentarlo.',
       errorUnknown: 'La solicitud falló ({code}).',
       diagnosticsHeading: 'Diagnósticos',
       scanDiagnosticsHeading: 'Diagnósticos del escaneo',
@@ -1933,6 +1944,7 @@ window.__ModuleLoader__.load({
       statusNotConfigurable: 'No disponible - este perfil no puede guardar este ajuste',
       statusApplying: 'Aplicando… el plugin se recarga una vez',
       statusApplied: 'Aplicado.',
+      statusUnverified: 'Guardado, pero no se confirmó la recarga. Recarga la página para verificar el nuevo valor.',
       statusError: 'No se pudo actualizar la configuración del plugin.',
       infoBindings: 'Archivo de vínculos',
       infoBindingsCount: '{count} vínculos guardados',
@@ -1964,7 +1976,7 @@ window.__ModuleLoader__.load({
       statusCreating: 'Creando…',
       statusOpening: 'Abriendo…',
       searchLabel: 'Buscar Souls',
-      searchPlaceholder: 'Buscar por nombre, descripción o fuente',
+      searchPlaceholder: 'Buscar por nombre, descripción, ruta de origen o nombre de archivo',
       filterLabel: 'Filtrar Souls',
       filterAll: 'Todas',
       filterUser: 'Invocable manualmente',
@@ -2272,6 +2284,7 @@ window.__ModuleLoader__.load({
       errorCodeNotFound: 'Файл больше не существует. Обновите список.',
       errorCodeUnsafePath: 'Этот путь находится вне настроенных каталогов Souls.',
       errorCodeInvalidRequest: 'Host отклонил запрос как некорректный.',
+      errorCodeInvalidResponse: 'Хост вернул неожиданный ответ. Обновите страницу или повторите попытку.',
       errorUnknown: 'Запрос не выполнен ({code}).',
       diagnosticsHeading: 'Диагностика',
       scanDiagnosticsHeading: 'Диагностика сканирования',
@@ -2291,6 +2304,7 @@ window.__ModuleLoader__.load({
       statusNotConfigurable: 'Недоступно — этот профиль не может сохранить настройку',
       statusApplying: 'Применение… плагин перезагрузится один раз',
       statusApplied: 'Применено.',
+      statusUnverified: 'Сохранено, но перезагрузка не подтверждена. Обновите страницу, чтобы проверить новое значение.',
       statusError: 'Не удалось обновить конфигурацию плагина.',
       infoBindings: 'Файл привязок',
       infoBindingsCount: 'Сохранено привязок: {count}',
@@ -2322,7 +2336,7 @@ window.__ModuleLoader__.load({
       statusCreating: 'Создание…',
       statusOpening: 'Открытие…',
       searchLabel: 'Поиск Souls',
-      searchPlaceholder: 'Искать по имени, описанию или источнику',
+      searchPlaceholder: 'Искать по имени, описанию, пути источника или имени файла',
       filterLabel: 'Фильтр Souls',
       filterAll: 'Все',
       filterUser: 'Вызываемые вручную',
@@ -2630,6 +2644,7 @@ window.__ModuleLoader__.load({
       errorCodeNotFound: 'O arquivo não existe mais. Atualize a lista.',
       errorCodeUnsafePath: 'Esse caminho está fora dos diretórios de Souls configurados.',
       errorCodeInvalidRequest: 'O Host rejeitou a requisição por estar malformada.',
+      errorCodeInvalidResponse: 'O Host retornou uma resposta inesperada. Atualize a página ou tente novamente.',
       errorUnknown: 'A requisição falhou ({code}).',
       diagnosticsHeading: 'Diagnósticos',
       scanDiagnosticsHeading: 'Diagnósticos do escaneamento',
@@ -2649,6 +2664,7 @@ window.__ModuleLoader__.load({
       statusNotConfigurable: 'Indisponível - este perfil não pode salvar esta configuração',
       statusApplying: 'Aplicando… o plugin recarrega uma vez',
       statusApplied: 'Aplicado.',
+      statusUnverified: 'Salvo, mas a recarga não foi confirmada. Atualize a página para verificar o novo valor.',
       statusError: 'Não foi possível atualizar a configuração do plugin.',
       infoBindings: 'Arquivo de vínculos',
       infoBindingsCount: '{count} vínculos salvos',
@@ -2680,7 +2696,7 @@ window.__ModuleLoader__.load({
       statusCreating: 'Criando…',
       statusOpening: 'Abrindo…',
       searchLabel: 'Pesquisar Souls',
-      searchPlaceholder: 'Pesquisar nome, descrição ou origem',
+      searchPlaceholder: 'Pesquisar nome, descrição, caminho de origem ou nome de arquivo',
       filterLabel: 'Filtrar Souls',
       filterAll: 'Todas',
       filterUser: 'Invocável manualmente',
@@ -2959,6 +2975,7 @@ window.__ModuleLoader__.load({
       'not-found': 'errorCodeNotFound',
       'unsafe-path': 'errorCodeUnsafePath',
       'invalid-request': 'errorCodeInvalidRequest',
+      'invalid-response': 'errorCodeInvalidResponse',
     }
 
     /** localStorage key prefix for one document's unsaved draft. */
@@ -3327,32 +3344,61 @@ window.__ModuleLoader__.load({
       return DRAFT_PREFIX + String(file)
     }
 
-    /** Read one stored draft; malformed JSON and blocked storage yield null. */
+    /**
+     * Read one stored draft; malformed JSON and blocked storage yield null.
+     *
+     * Records written by earlier versions carry only `fields`/`sections`/
+     * `savedAt`; the raw-mode keys are optional, so those records still restore
+     * as a form draft. Any present key is type-checked so a tampered or partial
+     * record cannot put a non-string where the editor renders one.
+     *
+     * @param {string} file - the document the draft belongs to.
+     * @returns {{ fields: object, sections: object, savedAt: number,
+     *   mode: 'form' | 'raw', rawSource: string | null, baseHash: string | null } | null}
+     */
     function readStoredDraft(file) {
       try {
         const raw = window.localStorage.getItem(draftStorageKey(file))
         if (raw === null) return null
         const parsed = JSON.parse(raw)
-        if (parsed === null || typeof parsed !== 'object') return null
-        if (parsed.fields === null || typeof parsed.fields !== 'object') return null
-        if (parsed.sections === null || typeof parsed.sections !== 'object') return null
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+        if (parsed.fields === null || typeof parsed.fields !== 'object' || Array.isArray(parsed.fields)) return null
+        if (parsed.sections === null || typeof parsed.sections !== 'object' || Array.isArray(parsed.sections)) return null
+        const rawSource = typeof parsed.rawSource === 'string' ? parsed.rawSource : null
+        const baseHash = typeof parsed.baseHash === 'string' && parsed.baseHash !== '' ? parsed.baseHash : null
         return {
           fields: parsed.fields,
           sections: parsed.sections,
-          savedAt: typeof parsed.savedAt === 'number' ? parsed.savedAt : 0,
+          savedAt: typeof parsed.savedAt === 'number' && isFinite(parsed.savedAt) ? parsed.savedAt : 0,
+          // Raw mode is only restorable with the source it applies to.
+          mode: parsed.mode === 'raw' && rawSource !== null ? 'raw' : 'form',
+          rawSource: rawSource,
+          baseHash: baseHash,
         }
       } catch (error) {
         return null
       }
     }
 
-    /** Persist one dirty draft; storage failures are silently ignored. */
+    /**
+     * Persist one dirty draft, including the raw-mode source, the mode needed to
+     * restore it, and the file hash the draft was based on. Storage failures are
+     * silently ignored.
+     *
+     * @param {string} file - the document the draft belongs to.
+     * @param {{ fields: object, sections: object, mode?: 'form' | 'raw',
+     *   rawSource?: string | null, baseHash?: string | null }} draft
+     * @returns {void}
+     */
     function writeStoredDraft(file, draft) {
       try {
         window.localStorage.setItem(draftStorageKey(file), JSON.stringify({
           fields: draft.fields,
           sections: draft.sections,
           savedAt: Date.now(),
+          mode: draft.mode === 'raw' ? 'raw' : 'form',
+          rawSource: typeof draft.rawSource === 'string' ? draft.rawSource : null,
+          baseHash: typeof draft.baseHash === 'string' ? draft.baseHash : null,
         }))
       } catch (error) {
         // Private mode or a full quota: unsaved edits still live in memory.
@@ -5085,6 +5131,35 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Validate one successful `GET agent-soul/overview` body.
+     *
+     * The page renders rows, settings, runtime health, and the orchestrator and
+     * preference cards from these blocks, so a payload missing them is a Host
+     * contract failure — reported through the error card — rather than an empty
+     * catalog or a stuck skeleton.
+     *
+     * @param {unknown} payload - the parsed response body.
+     * @returns {{ code: string, message: string, diagnostics: unknown[] } | null}
+     *   the typed failure, or null for the documented shape.
+     */
+    function overviewPayloadFailure(payload) {
+      if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+        return { code: 'invalid-response', message: '', diagnostics: [] }
+      }
+      if (!Array.isArray(payload.documents)) return { code: 'invalid-response', message: '', diagnostics: [] }
+      if (payload.plugin === null || typeof payload.plugin !== 'object') {
+        return { code: 'invalid-response', message: '', diagnostics: [] }
+      }
+      if (payload.settings === null || typeof payload.settings !== 'object') {
+        return { code: 'invalid-response', message: '', diagnostics: [] }
+      }
+      if (payload.runtime === null || typeof payload.runtime !== 'object') {
+        return { code: 'invalid-response', message: '', diagnostics: [] }
+      }
+      return null
+    }
+
+    /**
      * One save path for the single orchestrator definition: the browser sends
      * the editable `{ fields, sections }` split, never a raw source, so the
      * Host validates and re-reads exactly one state.
@@ -5563,25 +5638,107 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * The profile-wide state of the packaged-defaults switch.
+     *
+     * The setting lives in the profile patch, not in this page, so every mounted
+     * control (the Settings card and the Plugins row page) reads and writes the
+     * same record: a write started in one is visible in the other without a
+     * remount, and neither can show a value the other has already replaced.
+     *
+     * `phase` is the honest write lifecycle: `saving` (POST in flight),
+     * `applying` (POST accepted, waiting for a GET that shows the new value),
+     * `applied` (a GET confirmed it), `unknown` (the write was accepted but no
+     * read ever confirmed it), or `error` (the write itself failed).
+     */
+    const configState = {
+      block: null,
+      phase: 'loading',
+      failure: '',
+      requested: null,
+      writeActive: false,
+      listeners: new Set(),
+    }
+
+    /** Merge one config-state patch and wake every mounted control. */
+    function configStateSet(patch) {
+      Object.assign(configState, patch)
+      for (const listener of Array.from(configState.listeners)) {
+        try {
+          listener()
+        } catch (error) {
+          // A broken control must not stop the shared state from settling.
+        }
+      }
+    }
+
+    /** Subscribe one control to the shared config state; returns the remover. */
+    function subscribeConfigState(listener) {
+      configState.listeners.add(listener)
+      return function () { configState.listeners.delete(listener) }
+    }
+
+    /**
+     * Listeners for settled packaged-defaults writes: the page re-reads
+     * everything the effective flag can change (catalog rows, the open
+     * document, the orchestrator tab). `verified` is false when the write was
+     * accepted but no read confirmed it.
+     */
+    const configSettledListeners = new Set()
+
+    /** Tell every page listener that one write settled. */
+    function notifyConfigSettled(change) {
+      for (const listener of Array.from(configSettledListeners)) {
+        try {
+          listener(change)
+        } catch (error) {
+          // A page refresh must not break the switch that reported the write.
+        }
+      }
+    }
+
+    /** Subscribe one page to settled writes; returns the remover. */
+    function subscribeConfigSettled(listener) {
+      configSettledListeners.add(listener)
+      return function () { configSettledListeners.delete(listener) }
+    }
+
+    /**
      * Read and write the packaged-defaults mode and project one display state.
      *
      * The write lands in the profile patch, so the Loader reloads this plugin
      * row once; the hook therefore polls the read route a few times after a
-     * successful save and finishes on the applied state whether or not the
-     * reload was observed. Timers and late answers are dropped on unmount.
+     * successful save. Only a read that shows the written value is reported as
+     * applied — a mismatched or unreadable poll ends in `unknown` so the switch
+     * never claims an application nobody observed. Timers and late answers are
+     * dropped on unmount.
      *
      * @param {Function} t - the bound translate function.
      * @returns {{ checked: boolean, disabled: boolean, status: string, error: boolean,
      *   onChange: (event: any) => void }} the switch contract.
      */
     function useDefaultSoulsConfig(t) {
-      const [config, setConfig] = React.useState(null)
-      const [phase, setPhase] = React.useState('loading')
-      const [failure, setFailure] = React.useState('')
+      const [, setRevision] = React.useState(0)
       const alive = React.useRef(true)
       const timer = React.useRef(null)
+      const ownsWrite = React.useRef(false)
+      const config = configState.block
+      const phase = configState.phase
+      const failure = configState.failure
+      const setConfig = React.useCallback(function setConfig(next) {
+        configStateSet({ block: next })
+      }, [])
+      const setPhase = React.useCallback(function setPhase(next) {
+        configStateSet({ phase: next })
+      }, [])
+      const setFailure = React.useCallback(function setFailure(next) {
+        configStateSet({ failure: next })
+      }, [])
 
       const load = React.useCallback(async function load() {
+        if (configState.block === null && configState.phase !== 'saving' && configState.phase !== 'applying') {
+          setPhase('loading')
+          setFailure('')
+        }
         try {
           const payload = await readJson(await fetch(CONFIG_ROUTE, { headers: { accept: 'application/json' } }))
           if (!alive.current) return
@@ -5589,6 +5746,21 @@ window.__ModuleLoader__.load({
           if (block === null) {
             setPhase('error')
             setFailure(t('statusError'))
+            return
+          }
+          const current = configState.phase
+          if (current === 'saving' || current === 'applying') {
+            // A write is in flight here, or an earlier page was reloaded before
+            // it finished. Report the block, then settle an interrupted write
+            // from this read instead of leaving "Applying..." forever.
+            setConfig(block)
+            if (!configState.writeActive) {
+              if (configState.requested !== null && block.bundledEditable === configState.requested) {
+                setPhase('applied')
+              } else {
+                setPhase('unknown')
+              }
+            }
             return
           }
           setConfig(block)
@@ -5599,19 +5771,39 @@ window.__ModuleLoader__.load({
           setPhase('error')
           setFailure(configFailureText(t, error))
         }
-      }, [t])
+      }, [t, setConfig, setFailure, setPhase])
 
       React.useEffect(function () {
         alive.current = true
         void load()
         return function () {
           alive.current = false
+        }
+      }, [load])
+
+      // Mount-scoped subscription: either control may be the writer, and both
+      // render from the same record.
+      React.useEffect(function () {
+        return subscribeConfigState(function () {
+          setRevision(function (revision) { return revision + 1 })
+        })
+      }, [])
+
+      // Unmount only: a write started here must not leave the other control (or
+      // the next mount) showing "Applying..." with no poll behind it.
+      React.useEffect(function () {
+        return function () {
           if (timer.current !== null) {
             clearTimeout(timer.current)
             timer.current = null
           }
+          if (!ownsWrite.current) return
+          ownsWrite.current = false
+          if (configState.phase === 'saving' || configState.phase === 'applying') {
+            configStateSet({ writeActive: false, phase: 'unknown' })
+          }
         }
-      }, [load])
+      }, [])
 
       const poll = function poll(requested, attempt) {
         if (!alive.current) return
@@ -5626,11 +5818,22 @@ window.__ModuleLoader__.load({
             matched = block !== null && block.bundledEditable === requested
           } catch (error) {
             block = null
+            matched = false
           }
           if (!alive.current) return
           if (block !== null) setConfig(block)
-          if (matched || attempt >= CONFIG_POLL_ATTEMPTS) {
-            setPhase('applied')
+          if (matched) {
+            ownsWrite.current = false
+            configStateSet({ phase: 'applied', requested: requested, writeActive: false, failure: '' })
+            notifyConfigSettled({ verified: true, bundledEditable: requested })
+            return
+          }
+          if (attempt >= CONFIG_POLL_ATTEMPTS) {
+            // Exhausted without a read that shows the written value: never
+            // report success, and never invent one from the POST alone.
+            ownsWrite.current = false
+            configStateSet({ phase: 'unknown', requested: requested, writeActive: false })
+            notifyConfigSettled({ verified: false, bundledEditable: requested })
             return
           }
           poll(requested, attempt + 1)
@@ -5639,8 +5842,11 @@ window.__ModuleLoader__.load({
 
       const toggle = React.useCallback(async function toggle(next) {
         if (config === null || config.bundled === false || !config.configurable) return
+        if (configState.writeActive) return
+        ownsWrite.current = true
         setPhase('saving')
         setFailure('')
+        configStateSet({ requested: next === true, writeActive: true })
         try {
           const payload = await readJson(await fetch(CONFIG_ROUTE, {
             method: 'POST',
@@ -5654,6 +5860,8 @@ window.__ModuleLoader__.load({
           poll(next === true, 1)
         } catch (error) {
           if (!alive.current) return
+          ownsWrite.current = false
+          configStateSet({ writeActive: false })
           setPhase('error')
           setFailure(configFailureText(t, error))
         }
@@ -5667,6 +5875,7 @@ window.__ModuleLoader__.load({
       else if (phase === 'saving') status = t('statusSaving')
       else if (phase === 'applying') status = t('statusApplying')
       else if (phase === 'applied') status = t('statusApplied')
+      else if (phase === 'unknown') status = t('statusUnverified')
       else if (phase === 'error') status = failure === '' ? t('statusError') : failure
       else if (config === null) status = t('statusError')
       else if (config.bundled === false) status = t('statusUnavailable')
@@ -5677,7 +5886,7 @@ window.__ModuleLoader__.load({
         checked: checked,
         disabled: busy || blocked,
         status: status,
-        error: phase === 'error',
+        error: phase === 'error' || phase === 'unknown',
         onChange: function (event) {
           if (busy || config === null || config.bundled === false || !config.configurable) return
           void toggle(event.target.checked)
@@ -5829,6 +6038,14 @@ window.__ModuleLoader__.load({
       // session switches must not silently move unsaved edits to another root.
       const workspaceRootRef = React.useRef(sessionRoot)
       const workspaceRootSourceRef = React.useRef(sessionRoot === '' ? 'pending' : 'session')
+      // The newest render, readable from module-level callbacks and async
+      // handlers: a background refresh must never act on stale state.
+      const selectedRef = React.useRef(null)
+      const dialogModeRef = React.useRef(null)
+      const dirtyRef = React.useRef(false)
+      const orchestratorRef = React.useRef(null)
+      const orchestratorDirtyRef = React.useRef(false)
+      const busyRef = React.useRef('')
       const dirty = draft !== null && baseline !== null
         && (snapshotDraft(draft) !== baseline
           || (mode === 'raw' && rawSource !== baselineSource))
@@ -5988,11 +6205,16 @@ window.__ModuleLoader__.load({
         overviewSeq.current = seq
         const root = workspaceRootRef.current
         setLoading(true)
+        setOverviewError(null)
         try {
           const payload = await readJson(await fetch('agent-soul/overview' + '?root=' + encodeURIComponent(root)))
           if (overviewSeq.current !== seq) return false
-          const hostRoot = payload !== null && typeof payload === 'object'
-            && payload.plugin !== null && typeof payload.plugin === 'object'
+          // A 200 answer that is not the documented overview is an error, not an
+          // empty catalog: the page must show its error card (with the last good
+          // rows kept) instead of "No soul files yet" or a skeleton.
+          const shapeFailure = overviewPayloadFailure(payload)
+          if (shapeFailure !== null) throw shapeFailure
+          const hostRoot = payload.plugin !== null && typeof payload.plugin === 'object'
             && typeof payload.plugin.root === 'string' && payload.plugin.root !== ''
             ? payload.plugin.root
             : ''
@@ -6005,7 +6227,6 @@ window.__ModuleLoader__.load({
             workspaceRootRef.current = hostRoot
           }
           setOverview(payload)
-          setOverviewError(null)
           return true
         } catch (error) {
           if (overviewSeq.current !== seq) return false
@@ -6085,17 +6306,35 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
-      const openDocument = React.useCallback(async function openDocument(file) {
+      /**
+       * Read one document into the editor.
+       *
+       * A quiet read is the background refresh after an applied packaged-defaults
+       * setting: it keeps the status line and the busy lock alone, a failure
+       * leaves the open editor untouched instead of blanking it, and it drops
+       * its answer when an edit, another document, or a save started meanwhile.
+       *
+       * @param {string} file - the document to open.
+       * @param {{ quiet?: boolean }} [options] - quiet background refresh.
+       * @returns {Promise<boolean>} whether the document was adopted.
+       */
+      const openDocument = React.useCallback(async function openDocument(file, options) {
+        const quiet = options !== undefined && options !== null && options.quiet === true
         const seq = openSeq.current + 1
         openSeq.current = seq
         const root = workspaceRootRef.current
-        setBusy('document')
-        setDocumentError(null)
-        setStatus({ kind: 'info', text: t('statusOpening') })
+        if (!quiet) {
+          setBusy('document')
+          setDocumentError(null)
+          setStatus({ kind: 'info', text: t('statusOpening') })
+        }
         try {
           const payload = await readJson(await fetch(
             'agent-soul/document?file=' + encodeURIComponent(file) + '&root=' + encodeURIComponent(root)))
           if (openSeq.current !== seq) return false
+          // A quiet refresh must never adopt an answer over work that started
+          // after it: an edit, another document, or a save all win.
+          if (quiet && (selectedRef.current !== file || dirtyRef.current || busyRef.current !== '')) return false
           if (payload === null || typeof payload !== 'object' || payload.document === undefined) {
             throw { code: 'invalid-request', message: '', diagnostics: [] }
           }
@@ -6103,6 +6342,7 @@ window.__ModuleLoader__.load({
             ? payload.document.file
             : file
           const nextBaseline = snapshotDraft(payload.document)
+          const loadedSource = typeof payload.document.source === 'string' ? payload.document.source : ''
           const stored = readStoredDraft(fileOfDocument)
           const modifiedAt = typeof payload.document.modifiedAt === 'number'
             ? payload.document.modifiedAt
@@ -6110,27 +6350,35 @@ window.__ModuleLoader__.load({
           const storedSnapshot = stored === null
             ? null
             : JSON.stringify({ fields: stored.fields, sections: stored.sections })
+          // A raw-only edit changes no form field, so the stored source decides
+          // whether the draft is actually newer than the file it was based on.
+          const storedRawDirty = stored !== null && typeof stored.rawSource === 'string'
+            && stored.rawSource !== loadedSource
           setSelected(file)
           setDraft(payload.document)
           setBaseline(nextBaseline)
-          const loadedSource = typeof payload.document.source === 'string' ? payload.document.source : ''
           setBaselineSource(loadedSource)
           setRawSource(loadedSource)
           setRawDiagnostics([])
           setDuplicateOpen(false)
           setPreview(null)
           setPreviewError(null)
-          setDraftOffer(stored !== null && stored.savedAt > modifiedAt && storedSnapshot !== nextBaseline
+          setDraftOffer(stored !== null && stored.savedAt > modifiedAt
+            && (storedSnapshot !== nextBaseline || storedRawDirty)
             ? stored
             : null)
           setFieldErrors({})
           setConflict(null)
           setConfirmDelete(false)
-          setStatus(null)
+          setDocumentError(null)
+          if (!quiet) setStatus(null)
           return true
         } catch (error) {
           if (openSeq.current !== seq) return false
           const failure = failureOf(error)
+          setDocumentError(failure)
+          setStatus({ kind: 'error', text: failureText(t, failure) })
+          if (quiet) return false
           setSelected(file)
           setDraft(null)
           setBaseline(null)
@@ -6144,11 +6392,9 @@ window.__ModuleLoader__.load({
           setFieldErrors({})
           setConflict(null)
           setConfirmDelete(false)
-          setDocumentError(failure)
-          setStatus({ kind: 'error', text: failureText(t, failure) })
           return false
         } finally {
-          if (openSeq.current === seq) setBusy('')
+          if (openSeq.current === seq && !quiet) setBusy('')
         }
       }, [t])
 
@@ -6177,29 +6423,68 @@ window.__ModuleLoader__.load({
         setPreviewError(null)
       }, [])
 
+      /**
+       * Re-read everything the effective packaged-defaults flag can change: the
+       * catalog rows (bundled badges, save/delete enablement), the open document
+       * (package ownership), and the orchestrator definition (bundled hint).
+       * Unsaved drafts always win: a dirty document or Orchestrator draft is
+       * left exactly as it is, and the tab's own refresh path guards the rest.
+       * @returns {Promise<void>}
+       */
+      const refreshAfterConfigChange = React.useCallback(async function refreshAfterConfigChange() {
+        await loadOverview()
+        // Nothing to invalidate when the Orchestrator tab was never opened, and
+        // never replace unsaved Orchestrator edits.
+        if (orchestratorRef.current !== null && !orchestratorDirtyRef.current) await loadOrchestrator()
+        const file = selectedRef.current
+        if (file === null || dialogModeRef.current !== 'document') return
+        if (dirtyRef.current || busyRef.current !== '') return
+        await openDocument(file, { quiet: true })
+      }, [loadOverview, loadOrchestrator, openDocument])
+
+      // A settled toggle (verified or not) invalidates the dependent views:
+      // leaving them stale was the visible half of the toggle defect.
       React.useEffect(function () {
-        if (sessionRoot !== '' && workspaceRootSourceRef.current === 'pending') {
-          workspaceRootRef.current = sessionRoot
-          workspaceRootSourceRef.current = 'session'
-          // An association that arrives during initial discovery supersedes the
-          // pending request. Once an overview root is pinned, edits never move.
-          openSeq.current += 1
-          parseSeq.current += 1
-          setBusy(function (current) {
-            return current === 'document' || current === 'parse' ? '' : current
-          })
-        }
+        return subscribeConfigSettled(function () {
+          void refreshAfterConfigChange()
+        })
+      }, [refreshAfterConfigChange])
+
+      // The catalog is read once; the only later read from here is the one that
+      // adopts a Session association discovered after the first request. The
+      // root is pinned exactly once, so a Session switch never re-reads the
+      // workspace and never reloads a dirty editor behind the person's back.
+      React.useEffect(function () {
         void loadOverview()
         return function () { overviewSeq.current += 1 }
-      }, [loadOverview, sessionRoot])
+      }, [loadOverview])
+
+      React.useEffect(function () {
+        if (sessionRoot === '' || workspaceRootSourceRef.current !== 'pending') return undefined
+        workspaceRootRef.current = sessionRoot
+        workspaceRootSourceRef.current = 'session'
+        // An association that arrives during initial discovery supersedes the
+        // pending request. Once an overview root is pinned, edits never move.
+        openSeq.current += 1
+        parseSeq.current += 1
+        setBusy(function (current) {
+          return current === 'document' || current === 'parse' ? '' : current
+        })
+        void loadOverview()
+        // A definition read against the still-unknown fallback root is stale
+        // once the real Session root is known. A dirty draft is never replaced.
+        if (orchestratorRef.current !== null && !orchestratorDirtyRef.current) void loadOrchestrator()
+        return function () { overviewSeq.current += 1 }
+      }, [loadOverview, loadOrchestrator, sessionRoot])
 
       // Fetch the single definition when the tab opens (and on every reopen,
-      // which is the tab's refresh behavior); nothing else polls it.
+      // which is the tab's refresh behavior); nothing else polls it, and a
+      // Session root change must never reload a dirty Orchestrator draft.
       React.useEffect(function () {
         if (activeTab !== 'orchestrator') return undefined
         void loadOrchestrator()
         return function () { orchestratorSeq.current += 1 }
-      }, [activeTab, loadOrchestrator, sessionRoot])
+      }, [activeTab, loadOrchestrator])
 
       const refresh = React.useCallback(async function refresh() {
         setStatus(null)
@@ -6992,6 +7277,14 @@ window.__ModuleLoader__.load({
         return typeof orchestratorFieldErrors[key] === 'string' && orchestratorFieldErrors[key] !== ''
       })
       const busyLocked = busy !== ''
+      // Mirror the newest render for the module-level callbacks and background
+      // refreshes: they must never act on a stale selection or dirty flag.
+      selectedRef.current = selected
+      dialogModeRef.current = dialogMode
+      dirtyRef.current = dirty
+      orchestratorRef.current = orchestrator
+      orchestratorDirtyRef.current = orchestratorDirty
+      busyRef.current = busy
       const textInput = function (config) {
         return sharedTextInput(Object.assign({}, config, { disabled: busyLocked }))
       }
@@ -7055,18 +7348,28 @@ window.__ModuleLoader__.load({
         closeDialog()
       }
 
-      // Persist a dirty draft while the page stays open; successful mutations clear it.
+      // Persist a dirty draft (form or raw) while the page stays open; successful
+      // mutations clear it. The raw source, the mode, and the base hash travel
+      // with the form fields so a refresh can restore either editor.
       React.useEffect(function () {
-        if (busyLocked || mode !== 'form') return undefined
+        if (busyLocked) return undefined
         if (draft === null || baseline === null) return undefined
         const file = draft.file
         if (typeof file !== 'string' || file === '') return undefined
-        if (snapshotDraft(draft) === baseline) return undefined
+        const formDirty = snapshotDraft(draft) !== baseline
+        const rawDirty = mode === 'raw' && rawSource !== baselineSource
+        if (!formDirty && !rawDirty) return undefined
         const timer = window.setTimeout(function () {
-          writeStoredDraft(file, { fields: draft.fields, sections: draft.sections })
+          writeStoredDraft(file, {
+            fields: draft.fields,
+            sections: draft.sections,
+            mode: mode,
+            rawSource: rawDirty ? rawSource : null,
+            baseHash: typeof draft.hash === 'string' ? draft.hash : null,
+          })
         }, 400)
         return function () { window.clearTimeout(timer) }
-      }, [draft, baseline, mode, busyLocked])
+      }, [draft, baseline, mode, rawSource, baselineSource, busyLocked])
 
       // Live, no-write preview: debounce while the draft changes and ignore
       // stale answers. A failure only fills the preview panel; editing and the
@@ -7414,6 +7717,9 @@ window.__ModuleLoader__.load({
           pasteDiagnostics))
 
       const listBody = (function () {
+        // A failed overview is never an empty catalog: the error card above owns
+        // the message, and a skeleton would imply a load that already failed.
+        if (overview === null && overviewError !== null) return null
         if (loading && overview === null) {
           return h('div', { className: 'agent-soul-skeleton-list', 'aria-hidden': 'true' },
             [0, 1, 2, 3].map(function (index) {
@@ -8248,16 +8554,28 @@ window.__ModuleLoader__.load({
               type: 'button',
               className: 'agent-soul-secondary-button',
               onClick: function () {
+                const offer = draftOffer
+                if (offer === null) return
                 setDraft(function (current) {
                   if (current === null) return current
                   return Object.assign({}, current, {
-                    fields: draftOffer.fields,
-                    sections: draftOffer.sections,
+                    fields: offer.fields,
+                    sections: offer.sections,
                   })
                 })
+                if (offer.mode === 'raw' && typeof offer.rawSource === 'string') {
+                  // The stored raw text is the edit; the stored form fields only
+                  // carry the baseline it was taken from.
+                  setMode('raw')
+                  setRawSource(offer.rawSource)
+                  setRawDiagnostics([])
+                  setPreview(null)
+                } else {
+                  setMode('form')
+                  setRawSource(baselineSource)
+                }
                 setDraftOffer(null)
                 setFieldErrors({})
-                setMode('form')
               },
               disabled: busyLocked,
             }, t('restoreDraftButton')),

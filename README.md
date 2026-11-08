@@ -58,9 +58,11 @@ Agent Team (Lead, optionally the orchestrator)
 - **Visible activation.** A successful enable answers with an **ORCHESTRATOR MODE ACTIVE** block;
   a failed enable answers with the error. A failure before any state is touched leaves the mode
   unchanged (a failed first enable leaves it off). Ordinary replacement failures attempt to restore
-  the previous doctrine and report `previousStateRestored`; queue-failure rollback has additional
-  caveats and review/probe findings described under [Turn it on and off](#turn-it-on-and-off)
-  and [Known limitations](#known-limitations). A successful enable also
+  the previous doctrine and report `previousStateRestored`; queue-failure recovery reports the
+  observed live state (reverted, kept, explicit fallback, inactive, or unconfirmed) and the
+  `/orchestrate off` retry that restores a captured model. It is best-effort, not a guarantee of
+  live/durable agreement; see [Turn it on and off](#turn-it-on-and-off) and
+  [Known limitations](#known-limitations). A successful enable also
   renames the Session to `orchestrator` when the profile provides a session-title service and
   the Session has a prior title to restore; `/orchestrate off` restores the title you had before
   orchestration (unless you renamed the Session yourself). While the mode is on, the Session header
@@ -144,6 +146,11 @@ packaged catalog and doctrine — are merged to `main` and are part of 0.4.0 (PR
 refers to those merged feature changes, not to subsequent documentation edits. On a
 0.3.0-or-earlier installation, the packaged souls and `defaults/orchestrator.md` are always
 read-only and those controls do not exist — skip the `bundledEditable` paragraphs in this README.
+
+**Working-tree scope.** This README also documents post-merge review fixes present in the current
+working tree. They are not part of the 0.4.0 release history, and a published 0.4.0 installation may
+not contain them. The behavior, commands, and test counts below describe this working tree; the
+merged-feature release notes above are unchanged.
 
 ## Requirements and install
 
@@ -283,13 +290,16 @@ dsh-agent-soul/                  ← the package (can live anywhere; no fixed wo
    ├─ bindings.json              ← durable soul bindings for cold resume (plugin-owned)
    ├─ orchestrator.md            ← optional local Lead doctrine (overrides defaults/orchestrator.md)
    ├─ preferences.json           ← default-Soul selection (created on first change; plugin-owned)
-   └─ trash/                     ← deleted files when the trash move succeeds (otherwise deletion is irreversible)
+   └─ trash/                     ← deleted files moved by a successful trash move; a failed move leaves the source in place
 ```
 
 Local content wins: a workspace soul with the same name shadows the bundled copy, and a workspace
 `<dirname(bindingsFile)>/orchestrator.md` overrides `defaults/orchestrator.md`. Configure different
-soul directories or a different state anchor with `dirs` / `bindingsFile` — absolute, `~/…`, or
-relative to each workspace root. See [Configuration](#configuration).
+soul directories with `dirs` — absolute, `~/…`, or relative to each workspace root — or a different
+state anchor with `bindingsFile` — absolute or workspace-relative, with no `~` expansion (use an
+absolute path or a path under each workspace). A workspace-relative state path and its `trash/` are
+real-path fenced to the workspace, so a symlinked `.dsh` or `.dsh/agent-soul` cannot move state
+outside it. See [Configuration](#configuration).
 
 ## Quick start
 
@@ -354,9 +364,10 @@ relative to each workspace root. See [Configuration](#configuration).
    enable the mode and submit the task as the next message in one step. A successful enable answers
    with the **ORCHESTRATOR MODE ACTIVE** block; a failed enable answers with the error. A failure
    before any state is touched leaves the mode unchanged (a failed first enable leaves it off), and
-   ordinary replacement failures attempt restoration and report `previousStateRestored`. Queue-failure
-   recovery has known edge cases; see [Turn it on and off](#turn-it-on-and-off) and
-   [Known limitations](#known-limitations). Type `/orchestrate off` to leave; the prior Session title
+   ordinary replacement failures attempt restoration and report `previousStateRestored`; queue-failure
+   recovery is best-effort and reports the observed live state. See
+   [Turn it on and off](#turn-it-on-and-off) and [Known limitations](#known-limitations). Type
+   `/orchestrate off` to leave; the prior Session title
    is restored when the title service is available, the Session had a prior title, and you have not
    renamed it yourself.
 
@@ -393,7 +404,9 @@ hint and warning banner. It offers a bundled-default option plus every valid Sou
 selection that is no longer in the catalog stays visible as `<name> (not in catalog)` so it can be
 cleared. Choosing an option validates it against the live catalog, persists it through the
 authenticated preference route, and re-reads the overview. The list supports free-text search over
-name, description, source/file path, and label (not the Markdown body), filter chips (**All / User-invocable / AI-only / Invalid**), and
+name, description, source path, file name or absolute path, and label (not the Markdown body; the
+placeholder says so in all eight dictionaries), filter chips (**All / User-invocable / AI-only /
+Invalid**), and
 **Name / Updated** sorting. Invalid files stay listed so they can be fixed in place. The warning
 banner shows the Host's preference warning — a stale or unusable default, or a corrupt, malformed,
 or unreadable preferences document. Until the document is fixed, no effective default is advertised
@@ -467,16 +480,18 @@ size is remembered per browser, with **Reset size**). It contains:
 - **Duplicate:** copy the saved file under a new lower-kebab-case name.
 - **Delete:** two-step confirm; the file is moved to the trash, and the status banner offers
   **Undo delete** only when that move succeeds. If the trash cannot be written or the move fails, the
-  file is hard-deleted irreversibly and no Undo is offered.
+  source file is left in place and the page reports the trash error; there is no hard-delete fallback
+  or hard-delete opt-in. Fix the trash path, permissions, or device problem and retry.
 - **Save / Revert:** Save validates first; Revert restores the last loaded file content. The sticky
   footer keeps all actions within reach while the form scrolls.
 
-**Drafts and conflicts.** Unsaved edits are guarded in-page (Discard changes / Keep editing). For a
-Soul in **Form** mode, only its form-based fields and sections are stored in `localStorage` under
-`dsh.agent-soul.draft:<file>`; reopening offers **Restore draft / Discard draft** when that draft is
-newer than the file. Raw source and the Form/Raw mode, Orchestrator edits, New/Paste inputs, and Undo
-state are not restored. Save before refreshing or changing the associated Session root: changing that
-root can reset a dirty Orchestrator draft without a dirty guard. Soul save sends the hash it loaded;
+**Drafts and conflicts.** Unsaved edits are guarded in-page (Discard changes / Keep editing). A
+Soul draft is stored in `localStorage` under `dsh.agent-soul.draft:<file>` with its form fields and
+sections, the Form/Raw mode, the raw source when that mode is dirty, and the file hash the draft was
+based on. Reopening offers **Restore draft / Discard draft** when the draft is newer than the file and
+restores a raw draft into Raw mode; records written by older versions still restore as form drafts.
+Orchestrator edits, New/Paste inputs, and Undo state are not restored. A Session-root change no
+longer reloads or resets a dirty Orchestrator draft. Soul save sends the hash it loaded;
 if the file changed on disk, the page shows a conflict banner with **Reload file** or **Overwrite**
 instead of silently clobbering it. Field-level save errors appear under the matching control and in
 the diagnostics block; the first invalid field is focused.
@@ -497,12 +512,14 @@ counts and their registered soul commands, and the delegation example. Everythin
 is read-only; changing the other values is a bundle configuration change. The switch is the
 packaged-defaults edit mode (config key `bundledEditable`); the same toggle lives on the Plugins
 page (**Configure** on this bundle's `agent-soul-team` row → the **Use Default Agent Souls** page),
-and flipping it rewrites the profile patch's row config and reloads the plugin once. The two controls
-share hook code, not reactive display state: an already-open overview, Soul/Orchestrator document, or
-the other switch can remain stale. Refresh or reopen those views after the reload and verify the
-effective `bundledEditable`/packaged-defaults flags. Polling stops after six mismatch/error results
-and can still display **Applied.**; do not treat that label alone as proof. The normal Host write path
-validates and reconciles the configuration.
+and flipping it rewrites the profile patch's row config and reloads the plugin once. Both mounted
+controls share one module-level state record: flipping either one updates the other, and a settled
+write (verified or unverified) refreshes the overview, a clean Orchestrator draft, and a clean open
+document; unsaved drafts and in-flight operations are never replaced. A control mounted later reads
+the current state on mount. Only a read that shows the written value reports **Applied.**; polling
+that ends without one reports **Saved, but the reload was not confirmed** (Unverified), so that label
+is always an observation, not a promise. The normal Host write path validates and reconciles the
+configuration; refresh or reopen a stale view after an unverified result.
 
 ### Orchestrator tab
 
@@ -709,14 +726,15 @@ Common messages and fixes:
 | `context: must be "fresh" or "fork"` | Unsupported value (including `none` in raw YAML). | Use `fresh`/`fork`, or omit the key. |
 | `user-invocable: must be true or false` | Quoted or otherwise non-boolean. | Use the bare YAML booleans `true` / `false`. |
 | `duplicate soul name "x"` | Another file in the catalog already uses the name. Configured directories are scanned in their configured order, then the bundled catalog; files are sorted within each directory. The first definition wins, while a local same-name bundled shadow is intentional and silent. | Rename one file's `name`, or remove the duplicate. |
+| `duplicate packaged soul name "x"` | Two files in the packaged `agents/` catalog declare the same name (for example a copied file). | Remove or rename the extra packaged file; packaged-target saves that would create this collision are refused. |
 | `ignoring N soul definition(s) beyond maxDefinitions` | The catalog is over its configured limit. | Raise `maxDefinitions` or remove files. |
 | Model or tool errors at spawn time | The file parses, but the model route or a tool name is not available in this session. | Fix the route/tool, or use the GUI preview and `list_agent_souls`, which show resolution. |
 
 The GUI's save-time validator additionally rejects Team tools and the Lead-only `manage_agent_souls`
-tool, unknown tools when a live Lead catalog is available and non-empty, duplicate names, and
-unresolvable model declarations, so a fix made in the page does not wait until the next spawn to fail.
-A live Lead with zero restrictable tools skips the unknown-tool membership check; spawn remains the
-authoritative validation boundary.
+tool, unknown tools whenever the live Lead catalog is the source, duplicate names, and unresolvable
+model declarations, so a fix made in the page does not wait until the next spawn to fail. A
+live-but-empty catalog rejects every non-Team name; only a missing catalog (no live Lead, source
+`none`) skips the unknown-tool membership check. Spawn remains the authoritative validation boundary.
 
 ## Orchestrator mode
 
@@ -748,31 +766,43 @@ the optional service the enable still succeeds and the block reports
 `orchestrator`, so a rename you make during the mode is left untouched. The Lead's displayed
 identity changes to the session orchestrator, but the internal Team target remains `lead`. The task
 is queued only after the doctrine, model, and tool matrix apply. If the queue fails, the command
-reports the queue error. The handler attempts to revert a first enable and to restore the
-pre-invocation doctrine, model, and title for an already-active mode; a durably active mode with no
-live bundle (for example after a Host reload) keeps the bundle this invocation applied. These are
-best-effort recovery paths, not a guarantee that live and durable state agree. Static review and an
-in-memory handler probe (not full real-runtime integration) established that a first enable with a
-route override, queue failure, and failed previous-model restore can leave live mode active while
-the durable log reads off and the error reports only the queue failure. A separate static finding
-shows that an already-active rollback can log a captured-model restore failure yet return success
-with old doctrine mixed with the new route. See
-[Known limitations](#known-limitations) for recovery guidance.
-A failed enable answers with the error: a failure before any state is touched — a missing or
-invalid definition (reported with the file path), an unresolvable model route, or a failed tools
-probe — leaves the mode unchanged (a failed first enable leaves it off). For an ordinary failure
-while replacing an active doctrine, the handler rolls back to the previous doctrine when rollback
-succeeds (`previousStateRestored=true`), including the model change attempted by the failed apply;
-if that rollback itself fails on this path, the mode ends inactive (`previousStateRestored=false`)
-and the error says so. Queue-failure recovery is the separate best-effort path described above.
+reports the queue error plus the state it actually observed, and its recovery differs by path:
+
+- A **first enable** is reverted when the disable succeeds: the error says `the mode was reverted`.
+  If the model restore also fails, the live bundle and its model capture stay active (so
+  `/orchestrate off` can retry) while the command settles as an error and the durable log reads off.
+  The error then says `active=true, modelRestored=false`, states the live/durable disagreement, and
+  names `/orchestrate off` as the recovery. If disable leaves the mode inactive, the error says
+  `active=false`; if the live state cannot be confirmed it says `active=unknown` and asks you to
+  inspect the Session before running `/orchestrate off`.
+- An **already-active mode** is restored from a pre-invocation snapshot when possible. The error
+  distinguishes an exact restore (`the already-active mode was kept`), a previous doctrine restored
+  on the newly applied route (`active=true, modelRestored=false`, with the model-capture recovery
+  that actually exists), a failed snapshot recreation that keeps the freshly applied doctrine/model
+  as an explicit fallback (`fallback=true`), and no restorable state (`active=false`, naming the
+  durable log and any model left on the new route). A Session title changed by the invocation is
+  restored on each path when it still can be.
+- A durably active mode with no live bundle (for example after a Host reload) had nothing to
+  snapshot, so the newly applied definition is kept and reported as such.
+
+These are best-effort recovery paths, not a guarantee that live and durable state agree. The
+handler-level fault tests exercise them with an in-memory Agent double, not a full real Host
+orchestrator lifecycle, so verify the effective doctrine, route, and mode after an unusual failure.
+A failed enable before any state is touched — a missing or invalid definition (reported with the file
+path), an unresolvable model route, or a failed tools probe — leaves the mode unchanged (a failed
+first enable leaves it off). For an ordinary failure while replacing an active doctrine, the handler
+rolls back to the previous doctrine when rollback succeeds (`previousStateRestored=true`), including
+the model change attempted by the failed apply; if that rollback itself fails on this path, the mode
+ends inactive (`previousStateRestored=false`) and the error says so. Queue-failure recovery is the
+separate best-effort path described above.
 
 The mode is durable through the **session command log**, so it survives a page reload, a Host
 reload, or a resumed session. The normal fold walks runs in invocation order: a pending enable
 counts as on, while a run that later settles as an error no longer counts (so a first enable then
 reads off). The `settledOnly` pre-invocation read ignores pending runs and counts only successful
 settlements. Consequently, a crash or reload during a pending enable can reapply the enable, and a
-subsequent error can change the durable read; the live badge/log and the rollback caveats above
-matter when recovering. It is not a profile default and does not affect any other Session.
+subsequent error can change the durable read; the command's reported live/durable state and the off
+retry are the recovery evidence. It is not a profile default and does not affect any other Session.
 
 While the mode is on, the Session header shows a compact noninteractive **Orchestrator mode on**
 badge with a success dot; its title and accessible label say the mode is on and that
@@ -781,8 +811,9 @@ disappears as soon as the command log changes. It reads the Host's `agentSoulOrc
 projection, which is folded by the same pure logic as the durable runtime read in
 [`lib/orchestrator-mode.js`](lib/orchestrator-mode.js), so the badge and the durable `/orchestrate`
 mode read cannot disagree with each other. Neither alone proves the live bundle state after a
-rollback defect. If projection registration fails, the plugin logs a warning and keeps the command and
-every other capability; only the badge is absent.
+rollback failure; the command's rollback report is the evidence for that. If projection registration
+fails, the plugin logs a warning and keeps the command and every other capability; only the badge is
+absent.
 
 ### The definition file
 
@@ -862,6 +893,13 @@ workflow and start a correction loop.
 Retry a failed sub-task at most {{maxRetries}} times with the error and refined context. On a fatal
 error or exhausted retries, stop and ask the human.
 ```
+
+The bundled doctrine is a valid starting point: it states that a declared `model`/`provider` route
+is applied and that the shipped default (which declares none) inherits the Lead's selection; its
+State Tracking section lists only the task board's `pending`, `in_progress`, `completed`, and
+`deleted` statuses; and its strict-gate correction loop is scoped to `strict` gating and the
+configured retry budget, with `advisory` and `off` reporting rather than blocking. These are prompt
+instructions, not mechanical enforcement.
 
 ### Orchestrator frontmatter
 
@@ -1161,12 +1199,12 @@ rather than merging into it, so restate every key you rely on (including the shi
 | Key | Default | Accepted values | Meaning |
 |---|---|---|---|
 | `bundled` | `true` | Boolean | Ship the package's own `agents/` catalog and `defaults/orchestrator.md` doctrine into every workspace. When true, a workspace with no local definition still lists the bundled souls and `/orchestrate` enables anywhere right after installation, without setup. Set `false` for strictly workspace-scoped content: the catalog then contains only configured directories, and `/orchestrate` refuses when the workspace file is absent. |
-| `bundledEditable` | `false` | Boolean | Opt-in authoring mode for the packaged defaults. Requires `bundled: true`; with `bundled: false` the flag is inert and activation logs a warning. When `true`, the packaged `agents/` souls open editable in **Settings → Agent Soul**: **Save** rewrites the package's Markdown atomically, **Delete** moves the file to the workspace trash when possible (Undo/restore work only after a successful move; a trash/move failure hard-deletes irreversibly with no Undo), and labels stay package-relative; a workspace soul with the same name still shadows the packaged row, same-name duplicates remain allowed, and new/duplicated souls still land in the configured `dirs`. The **Orchestrator** tab likewise edits the packaged `defaults/orchestrator.md` in place when the workspace has no `orchestrator.md` of its own (a workspace file always wins, and one that appears mid-edit makes the save fail with a conflict instead of clobbering it). The GUI toggles this key through the plugin's Loader row config: the **Use default agent souls** switch in the Agent Soul settings card and on the Plugins page (**Configure** on this bundle's `agent-soul-team` row → **Use Default Agent Souls**) writes the profile patch's row config (all other row keys preserved) and reloads the plugin once; the switch is disabled when `bundled` is `false` or the profile cannot save the setting. **Risks:** in-place edits land in the installed package directory and are lost if the package is reinstalled or updated; the packaged catalog and doctrine are shared by workspaces using that package installation/profile while bindings and trash stay per workspace. |
+| `bundledEditable` | `false` | Boolean | Opt-in authoring mode for the packaged defaults. Requires `bundled: true`; with `bundled: false` the flag is inert and activation logs a warning. When `true`, the packaged `agents/` souls open editable in **Settings → Agent Soul**: **Save** rewrites the package's Markdown atomically, **Delete** moves the file to the workspace trash (Undo/restore work only after a successful move; a trash/move failure leaves the source in place and reports the error, with no hard-delete fallback), and labels stay package-relative; a workspace soul with the same name still shadows the packaged row (local-over-bundled shadowing remains valid, while a packaged target may not take another packaged soul's name), and new/duplicated souls still land in the configured `dirs`. The **Orchestrator** tab likewise edits the packaged `defaults/orchestrator.md` in place when the workspace has no `orchestrator.md` of its own (a workspace file always wins, and one that appears mid-edit makes the save fail with a conflict instead of clobbering it). The GUI toggles this key through the plugin's Loader row config: the **Use default agent souls** switch in the Agent Soul settings card and on the Plugins page (**Configure** on this bundle's `agent-soul-team` row → **Use Default Agent Souls**) writes the profile patch's row config (all other row keys preserved) and reloads the plugin once; the switch is disabled when `bundled` is `false` or the profile cannot save the setting. **Risks:** in-place edits land in the installed package directory and are lost if the package is reinstalled or updated; the packaged catalog and doctrine are shared by workspaces using that package installation/profile while bindings and trash stay per workspace. |
 | `dirs` | `['.dsh/agents']` | Non-empty array of non-empty strings; absolute, `~/…`, or workspace-relative | Local soul directories per workspace. Missing directories are fine, and the GUI creates the first workspace-relative one on demand when saving a new soul. When `bundled` is on, the package catalog is appended after these directories and a local name shadows the bundled one. |
 | `commandPrefix` | `''` | `/^[a-z0-9_-]*$/` | Prefix for human commands. `agent-` gives `/agent-researcher`. |
 | `maxDefinitions` | `64` | Integer 1–1000 | Maximum valid definitions kept per root; extra valid files become a diagnostic. |
 | `maxPromptChars` | `12000` | Integer 1000–200000 | Budget for the Lead's catalog section; entries are kept whole until the budget runs out. |
-| `bindingsFile` | `.dsh/agent-soul/bindings.json` | Non-empty string; absolute or workspace-relative | Durable bindings are read from this resolved file itself; its directory anchors the trash directory, `orchestrator.md`, and `preferences.json`. The newest 500 records are retained per bindings document, so workspaces sharing an absolute file share its keyspace and retention. Avoid `../` escapes: bindings accepts them, but the sibling preferences/orchestrator paths reject workspace escapes. |
+| `bindingsFile` | `.dsh/agent-soul/bindings.json` | Non-empty string; absolute or workspace-relative; no `~` expansion | Durable bindings are read from this resolved file itself; its directory anchors the trash directory, `orchestrator.md`, and `preferences.json`. A workspace-relative path is fenced to the **real** workspace root before any read or write: activation rejects a lexical `../…` escape with a `TypeError`, and the binding store/trash/restore resolve existing ancestors so a symlinked `.dsh` or `.dsh/agent-soul`, a dangling link, or a document symlink cannot move state outside the workspace. An absolute path is intentional shared state used verbatim for every workspace, with its real state directory as the boundary, sharing its child-id keyspace and newest-500 retention. **Migration:** an existing relative `bindingsFile` containing `../` must become a root-contained relative path or an absolute shared path before activation; a symlinked state path that escapes its real workspace must be replaced or pointed inside it. |
 | `freshProvider` | `spawn` | Non-empty string | Agent Teams subagent provider for `fresh` spawns. |
 | `forkProvider` | `fork` | Non-empty string | Agent Teams subagent provider for `fork` spawns. |
 | `interrupt` | `true` | Boolean | Register `interrupt_agent` like the shipped row. |
@@ -1192,21 +1230,21 @@ against each workspace root.
 |---|---|
 | **Save a soul** | The file is written atomically, the catalog is rescanned, and the next `spawn_teammate` / command / list sees it. Running teammates are not changed. |
 | **Catalog scan** | Runs at plugin activation for a Lead, when a Lead is created, on every soul spawn, `list_agent_souls`, command invocation, GUI overview, and GUI mutation. There is no filesystem watcher. `{{catalog}}` in an orchestrator definition uses the last cached scan; an explicit `/orchestrate` enable does not rescan external Soul edits. |
-| **Cold resume** | The teammate's applied snapshot is read from the resolved `bindingsFile` itself (default `<workspace>/.dsh/agent-soul/bindings.json`) and its persona, tool matrix, and model are re-applied. Admission is fail-closed: a resumed roster teammate with no durable binding, or whose binding cannot be read, is refused rather than resumed Soul-less. The plugin makes the refusal actionable: its `send_message` tool answers `teammate "<name>" could not be resumed: <Soul-specific cause>. The teammate was not started. Restore its durable Agent Soul binding or re-spawn it with spawn_teammate to create a valid one.`, the Host log records `agent-soul: cold resume refused for teammate "<name>": … (code SOUL_PLAN_UNAVAILABLE, reason …)`, and `list_agent_souls` returns the same cause under `diagnostics` with `source: "admission:<name>"`. The shared subagent lifecycle's generic `is unavailable` wrapper itself is unchanged. The store is best-effort only for persistence and retains the newest 500 bindings per bindings document (workspaces sharing an absolute file share its keyspace and retention); a pruned or corrupt record therefore blocks that resume (re-spawn the teammate) instead of degrading it. |
+| **Cold resume** | The teammate's applied snapshot is read from the resolved `bindingsFile` itself (default `<workspace>/.dsh/agent-soul/bindings.json`) and its persona, tool matrix, and model are re-applied. Admission is fail-closed: a resumed roster teammate with no durable binding, or whose binding cannot be read, is refused rather than resumed Soul-less. The plugin makes the refusal actionable: its `send_message` tool answers `teammate "<name>" could not be resumed: <Soul-specific cause>. The teammate was not started. Restore its durable Agent Soul binding or re-spawn it with spawn_teammate to create a valid one.`, the Host log records `agent-soul: cold resume refused for teammate "<name>": … (code SOUL_PLAN_UNAVAILABLE, reason …)`, and `list_agent_souls` returns the same cause under `diagnostics` with `source: "admission:<name>"`. The shared subagent lifecycle's generic `is unavailable` wrapper itself is unchanged. Every `get`/`list`/`size` re-reads the durable document, so a document that became unreadable, corrupt, unsupported, unsafe, or partially malformed after an earlier healthy read rejects with its typed reason instead of resuming the stale plan. `get` is the admission path and refuses a partially malformed document outright; `list`/`size` reject a document-level failure and, for a partially malformed document, return the valid records/count with the warning. The only in-memory value served while the document is unusable is this process's unpersisted local `set`/`delete` for that child; it is not durable. The store retains the newest 500 bindings per bindings document (workspaces sharing an absolute file share its keyspace and retention); a pruned record blocks that resume (re-spawn the teammate). A snapshot that cannot be represented as a valid record is refused with `E_BINDING_INVALID_RECORD` instead of poisoning the document. |
 | **Plugin activation** | A pre-existing live roster teammate with no pending or durable Soul plan is skipped with a warning and gets no Team tools; its creation already happened, so it cannot be vetoed. The warning carries the Soul-specific reason, and the refusal is also recorded for `list_agent_souls` diagnostics. New teammates and cold resumes are vetoed in `agent/created` instead. |
 | **Member installation failure / host safety** | Only plan resolution (`SoulPlanUnavailableError`) vetoes creation. Agent disposal, creation cancellation, plugin teardown, and unexpected post-plan apply failures are logged skips after every partial registration (Team tools included) is unwound. The shared installation task is internally observed, so an abandoned caller cannot turn a failure into a process-fatal unhandled rejection. A skipped teammate can be re-spawned to repair it. |
 | **Default Soul** | Persisted in `<dirname(bindingsFile)>/preferences.json`. A missing document means no explicit selection (the live catalog's `generalist`, normally bundled, applies when present); a stale selection, or a corrupt/malformed/unsupported document, invalidates the default and fails the next default spawn with the reason. A document (or state directory) that cannot be read at all also fails the spawn with its path. Explicit `agent_type` bypasses the preference document. |
 | **Orchestrator title** | The Session title is durable in the Session log (`session/title`). Enable renames it to `orchestrator` only when the session-title service is available and a prior title exists to restore; off restores the captured title only while it is still exactly `orchestrator`. With no prior title nothing is renamed and nothing is restored. |
 | **Host reload / bundle toggle** | The plugin is re-created; the catalog and preferences are read from disk again; active orchestrator mode is re-applied from the session log without re-capturing the previous model or Session title. |
-| **Page refresh** | The browser artifact reloads. Only form-based Soul fields/sections and dialog size persist; Raw source/mode, Orchestrator edits, New/Paste inputs, and Undo state are not restored. Save before refreshing or changing the associated Session root; a root change can reset a dirty Orchestrator draft without a dirty guard. |
-| **Delete a soul** | The file moves to `<dirname(bindingsFile)>/trash/<YYYYMMDDTHHMMSSmmmZ>-<original filename>` (a `<pid>.<counter>-` suffix is added on a name collision); **Undo delete** moves it back. If the trash write or move fails, the file is hard-deleted irreversibly and no Undo is offered. |
+| **Page refresh** | The browser artifact reloads. A Soul draft persists its form fields/sections, Form/Raw mode, raw source, and base file hash; dialog size also persists. Orchestrator edits, New/Paste inputs, and Undo state are not restored, so save those before reloading. A later Session-root association no longer replaces a dirty Orchestrator draft. |
+| **Delete a soul** | The file moves to `<dirname(bindingsFile)>/trash/<YYYYMMDDTHHMMSSmmmZ>-<original filename>` (a `<pid>.<counter>-` suffix is added on a name collision); **Undo delete** moves it back. The trash path is fenced to the real workspace (or the real shared-state directory for an absolute `bindingsFile`) before any move, so a symlinked state path cannot place a deleted soul outside that boundary. If the trash directory cannot be created, the move fails, or the state path is unsafe, the source file is left in place and `deleteDocument` returns an `invalid-request`/`unsafe-path` failure naming the reason; no `trashedFile` is reported, no Undo is offered, and there is no hard-delete fallback. |
 | **Switch workspace** | Soul directories, bindings, and the writable orchestrator definition resolve per workspace. The GUI edits one workspace at a time and shows which root it chose. The packaged catalog and doctrine are the same in every workspace unless `bundled: false`; local files shadow them per workspace, and with `bundledEditable: true` an in-place edit of a packaged file is shared by every workspace in the profile (bindings and trash stay per workspace). |
-| **Orchestrator mode** | Derived from the session command log, so it survives a page/Host reload and is reapplied when the session's Lead is created. A pending enable counts as on in the normal fold but is excluded from the `settledOnly` pre-invocation read; a later error can make a first enable read off. It is never a profile default. See [Turn it on and off](#turn-it-on-and-off) for crash/reload and rollback caveats. |
+| **Orchestrator mode** | Derived from the session command log, so it survives a page/Host reload and is reapplied when the session's Lead is created. A pending enable counts as on in the normal fold but is excluded from the `settledOnly` pre-invocation read; a later error can make a first enable read off. It is never a profile default. See [Turn it on and off](#turn-it-on-and-off) for crash/reload behavior and the best-effort queue-failure recovery report. |
 
-The GUI keeps these browser-only values: form-based Soul fields/sections under
-`dsh.agent-soul.draft:<file>` and the editor size under `dsh.agent-soul.editor-size`. Raw source/mode,
-Orchestrator edits, New/Paste inputs, and Undo state are not restored. They are not shared with other
-browsers.
+The GUI keeps these browser-only values: a Soul draft under `dsh.agent-soul.draft:<file>` (form
+fields/sections, Form/Raw mode, raw source, base hash) and the editor size under
+`dsh.agent-soul.editor-size`. Orchestrator edits, New/Paste inputs, and Undo state are not restored.
+They are not shared with other browsers.
 
 ## Troubleshooting
 
@@ -1223,12 +1261,15 @@ browsers.
 | **`/orchestrate` says no definition** | The path shown; the settings card's `bundled` value and bindings file; whether the package's `defaults/orchestrator.md` was installed. | With the default `bundled: true` this should not happen in a complete install: the packaged default is used. If it does, the package asset is missing (reinstall the bundle) or `bundled` is `false` — create the file at the shown path from the Orchestrator tab, restore the bundled asset, or re-enable bundled defaults. |
 | **The Orchestrator tab shows a Bundled badge** | That is expected on a fresh install: the effective doctrine is the package default (with **Use default agent souls** on there is no badge and the packaged file itself is the editable path). | By default, save from the editor to create a workspace override at the shown path; delete that file (or the plugin's saved copy) to fall back to the bundled doctrine. With **Use default agent souls** on (`bundledEditable: true`), **Save** rewrites the packaged doctrine in place. |
 | **A soul card shows a Bundled badge and the editor will not save** | By default (**Use default agent souls** off, `bundledEditable: false`) packaged souls are read-only package assets. | Use **Duplicate** in the editor to create an editable copy under the configured workspace `dirs` (created on demand). To edit packaged souls in place instead, turn on **Use default agent souls** — the switch in the Agent Soul settings card, or the Plugins page (**Configure** on this bundle's `agent-soul-team` row → **Use Default Agent Souls**) — or set `bundledEditable: true` (with `bundled: true`) in the row config and reload; see [Configuration](#configuration) for the package-directory and shared-catalog risks. A local soul with the same name shadows the bundled card. |
-| **`/orchestrate <task>` enabled the mode but no task ran** | The command result text and Host log; queue-failure rollback is best-effort. Static review and an in-memory first-enable handler probe found cases where live/durable state can disagree or old doctrine can be mixed with a new route; full real-runtime integration was not exercised. | Send the task as a normal message after `/orchestrate`. If the live badge or doctrine/model looks wrong, retry `/orchestrate off` and inspect the Host log; reload the Host/reopen the Lead when needed, then verify effective mode, doctrine, and route before continuing. |
+| **`/orchestrate <task>` enabled the mode but no task ran** | The command result text and Host log; queue-failure recovery is best-effort and reports the observed live state (reverted, kept, explicit fallback, inactive, or unconfirmed). The handler-level fault tests use an in-memory Agent double, not a full real Host lifecycle. | Send the task as a normal message after `/orchestrate`. If the error reports `active=true` or `active=unknown`, retry `/orchestrate off` to restore a captured model and inspect the Host log; reload/reopen only if the state remains unclear, then verify effective mode, doctrine, and route. |
 | **Orchestrator definition is invalid** | Diagnostics in the Orchestrator tab: gate mode, retries, booleans, model/provider (a conflicting route, provider without model, an empty model id), body. A `reasoning-effort` alone is ignored at enable and is not an error. | Fix the named field. Invalid saves write nothing; the mode stays off or keeps its previous state. |
 | **Model is unresolved** | The raw model/provider and the live providers; whether the `llm` service is available. | Use a model id the providers advertise, or write the full `provider/model` route. A different `provider` plus a prefixed model is an error. |
 | **A tool is not allowed / tools list is rejected** | The name is visible in the live Lead's catalog; it is not a Team tool. | Use the GUI picker or `list_agent_souls`; remove Team tool names from soul `tools`; use `*` or `[]` deliberately. |
 | **YAML errors in the editor** | Tabs, block scalars, nested mappings, inline mappings (`{}`), malformed flow lists, a description wrapped across plain lines (the subset has no multi-line plain scalars). | Use the supported YAML subset; quote tricky scalars; keep the description on one line (recommended, not enforced). |
 | **A new file does not appear** | There is no filesystem watcher. | Press **Refresh** in the page, or trigger a spawn/list/command (each rescans). |
+| **The page shows an unexpected-payload error card** | The Host overview response and Host log; a stale Web artifact. | Refresh/retry. A 200 overview missing the documented blocks is reported as an `invalid-response` error card (with the last good rows kept), never as an empty catalog or a stuck skeleton. Rebuild/refresh the Web artifact if it persists. |
+| **Delete reports "cannot move the document to the trash directory" or `unsafe-path`** | The trash path under `<dirname(bindingsFile)>/trash`, its permissions, free space, whether the workspace and trash are on different devices, and whether the state path is a symlink that leaves the real workspace. | The source file is still there and was not deleted. Fix the path, permissions, device, or symlink problem and retry the delete; there is no hard-delete opt-in. |
+| **Activation fails with `config.bindingsFile must be an absolute path or a workspace-relative path that does not escape the workspace`** | The row config's `bindingsFile`. | Change the relative path to stay inside each workspace root, or make it absolute for intentional shared state, then reload/restart. A symlinked `.dsh`/`.dsh/agent-soul` that leaves the real workspace is refused at read/write/delete/restore time; point it inside the workspace or use an absolute shared path. |
 | **Soul save conflict (409)** | The file changed on disk since it was loaded. | **Reload file** to discard local edits, or **Overwrite** to save with the current server hash. |
 | **Orchestrator save conflicts** | Ordinary Orchestrator saves have no Soul-style `expectedHash` banner/overwrite flow and are last-write-wins. With `bundledEditable`, a workspace file appearing while the packaged file is edited returns a 400 conflict instead of clobbering it. | Refresh/reload the Orchestrator definition and save deliberately; do not expect the Soul conflict dialog for ordinary Orchestrator saves. |
 | **`/orchestrate off` did not restore the model or title** | The mode was already on after a Host reload, so the runtime has no captured original route/title; the Session had no prior title at enable; you renamed the Session during the mode; or the profile mounts no session-title service. | Expected limitation: select the model again, or rename the Session. The pre-reload route cannot be recovered, a human rename is deliberately preserved, and with no prior title or no title service nothing was renamed to restore. |
@@ -1237,12 +1278,12 @@ browsers.
 | **`spawn_teammate` fails with "the preferences document is invalid"** | The warning in the Souls tab and the malformed selection/shape in `<dirname(bindingsFile)>/preferences.json` (default `<workspace>/.dsh/agent-soul/preferences.json`; for example `selected: 42`, a non-kebab-case name, or a missing `selected` key). | Fix or clear the selection in the Default Soul selector, or pass an explicit `agent_type`; a malformed document is never reinterpreted as `generalist`. |
 | **`spawn_teammate` fails with `teammate name "…" was already used in this Team`** | The Team service refuses a name already used in this Team; direct spawn never renames on your behalf. | Choose a fresh lower-kebab-case name. Slash commands derive a free name automatically (`<soul>`, `<soul>-2`, …). |
 | **`spawn_teammate` fails with `a soul spawn for this Lead and teammate name is already pending`** | A spawn for the same Lead and requested name is still in flight; the plugin refuses the duplicate before it reaches the Team service. | Wait for the first spawn to settle, or choose a different name. |
-| **A cold-resumed teammate fails with "no pending or durable Agent Soul plan" or "cannot read its durable Agent Soul binding"** | The resolved `bindingsFile` itself (default `<workspace>/.dsh/agent-soul/bindings.json`) and its newest-500-per-document cap; whether the teammate was created through `spawn_teammate`; the plugin's `teammate "<name>" could not be resumed:` refusal (it appends the Soul-specific cause); the Host log line containing `SOUL_PLAN_UNAVAILABLE`; `list_agent_souls` diagnostics with `source: "admission:<name>"`. | Re-spawn the teammate with `spawn_teammate`; cold-resume admission is fail-closed rather than Soul-less. Back up the binding document before repairing or mutating corrupt/unsupported JSON: a later set/delete can otherwise overwrite unrelated records. Read/JSON failures can be cached as empty, so external repair or another process's write may require a new store/Host reload and an unreadable input can look missing. The shared subagent lifecycle's own `is unavailable` wrapper does not carry the cause — read the plugin's refusal text, log line, or diagnostics for it. |
+| **A cold-resumed teammate fails with "no pending or durable Agent Soul plan" or "cannot read its durable Agent Soul binding"** | The resolved `bindingsFile` itself (default `<workspace>/.dsh/agent-soul/bindings.json`) and its newest-500-per-document cap; whether the teammate was created through `spawn_teammate`; the plugin's `teammate "<name>" could not be resumed:` refusal (it appends the Soul-specific cause); the Host log line containing `SOUL_PLAN_UNAVAILABLE`; `list_agent_souls` diagnostics with `source: "admission:<name>"`. | Re-spawn the teammate with `spawn_teammate`; cold-resume admission is fail-closed rather than Soul-less. The cause is typed (`missing-binding`, `unreadable-binding`, `corrupt-binding`, `unsupported-binding`, `unsafe-binding-path`). Every `get`/`list`/`size` re-reads the durable document, so a plan read before the document became unreadable/corrupt/unsupported/unsafe/partially malformed is not served: `get` rejects the whole document (including a partial malformed record), while `list`/`size` reject a document-level failure and for a partially malformed document return the valid records with the warning. The only in-memory exception is this process's unpersisted local `set`/`delete` for that child; it is not durable and `list`/`size` still reject the unusable document. `set`/`delete` refuse to rewrite untrusted bytes and keep pending mutations for a later healthy write; a snapshot that is not a valid record is refused with `E_BINDING_INVALID_RECORD`. Repair or replace the document externally (or fix the path), then retry; the same store re-reads it and observes the repair without a Host reload. The shared subagent lifecycle's own `is unavailable` wrapper does not carry the cause — read the plugin's refusal text, log line, or diagnostics for it. |
 | **The log says member installation was `SKIPPED after an unexpected failure` or `cancelled`** | The error and teammate identity in the warning. Partial Team-tool and Soul registrations were unwound; the host stays alive, but this teammate may be running without its Soul effects. | Re-spawn the teammate. For a cancellation, retrying creation or resume is enough. For an unexpected apply failure, preserve and report the warning line if it recurs. Only a missing/unreadable Soul plan is an intentional creation veto. |
 | **A `subagent` / `subagent_fork` call is denied or the tool is missing** | The Team member is intentionally restricted. | Use `spawn_teammate` with a valid `agent_type`, or omit it to use the default Soul. Generic children are rejected at creation even if the tools are invoked indirectly. |
 | **A workflow run's `agent()` calls fail inside a Team session** | The `agent/created` fence: provider-owned children under a Team member are vetoed, so the child start fails. | Delegate with `spawn_teammate`; generic child orchestration (workflow children included) does not run inside a Team session. |
 | **`spawn_teammate` has no `agent_type`, `list_agent_souls` is missing, or `team:policy` is reported as already registered** | The Team tool surface warning in the health card; `manage_agent_souls({ action: "diagnose" })`; whether the Agent Teams bundle sits after this bundle in `dsh.profile.bundles`. | Both Team-tool rows are active. Run `manage_agent_souls({ action: "repair_team_tools" })`, enable `claimTeamToolRow`, or add `- id: tool-agent-team` / `disabled: true` to the profile patch and reload. The durable fix is installing this bundle after the Agent Teams bundle. |
-| **Config change has no effect** | The profile still has the old row; the page shows read-only active values. The two `bundledEditable` switches share hook code but not reactive display state, and polling can end with **Applied.** after six mismatches/errors. | Edit the bundle/profile row and reload the bundle; restart if the profile manager keeps the old row. Refresh/reopen stale views and verify effective flags rather than trusting **Applied.** alone. |
+| **Config change has no effect** | The profile still has the old row; the page shows read-only active values. The two `bundledEditable` switches share one state record, and a settled write refreshes the overview and clean editor views. Polling reports **Applied.** only after a read shows the written value; otherwise it reports an unverified result. | Edit the bundle/profile row and reload the bundle; restart if the profile manager keeps the old row. If the switch reports an unverified result, reload the page or reopen the view and inspect the effective flag; that status is not success. |
 
 ## Known limitations
 
@@ -1258,42 +1299,48 @@ browsers.
   The permission matrix covers inherited preset/global tools. The GUI and spawn reject a Team-tool
   name in a soul `tools` list. Naming one in an orchestrator `tools` list is harmless and ignored
   because it is non-restrictable. The Lead-only `manage_agent_souls` tool is not delegable.
-- **Packaged rename validation has a gap.** With `bundledEditable`, `manage_agent_souls` or a direct
-  save can rename a packaged Soul onto another packaged name because that path lacks the semantic
-  duplicate validator; the later bundled duplicate is silently dropped from the catalog. The GUI
-  validator catches duplicates in other rows. Use unique names and the GUI until this is fixed.
-- **GUI tool validation has an empty-catalog exception.** A live Lead with zero restrictable tools
-  skips the unknown-tool membership check; spawn remains authoritative.
 - **Soul directories are per workspace.** Workspace-relative paths resolve against the workspace
   root; a Team in another workspace sees its own resolution until `dirs` is made absolute.
 - **Cold resume fails closed without its binding.** Admission requires a pending spawn plan or a
-  durable binding; a missing, pruned, or unreadable record refuses the resume rather than running a
-  Soul-less teammate. The store is bounded to the newest 500 records per bindings document and is
-  best-effort for writes only, so
-  a pruned record blocks that resume until the teammate is re-spawned. The refusal is actionable:
-  the plugin's `send_message` tool names the Soul-specific cause, the Host log records it with code
-  `SOUL_PLAN_UNAVAILABLE`, and `list_agent_souls` exposes it under `diagnostics` with
-  `source: "admission:<name>"`. The shared subagent lifecycle's generic wrapper message is unchanged.
-  At plugin activation, a pre-existing live teammate without a plan is skipped with a warning and
-  gets no Team tools (creation already happened and cannot be vetoed).
-- **Binding-store corruption and caching can lose or hide records.** A corrupt or unsupported JSON
-  document is read as empty; a following set/delete can then write a new document containing only the
-  mutation, overwriting unrelated records. Back up `bindingsFile` before repair or mutation. Read/JSON
-  failures and misses are cached, so external repair or another process's writes may not be observed
-  until a new store/Host reload; unreadable input can be reported as a missing binding. These are
-  current storage defects, not recovery guarantees.
-- **State-path escape handling is inconsistent.** A relative `bindingsFile` with `../` can escape the
-  workspace for bindings, while the sibling preferences and orchestrator paths reject that escape.
-  Keep state inside the workspace unless deliberately using an absolute shared bindings document;
-  shared documents also share their keyspace and newest-500 retention.
+  durable binding. A missing, pruned, unreadable, corrupt, unsupported, unsafe-path, or partially
+  malformed binding refuses the resume rather than running a Soul-less teammate. The refusal carries
+  a typed reason (`missing-binding`, `unreadable-binding`, `corrupt-binding`,
+  `unsupported-binding`, `unsafe-binding-path`) in the plugin's `send_message` text, the Host
+  log line (`SOUL_PLAN_UNAVAILABLE`), and `list_agent_souls` diagnostics with
+  `source: "admission:<name>"`. Every `get`/`list`/`size` re-reads the durable document, so a
+  previously healthy plan is not served after the document becomes corrupt or unreadable; `get`
+  additionally refuses a partially malformed document. The only in-memory value served while the
+  document is unusable is this process's unpersisted local `set`/`delete` for that child, and it
+  is not durable. `list`/`size` still reject a document-level failure; for a partially malformed
+  document they return the valid records with the warning (only `get` refuses the whole document).
+  A malformed snapshot is refused with `E_BINDING_INVALID_RECORD` before it is written. The store
+  retains the newest 500 records per bindings document, so a pruned record blocks that resume until
+  the teammate is re-spawned. Repair or replace an unreadable/corrupt document externally and retry;
+  the same store re-reads it without a new process. At plugin activation, a pre-existing live
+  teammate without a plan is skipped with a warning and gets no Team tools (creation already
+  happened and cannot be vetoed).
+- **Plugin state paths follow one real-path rule.** A workspace-relative `bindingsFile`, its
+  `trash/`, restores, and its sibling state documents must resolve inside the **real** workspace
+  root. Activation rejects a lexical `../` escape, and I/O additionally resolves existing ancestors
+  so symlinked `.dsh`/`.dsh/agent-soul`, dangling links, or a document symlink cannot move state
+  outside the workspace; delete/restore refuse rather than move a soul out. An absolute
+  `bindingsFile` is intentional shared state shared by every workspace using that profile, with its
+  real state directory as the boundary, including its child-id keyspace and newest-500 retention.
+  Migrate existing relative escapes—and escaping symlinked state paths—to a root-contained relative
+  path or an absolute shared path before activation. The real-path check and the subsequent I/O are
+  not one atomic operation; a racing replacement retains the same TOCTOU class as the preferences
+  and orchestrator fences.
 - **The Team Lead's identity is reserved.** `lead` cannot be an Agent Soul name: the parser rejects
   it with `name: "lead" is reserved for the Team Lead`, so a file with that name is invalid,
   excluded from the catalog, refused by the GUI and agent tool, and rejected by spawn before any
   roster or binding change. Only the exact name is reserved; `leadership`, `lead-review`, and
   `lead-2` are valid.
-- **Delete fallback is irreversible.** If creating the trash or moving the file fails, the current
-  implementation hard-deletes the Soul and omits `trashedFile`, so no Undo is available. Back up
-  important Souls before deleting, especially packaged files with `bundledEditable`.
+- **Delete fails safe when the trash is unavailable.** If the state/trash path is unsafe (for
+  example a symlinked `.dsh`/`.dsh/agent-soul` leaving the real workspace), the trash directory
+  cannot be created, or the no-replace move fails, the source remains in place and the operation
+  returns an `unsafe-path`/`invalid-request` failure naming the reason; no `trashedFile` or Undo
+  entry is created, and there is no hard-delete opt-in. Fix the path/symlink/permissions/device
+  problem and retry. Packaged deletes still require `bundledEditable`.
 - **Session title ownership is cooperative.** The rename is an ordinary `session/title` append, not
   an exclusive lock. A title changed by another tool during activation can be overwritten by the
   activation rename; off preserves any title that is no longer exactly `orchestrator`.
@@ -1313,12 +1360,12 @@ browsers.
   `spawn_teammate` for delegation.
 - **The GUI edits one workspace at a time.** It prefers a live Session workspace and falls back to
   the deployment root; it does not merge catalogs from several workspaces.
-- **Browser recovery is narrow.** Only form-based Soul fields/sections and dialog size persist. Raw
-  source/mode, Orchestrator edits, New/Paste inputs, and Undo state are not restored. Changing the
-  associated Session root can reset a dirty Orchestrator draft without a dirty guard; save before a
-  refresh or Session-root change. Ordinary Orchestrator saves are last-write-wins rather than using
-  the Soul `expectedHash` conflict flow; packaged `bundledEditable` saves have only the specific
-  workspace-appearance 400 conflict guard.
+- **Browser recovery is narrow.** A Soul draft persists its form fields/sections, Form/Raw mode, raw
+  source, and base file hash; dialog size also persists. Orchestrator edits, New/Paste inputs, and
+  Undo state are not restored, so save those before refreshing. A Session-root change no longer
+  reloads or resets a dirty Orchestrator draft. Ordinary Orchestrator saves are last-write-wins
+  rather than using the Soul `expectedHash` conflict flow; packaged `bundledEditable` saves have only
+  the specific workspace-appearance 400 conflict guard.
 - **Model routing needs the LLM catalog** to resolve a bare model id. Without the `llm` service,
   write the full `provider/model` route; it is accepted without catalog verification, and spawn/enable
   succeeds only if deployment selection can serve it.
@@ -1337,24 +1384,15 @@ browsers.
 - **Orchestrator mode is per session and command-activated.** It is off by default. The model
   override is session-scoped, not a profile default. The previous model is restored only when it
   was captured in the same process; after a reload there is no captured original.
-- **Orchestrator queue rollback has known defects.** Static review and an in-memory handler probe
-  (not full real-runtime integration) established that a first `/orchestrate <task>` with a route
-  override, queue failure, and failed previous-model restore can leave live mode active while the
-  durable log reads off and report only the queue failure. A separate static finding shows that an
-  already-active queue rollback can log captured-model restore failure and still return success
-  with old doctrine mixed with the new route. Retry `/orchestrate off`, inspect
-  the Host log, and reload the Host/reopen the Lead when needed; verify the effective doctrine, route,
-  and mode before continuing. These are defects to report to code owners, not desirable guarantees.
+- **Orchestrator queue-failure recovery is best-effort.** A queue failure after a first enable, or
+  while a mode was already active, reports the observed live state (reverted, kept, explicit
+  fallback, inactive, or unconfirmed) and relies on `/orchestrate off` to retry a captured model
+  restore. The handler-level fault tests use an in-memory Agent double, not a full real Host
+  lifecycle, so a compound failure can still leave live and durable state disagreeing; the command
+  says so and names the off retry. Inspect the effective mode, doctrine, and route before continuing.
 - **Orchestrator doctrine is prompt-level.** Plan-first, gating, retry counts, and pause-on-fatal
   are instructions the model follows with the task board and Team tools; there is no automatic
   retry driver. Model/tool overrides are enforced by the Harness.
-- **Bundled doctrine text has known defects.** The executable `defaults/orchestrator.md` is not edited
-  by this documentation. Its line 25 describes route declarations although the bundled frontmatter
-  declares none (the actual route inherits the Lead); line 105 names a nonexistent `Failed` board
-  state (supported states are `pending`, `in_progress`, `completed`, and `deleted`); and line 170
-  unconditionally requests gate correction despite `advisory`/`off` and the selected retry budget.
-  These are reported prompt defects, not intended behavior. Use the actual supported states and the
-  selected `gate-mode`/`max-retries` values.
 - **Orchestrator tool names are best-effort.** A name that is not currently restrictable (including
   a Team tool) is skipped with a warning; it does not fail the mode. A failure of the tool
   restriction service itself aborts the enable and is reported as a failed enable (see **Turn it on
@@ -1364,8 +1402,15 @@ browsers.
 - **Multiple live Sessions** can coexist. Command status uses the Lead whose Session directory
   matches the workspace being edited, falling back to the first Lead; a mismatch can still make a
   check ambiguous.
-- **No automated visual regression.** No automated check renders the browser page: native
-  interaction and layout must be checked in a real browser, and `client.js` is not rendered in CI.
+- **Localization covers UI chrome, not raw Host content.** Eight dictionaries localize plugin
+  controls and statuses; Host diagnostics/messages, file content, and raw error text can appear in
+  their source language. That boundary is intentional, not a rendered-browser claim.
+- **Verification has a fixed scope.** The focused suites and the keyless harness cover module and
+  host-side behavior; no automated check renders the browser page (native interaction and layout
+  must be checked in a real browser, and `client.js` is not rendered in CI), activates Orchestrator
+  mode end to end, uses a real provider/model, or runs on other OS/Node versions. Baseline
+  remediation needs an archived `QAS_BASELINE_DIR`, and the full DSH suite is outside this package.
+  See [`smoke/README.md`](smoke/README.md).
 
 ## Development and testing
 
@@ -1384,34 +1429,34 @@ that exists is syntax checking, the focused keyless module suites under `smoke/`
 `node --test`; per-suite coverage and assertion counts live in [`smoke/README.md`](smoke/README.md),
 the testing authority), and the end-to-end smoke harness.
 
-**Before running the end-to-end command, follow the [disposable-copy instructions](smoke/README.md).** Its write-refusal probes
-target the real packaged `agents/generalist.md` and restore captured content in `finally`; concurrent
-legitimate edits can be overwritten, and a crash after an unexpected write can leave the package
-mutated. The reported 41/41 result was intentionally run from an isolated copy.
+The end-to-end harness is safe to run directly from this package tree: its document write-refusal
+probes run against a run-owned package copy, and the real `agents/generalist.md` is only snapshotted
+before and after and never restored. A concurrent legitimate edit is preserved and reported. A
+disposable package copy remains optional; see [`smoke/README.md`](smoke/README.md).
 
 ```sh
 node --check index.js
 for f in lib/*.js; do node --check "$f" || exit 1; done
 node --check client.js
 
-# focused module suites (keyless; temporary directories only)
-node --test smoke/remediation-bindings.test.mjs smoke/remediation-admin.test.mjs
-node --test smoke/bundled-editable.test.mjs
-node --test smoke/config-toggle.test.mjs
+# focused module suites (keyless; temporary directories only), 81 tests
+node --test smoke/
 
-# end-to-end harness
+# end-to-end harness (safe directly; 50 checks)
 node smoke/run-smoke.mjs
 ```
 
-End-to-end verification boots a real `dsh --profile headless` process from a DSH source checkout
+On 2026-11-08, `node --test smoke/` passed **81/81** focused tests (the storage suite grew to 18
+cases). End-to-end verification boots a real `dsh --profile headless` process from a DSH source checkout
 with a temporary `DSH_HOME`, a scripted LLM adapter, and this bundle selected through its real
 manifest and `cordis.patch.yml`. It asserts the workspace-independent bundled defaults (an empty
 workspace sees the packaged catalog and doctrine, and `bundled: false` restores strict
 workspace-only behavior), the Lead catalog, `spawn_teammate({ agent_type })`, persona composition,
-exact tool matrices, model routing, user-invocable slash command execution, durable bindings, and
-symlinked-workspace and packaged-catalog write-fence refusals. The child environment is allowlisted
-by construction to exclude inherited credentials, proxies, and loader flags, but the fixture does
-not deterministically seed canaries; this is not a deterministic inherited-canary test.
+exact tool matrices, model routing, user-invocable slash command execution, durable bindings,
+symlinked-workspace and isolated packaged-catalog write-fence refusals, seeded credential/proxy/
+loader canaries removed from the child environment, and an explicit `/orchestrate` registration
+assertion. The child environment is allowlisted by construction, so the seeded canaries are a real
+removal proof for those variables (not proof about every possible inherited secret).
 
 ```sh
 node smoke/run-smoke.mjs
@@ -1419,14 +1464,23 @@ node smoke/run-smoke.mjs
 DSH_CHECKOUT=/path/to/deepseek-harness node smoke/run-smoke.mjs
 ```
 
-The harness runs **41 checks** and passed **41/41** on 2026-11-08 — a dated point-in-time result
-from an isolated package copy that can be re-run from a disposable copy with `node smoke/run-smoke.mjs` — starting with
+The harness runs **50 checks** and passed **50/50** on 2026-11-08 — a dated point-in-time result on
+macOS arm64 with Node 26.13.0, re-runnable directly with `node smoke/run-smoke.mjs` — starting with
 a composed fresh profile whose `--dump-config` proves this bundle's own patch disables the shipped
-`tool-agent-team` row. The observed command list includes `/orchestrate`, but its absence would not
-fail the command assertion; the mode is not activated end-to-end. The bundled doctrine resolution
-that makes it available in any workspace is verified directly by the harness. The default checkout
-path is `/Users/zosyn/LLM/deepseek-harness`. The fixtures are designed to use no credentials or
-network access; network syscalls were not independently monitored. See
+`tool-agent-team` row. The command list is asserted: a malformed or missing `/orchestrate`
+registration now fails the harness, though the mode itself is still not activated end-to-end. The
+bundled doctrine resolution that makes it available in any workspace is verified directly by the
+harness. The default checkout path is `/Users/zosyn/LLM/deepseek-harness`. The fixtures are designed
+to use no credentials or network access; network syscalls were not independently monitored. See
+[`smoke/README.md`](smoke/README.md).
+
+The focused remediation runtime is separate from the smoke harness. On 2026-11-08,
+`node smoke/remediation-runtime.mjs --target candidate --only all` passed **169/169** with **2/2
+suites** on both a canonical and a symlink-prefixed disposable `QAS_RUN_ROOT`. Its `summary.json`
+reports `status`, `complete`, `incompleteSuites`, `unexecutedSuites`, `runnerChecks`,
+`adapterAssertions`, suite counts, and per-check rows, so an interrupted run cannot read as a full
+pass; readiness barriers are published atomically and readers retry a partial document. The baseline
+mode still requires an archived `QAS_BASELINE_DIR` and is not run. See
 [`smoke/README.md`](smoke/README.md).
 
 For a Host change: reload the bundle from the profile (or restart the Harness). For a browser change,
@@ -1445,7 +1499,7 @@ refresh is always safe and reloads the dictionaries and client module.
 | `<workspace>/.dsh/agent-soul/bindings.json` | Durable teammate bindings (plugin-owned runtime state, created on first spawn; gitignored in this repository). |
 | `<workspace>/.dsh/agent-soul/preferences.json` | Plugin-owned default-Soul selection (created on first change). |
 | `<workspace>/.dsh/agent-soul/orchestrator.md` | Optional workspace Lead doctrine; overrides the bundled default. |
-| `<workspace>/.dsh/agent-soul/trash/` | Deleted files when the trash move succeeds (created on first delete); a failed move is an irreversible hard delete with no Undo. |
+| `<workspace>/.dsh/agent-soul/trash/` | Deleted files moved by a successful trash move (created on first delete); a failed move leaves the source in place and reports the error, with no Undo. |
 | [`locale/en.json`](locale/en.json) | Package locale metadata for the Settings entry (English). |
 | [`locale/zh.json`](locale/zh.json) | Package locale metadata for the Settings entry (Chinese); the eight in-page dictionaries live in `client.js`. |
 | [`icon.svg`](icon.svg) | Bundle icon shown by the profile/bundle listings. |
@@ -1459,7 +1513,7 @@ refresh is always safe and reloads the dictionaries and client module.
 | [`lib/commands.js`](lib/commands.js) | User-invocable slash commands. |
 | [`lib/model.js`](lib/model.js) | Model-route resolution. |
 | [`lib/composition.js`](lib/composition.js) | Team-tool row detection, repair, and opt-in automatic claim. |
-| [`lib/bindings.js`](lib/bindings.js) | Durable binding store. |
+| [`lib/bindings.js`](lib/bindings.js) | Typed durable binding store (fail-closed reads, transactional refusal of untrusted documents). |
 | [`lib/admin.js`](lib/admin.js) | Document layer: split/compose/validate, scan, path safety, trash. |
 | [`lib/gui-host.js`](lib/gui-host.js) | Authenticated Host JSON routes and overview. |
 | [`lib/orchestrator.js`](lib/orchestrator.js) | Orchestrator document, `/orchestrate`, mode runtime. |
@@ -1467,7 +1521,7 @@ refresh is always safe and reloads the dictionaries and client module.
 | [`lib/admin-tool.js`](lib/admin-tool.js) | `manage_agent_souls` Lead tool. |
 | [`client.js`](client.js) | Settings → Agent Soul browser artifact. |
 | [`cordis.patch.yml`](cordis.patch.yml) | Profile patch and row config. |
-| [`smoke/`](smoke/) | End-to-end harness and scripted adapter. |
+| [`smoke/`](smoke/) | Keyless end-to-end harness, focused `node:test` suites, and scripted adapters. |
 | [`docs/INTERNALS.md`](docs/INTERNALS.md) | Module architecture and maintainer invariants. |
 | [`docs/SOUL-OPTIONS.md`](docs/SOUL-OPTIONS.md) | Control-by-control reference for every editable option in both editors. |
 | [`docs/GUI-INTERNALS.md`](docs/GUI-INTERNALS.md) | GUI/API contract (routes, payloads, browser artifact rules). |

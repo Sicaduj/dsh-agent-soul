@@ -2,7 +2,7 @@
 /** Standalone focused real headless CLI regressions; all mutable state is run-owned. */
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, realpath, symlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
@@ -10,35 +10,25 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const smokeDir = dirname(fileURLToPath(import.meta.url))
 const candidate = resolve(smokeDir, '..')
-const runRoot = process.env.QAS_RUN_ROOT === undefined
-  ? await mkdtemp(join(tmpdir(), 'agent-soul-remediation-'))
-  : resolve(process.env.QAS_RUN_ROOT)
 const option = (name, fallback) => process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : fallback
-const target = option('--target', 'candidate')
-const only = option('--only', 'all')
-if (!['baseline', 'candidate'].includes(target) || !['all', 'concurrency', 'read'].includes(only)) throw new Error('use --target baseline|candidate --only all|concurrency|read')
-if (target === 'baseline' && process.env.QAS_BASELINE_DIR === undefined) {
-  throw new Error('QAS_BASELINE_DIR must identify an archived original plugin; never use the live installation')
-}
-const pluginDir = target === 'baseline' ? resolve(process.env.QAS_BASELINE_DIR) : candidate
-const checkout = resolve(process.env.DSH_CHECKOUT ?? '/Users/zosyn/LLM/deepseek-harness')
-const tsxLoader = pathToFileURL(createRequire(join(checkout, 'package.json')).resolve('tsx')).href
-const cliBin = join(checkout, 'apps/cli/src/bin.ts')
-const adapterUrl = pathToFileURL(join(smokeDir, 'remediation-runtime-adapter.ts')).href
-const workBase = join(runRoot, 'runtime-focused')
-const evidenceBase = join(runRoot, 'evidence', 'runtime-focused')
-await mkdir(workBase, { recursive: true }); await mkdir(evidenceBase, { recursive: true })
-const work = await mkdtemp(join(workBase, `${target}-${only}-`))
-const evidence = join(evidenceBase, basename(work))
-await mkdir(evidence)
-const startedAt = new Date().toISOString()
-const inputDigests = Object.fromEntries(await Promise.all([
-  join(pluginDir, 'index.js'), join(pluginDir, 'lib', 'bindings.js'), join(pluginDir, 'lib', 'admin-tool.js'),
-  fileURLToPath(import.meta.url), join(smokeDir, 'remediation-runtime-adapter.ts'),
-].map(async path => [path, await digest(path)])))
 const checks = []
 const processes = []
 const active = new Set()
+let target
+let only
+let pluginDir
+let checkout
+let tsxLoader
+let cliBin
+let adapterUrl
+let runRootRequested
+let runRoot
+let workBase
+let evidenceBase
+let work
+let evidence
+let startedAt
+let inputDigests
 const quote = value => `'${String(value).replaceAll("'", "'\\''")}'`
 const commandText = (args, cwd) => `(cd ${quote(cwd)} && ${[process.execPath, ...args].map(quote).join(' ')})`
 async function json(path, value) { await writeFile(path, JSON.stringify(value, null, 2) + '\n') }
@@ -145,15 +135,49 @@ async function soul(workspace, label, version) {
   await writeFile(join(workspace, '.dsh', 'agents', 'qas-shared.md'),
     `---\nname: qas-shared\ndescription: run-owned ${label} V${version}\ntools:\n  - ${tool}\nmodel: ${model}\ncontext: fresh\nuser-invocable: false\n---\n\n## Role Definition\n\nQAS_ROOT_${label}_V${version}\n\n## Hard Rules\n\n- Deterministic no-provider probe only.\n\n## Output Format\n\nOne completion.\n`)
 }
+/**
+ * Read one JSON readiness observation without treating an in-flight write as a
+ * failure. A missing file is transient (ENOENT), and a non-atomic publisher can
+ * expose a truncated document before its final bytes land, so an empty or
+ * partial file is retried until the waiter's deadline instead of aborting the
+ * whole run with a JSON SyntaxError. Unexpected read errors still propagate.
+ *
+ * @param {string} path
+ * @returns {Promise<object | null>} the parsed observation, or null while not ready.
+ */
+export async function readReadyObservation(path) {
+  let text
+  try {
+    text = await readFile(path, 'utf8')
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null
+    throw error
+  }
+  if (text.trim() === '') return null
+  try {
+    return JSON.parse(text)
+  } catch (error) {
+    if (error instanceof SyntaxError) return null
+    throw error
+  }
+}
 async function waitFiles(paths, running) {
   const until = Date.now() + 100000
   while (Date.now() < until) {
-    const observations = await Promise.all(paths.map(async path => { try { return JSON.parse(await readFile(path, 'utf8')) } catch (error) { if (error.code === 'ENOENT') return null; throw error } }))
-    if (observations.every(Boolean)) return observations
-    if (running.some(r => r.child.exitCode !== null || r.child.signalCode !== null)) throw new Error('CLI exited before both real stores primed; inspect process evidence')
+    const read = () => Promise.all(paths.map(path => readReadyObservation(path)))
+    const observations = await read()
+    if (observations.every(observation => observation !== null)) return observations
+    if (running.some(r => r.child.exitCode !== null || r.child.signalCode !== null)) {
+      // Publish-then-exit races are safe: the readiness document is complete
+      // before the publisher exits, so re-read once before treating the child
+      // exit as a failure.
+      const settled = await read()
+      if (settled.every(observation => observation !== null)) return settled
+      throw new Error('CLI exited before both real stores primed; inspect process evidence')
+    }
     await new Promise(resolve => setTimeout(resolve, 20))
   }
-  throw new Error('timed out waiting for both primed CLI processes')
+  throw new Error('timed out waiting for both primed CLI processes; readiness observations stayed missing or incomplete')
 }
 async function modelLogProof(config, childId, expectedModel, phase) {
   const files = await readdir(join(config.home, 'sessions'), { recursive: true })
@@ -251,27 +275,124 @@ async function readVariants() {
     check(`F001.${label}.digests-identical`, before, after)
   }
 }
-let error
-try {
-  await mkdir(join(work, 'tmp'))
-  console.log(`WORK=${work}\nEVIDENCE=${evidence}`)
-  if (only === 'all' || only === 'concurrency') await concurrency()
-  if (only === 'all' || only === 'read') await readVariants()
-} catch (caught) {
-  error = { name: caught.name, message: caught.message, stack: caught.stack }
-  console.error(caught)
-  process.exitCode = 1
-} finally {
-  for (const child of active) child.kill('SIGKILL')
-  // Observe completion of run-owned children even after a failed barrier/driver check.
-  while (active.size) await new Promise(resolve => setTimeout(resolve, 10))
-  const all = [...checks]
-  for (const file of (await readdir(evidence)).filter(f => f.endsWith('.jsonl'))) all.push(...(await rows(join(evidence, file))).filter(r => r.kind === 'assertion'))
-  await json(join(evidence, 'summary.json'), { target, only, startedAt, finishedAt: new Date().toISOString(), work, evidence, pluginDir, checkout, inputDigests,
-    runnerCommand: commandText([fileURLToPath(import.meta.url), ...process.argv.slice(2)], process.cwd()),
-    counts: all.reduce((counts, row) => ({ ...counts, [row.verdict]: (counts[row.verdict] ?? 0) + 1 }), {}),
-    error: error ?? null, processes: processes.map(({ stdout, stderr, ...p }) => p), checks,
-    limits: ['Scripted adapter: no real-model quality claim or paid-provider I/O.', 'CLI tools executor + tools/result typed pipeline, not rendered browser evidence.',
-      'Builtin mutation monitoring is scoped to get_orchestrator execution; SHA-256 trees cover workspace and bundled defaults before/after each CLI.'] })
-  console.log(`SUMMARY=${join(evidence, 'summary.json')}`)
+
+/**
+ * Create and canonicalize the run root before any expected workspace path is
+ * derived from it. A symlinked /tmp-style prefix must produce the same
+ * canonical paths the CLI reports from its own `getcwd()`, so exact path
+ * assertions pass for both canonical and symlink-prefixed roots.
+ *
+ * @param {string} path - requested run root (created when absent).
+ * @returns {Promise<string>} canonical absolute run root.
+ */
+export async function canonicalizeRunRoot(path) {
+  const requested = resolve(path)
+  await mkdir(requested, { recursive: true })
+  return realpath(requested)
 }
+
+/**
+ * Derive the honest outcome of one remediation invocation.
+ *
+ * A failed run stops at the first failing assertion, so checks after that point
+ * never execute. Reporting must not present the executed subset as a complete
+ * pass: a suite is only complete after its function returns, and a failure
+ * leaves the current suite incomplete plus later suites unexecuted.
+ *
+ * @param {{ error?: object | null, plannedSuites: string[], completedSuites: string[], currentSuite?: string | null }} state
+ * @returns {{ status: 'PASS' | 'FAIL', complete: boolean, incompleteSuites: string[], unexecutedSuites: string[] }}
+ */
+export function invocationStatus({ error = null, plannedSuites, completedSuites, currentSuite = null }) {
+  const incompleteSuites = currentSuite === null ? [] : [currentSuite]
+  const unexecutedSuites = plannedSuites.filter(suite => !completedSuites.includes(suite) && !incompleteSuites.includes(suite))
+  const status = error === null && incompleteSuites.length === 0 && unexecutedSuites.length === 0 ? 'PASS' : 'FAIL'
+  return { status, complete: status === 'PASS', incompleteSuites, unexecutedSuites }
+}
+
+/** Run the selected focused suites in this process. */
+export async function main() {
+  target = option('--target', 'candidate')
+  only = option('--only', 'all')
+  if (!['baseline', 'candidate'].includes(target) || !['all', 'concurrency', 'read'].includes(only)) throw new Error('use --target baseline|candidate --only all|concurrency|read')
+  if (target === 'baseline' && process.env.QAS_BASELINE_DIR === undefined) {
+    throw new Error('QAS_BASELINE_DIR must identify an archived original plugin; never use the live installation')
+  }
+  pluginDir = target === 'baseline' ? resolve(process.env.QAS_BASELINE_DIR) : candidate
+  checkout = resolve(process.env.DSH_CHECKOUT ?? '/Users/zosyn/LLM/deepseek-harness')
+  tsxLoader = pathToFileURL(createRequire(join(checkout, 'package.json')).resolve('tsx')).href
+  cliBin = join(checkout, 'apps/cli/src/bin.ts')
+  adapterUrl = pathToFileURL(join(smokeDir, 'remediation-runtime-adapter.ts')).href
+  runRootRequested = process.env.QAS_RUN_ROOT === undefined
+    ? await mkdtemp(join(tmpdir(), 'agent-soul-remediation-'))
+    : resolve(process.env.QAS_RUN_ROOT)
+  runRoot = await canonicalizeRunRoot(runRootRequested)
+  const plannedSuites = only === 'all' ? ['concurrency', 'read'] : [only]
+  const completedSuites = []
+  let currentSuite = null
+  workBase = join(runRoot, 'runtime-focused')
+  evidenceBase = join(runRoot, 'evidence', 'runtime-focused')
+  await mkdir(workBase, { recursive: true }); await mkdir(evidenceBase, { recursive: true })
+  work = await mkdtemp(join(workBase, `${target}-${only}-`))
+  evidence = join(evidenceBase, basename(work))
+  await mkdir(evidence)
+  startedAt = new Date().toISOString()
+  inputDigests = Object.fromEntries(await Promise.all([
+    join(pluginDir, 'index.js'), join(pluginDir, 'lib', 'bindings.js'), join(pluginDir, 'lib', 'admin-tool.js'),
+    fileURLToPath(import.meta.url), join(smokeDir, 'remediation-runtime-adapter.ts'),
+  ].map(async path => [path, await digest(path)])))
+  let error = null
+  try {
+    await mkdir(join(work, 'tmp'))
+    console.log(`WORK=${work}\nEVIDENCE=${evidence}`)
+    if (only === 'all' || only === 'concurrency') {
+      currentSuite = 'concurrency'
+      await concurrency()
+      completedSuites.push('concurrency')
+      currentSuite = null
+    }
+    if (only === 'all' || only === 'read') {
+      currentSuite = 'read'
+      await readVariants()
+      completedSuites.push('read')
+      currentSuite = null
+    }
+  } catch (caught) {
+    error = { name: caught.name, message: caught.message, stack: caught.stack }
+    console.error(caught)
+    process.exitCode = 1
+  } finally {
+    for (const child of active) child.kill('SIGKILL')
+    // Observe completion of run-owned children even after a failed barrier/driver check.
+    while (active.size) await new Promise(resolve => setTimeout(resolve, 10))
+    const all = [...checks]
+    for (const file of (await readdir(evidence)).filter(f => f.endsWith('.jsonl'))) all.push(...(await rows(join(evidence, file))).filter(r => r.kind === 'assertion'))
+    const coverage = invocationStatus({ error, plannedSuites, completedSuites, currentSuite })
+    await json(join(evidence, 'summary.json'), { target, only, ...coverage,
+      runRoot: { requested: runRootRequested, canonical: runRoot },
+      plannedSuites, completedSuites, startedAt, finishedAt: new Date().toISOString(), work, evidence, pluginDir, checkout, inputDigests,
+      runnerCommand: commandText([fileURLToPath(import.meta.url), ...process.argv.slice(2)], process.cwd()),
+      counts: all.reduce((counts, row) => ({ ...counts, [row.verdict]: (counts[row.verdict] ?? 0) + 1 }), {}),
+      runnerChecks: checks.length, adapterAssertions: all.length - checks.length,
+      error: error ?? null, processes: processes.map(({ stdout, stderr, ...p }) => p), checks,
+      limits: ['Scripted adapter: no real-model quality claim or paid-provider I/O.', 'CLI tools executor + tools/result typed pipeline, not rendered browser evidence.',
+        'Builtin mutation monitoring is scoped to get_orchestrator execution; SHA-256 trees cover workspace and bundled defaults before/after each CLI.'] })
+    console.log(`SUMMARY=${join(evidence, 'summary.json')}`)
+    console.log(`RESULT=${coverage.status} CHECKS=${all.length} SUITES=${completedSuites.length}/${plannedSuites.length}${error === null ? '' : ` ERROR=${error.message}`}`)
+  }
+}
+
+/** Whether this module is the process entry point (import-safe for tests). */
+async function isDirectInvocation() {
+  if (process.argv[1] === undefined) return false
+  try {
+    const [entry, self] = await Promise.all([
+      realpath(resolve(process.argv[1])),
+      realpath(fileURLToPath(import.meta.url)),
+    ])
+    return entry === self
+  } catch {
+    return false
+  }
+}
+
+if (await isDirectInvocation()) await main()

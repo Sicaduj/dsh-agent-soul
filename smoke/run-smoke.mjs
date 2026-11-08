@@ -9,6 +9,13 @@
  * exits. The runner asserts on those observations, on the durable binding
  * document, and on the child session's recorded model selection.
  *
+ * The packaged-document write-refusal probes run against a throwaway copy of
+ * this package (imported through its own file URL), so the real
+ * `agents/generalist.md` is never passed to a write API. Its digest is captured
+ * before and after the probes only to report whether the run-owned bytes stayed
+ * put; captured bytes are never restored, which is what made the former
+ * `finally` fallback able to overwrite a concurrent legitimate edit.
+ *
  * This is a development verification harness, not shipped plugin code. It needs
  * the DSH source checkout (tsx + TypeScript paths), because the run boots the
  * CLI from source exactly like the repository's own loader smoke tests.
@@ -19,7 +26,8 @@
  */
 
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -27,21 +35,20 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { expectedSoulTools } from './contract.mjs'
 import { BUNDLED_SOULS_DIR, createCatalog } from '../lib/soul.js'
 import { readOrchestrator } from '../lib/orchestrator.js'
-import {
-  createDocument,
-  deleteDocument,
-  duplicateDocument,
-  listDocuments,
-  readDocument,
-  saveDocumentSource,
-} from '../lib/admin.js'
 
 const smokeDir = dirname(fileURLToPath(import.meta.url))
 const pluginDir = resolve(smokeDir, '..')
 const checkout = resolve(process.env.DSH_CHECKOUT ?? '/Users/zosyn/LLM/deepseek-harness')
 const cliBin = join(checkout, 'apps/cli/src/bin.ts')
 const tsconfigPath = join(checkout, 'tsconfig.json')
-const tsxLoader = pathToFileURL(createRequire(join(checkout, 'package.json')).resolve('tsx')).href
+/** `tsx` is only needed for a real CLI run, so importing this module stays cheap. */
+let cachedTsxLoader
+function tsxLoaderUrl() {
+  if (cachedTsxLoader === undefined) {
+    cachedTsxLoader = pathToFileURL(createRequire(join(checkout, 'package.json')).resolve('tsx')).href
+  }
+  return cachedTsxLoader
+}
 
 /** Captured dsh output, dumped when a later assertion fails. */
 const transcript = { stdout: '', stderr: '' }
@@ -185,8 +192,46 @@ async function findRoutedSession(sessionsDir) {
   return undefined
 }
 
+/**
+ * Seed removable credential, proxy, and loader canaries into the runner's own
+ * environment. The child environment is allowlisted by construction, so this
+ * makes the adapter's scrub observation a real removal proof instead of a
+ * vacuous absence check. Returns the marker values and a restore callback.
+ *
+ * @returns {{ markers: { credential: string, proxy: string, loader: string }, restore: () => void }}
+ */
+export function seedEnvironmentCanaries() {
+  const nonce = `${process.pid}-${Date.now().toString(36)}`
+  const markers = Object.freeze({
+    credential: `smoke-canary-credential-${nonce}`,
+    proxy: `http://127.0.0.1:9/smoke-canary-proxy-${nonce}`,
+    loader: `smoke-canary-loader-${nonce}`,
+  })
+  const keys = [
+    'SMOKE_CANARY_CREDENTIAL', 'SMOKE_CANARY_SECRET', 'DEEPSEEK_API_KEY',
+    'HTTP_PROXY', 'HTTPS_PROXY', 'NODE_OPTIONS', 'DYLD_INSERT_LIBRARIES',
+  ]
+  const previous = new Map(keys.map(key => [key, process.env[key]]))
+  process.env.SMOKE_CANARY_CREDENTIAL = markers.credential
+  process.env.SMOKE_CANARY_SECRET = markers.credential
+  process.env.DEEPSEEK_API_KEY = markers.credential
+  process.env.HTTP_PROXY = markers.proxy
+  process.env.HTTPS_PROXY = markers.proxy
+  process.env.NODE_OPTIONS = `--require=/nonexistent/${markers.loader}.cjs`
+  process.env.DYLD_INSERT_LIBRARIES = `/nonexistent/${markers.loader}.dylib`
+  return {
+    markers,
+    restore() {
+      for (const [key, value] of previous) {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+    },
+  }
+}
+
 /** Build a credential-free child environment without inherited loaders or proxies. */
-function childEnvironment(home, observationsPath) {
+export function childEnvironment(home, observationsPath) {
   const allowed = [
     'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'TEMP', 'TMP',
     'USERPROFILE', 'SystemRoot', 'WINDIR', 'ComSpec', 'PATHEXT', 'LANG', 'LC_ALL',
@@ -213,7 +258,7 @@ function childEnvironment(home, observationsPath) {
  * @returns {Promise<{ exitCode: number, stdout: string, stderr: string }>}
  */
 async function runCli(home, root, args) {
-  const child = spawn(process.execPath, ['--import', tsxLoader, cliBin, ...args], {
+  const child = spawn(process.execPath, ['--import', tsxLoaderUrl(), cliBin, ...args], {
     cwd: root,
     env: childEnvironment(home, join(home, 'dump-observations.jsonl')),
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -230,6 +275,241 @@ async function runCli(home, root, args) {
   return { exitCode, stdout, stderr }
 }
 
+/** Unique marker embedded in every attempted in-place package write. */
+const PROBE_WRITE_CANARY = 'SMOKE_REFUSED_WRITE_CANARY'
+
+/**
+ * Read one file's bytes, digest, and text in a single snapshot.
+ * @param {string} path
+ * @returns {Promise<{ path: string, hash: string, text: string }>}
+ */
+async function fileState(path) {
+  const bytes = await readFile(path)
+  return { path, hash: createHash('sha256').update(bytes).digest('hex'), text: bytes.toString('utf8') }
+}
+
+/**
+ * Copy the package modules needed by the document layer into a run-owned tree.
+ * The copies are loaded by file URL so `BUNDLED_SOULS_DIR` resolves inside the
+ * copy; the source package is only ever read.
+ * @param {string} sourcePackage
+ * @param {string} destination
+ * @returns {Promise<void>}
+ */
+async function copyPackageForProbes(sourcePackage, destination) {
+  for (const entry of ['lib', 'agents', 'defaults']) {
+    await cp(join(sourcePackage, entry), join(destination, entry), { recursive: true })
+  }
+  for (const entry of ['index.js', 'package.json']) {
+    await cp(join(sourcePackage, entry), join(destination, entry))
+  }
+}
+
+/**
+ * Exercise the packaged-document write fence against an isolated package copy.
+ *
+ * No real package path reaches `createDocument`/`duplicateDocument`/
+ * `saveDocumentSource`/`deleteDocument`; the imported copy owns its own
+ * `BUNDLED_SOULS_DIR`. The real file is snapshotted around the probes and never
+ * restored: a concurrent external edit is reported and preserved instead.
+ *
+ * @param {{ root: string, check?: (name: string, condition: unknown, detail?: string) => void,
+ *   sourcePackage?: string, realBundledFile?: string,
+ *   afterProbes?: (context: { isolatedPackage: string, isolatedBundledFile: string }) => Promise<void> | void }} options
+ * @returns {Promise<object>} safety evidence for the caller and focused tests.
+ */
+export async function probeBundledDocumentSafety({
+  root,
+  check: report = check,
+  sourcePackage = pluginDir,
+  realBundledFile = join(BUNDLED_SOULS_DIR, 'generalist.md'),
+  afterProbes,
+} = {}) {
+  const probeRoot = join(root, 'module-probes')
+  const isolatedPackage = join(probeRoot, 'isolated-package')
+  const isolatedBundledDir = join(isolatedPackage, 'agents')
+  const isolatedBundledFile = join(isolatedBundledDir, 'generalist.md')
+  const realBefore = await fileState(realBundledFile)
+  await mkdir(probeRoot, { recursive: true })
+  await copyPackageForProbes(sourcePackage, isolatedPackage)
+  const isolatedAdmin = await import(pathToFileURL(join(isolatedPackage, 'lib', 'admin.js')).href)
+  const isolatedSource = await readFile(isolatedBundledFile, 'utf8')
+  const mutatedSource = `${isolatedSource}\n${PROBE_WRITE_CANARY}\n`
+
+  // The implicit soul-directory creation must not follow a symlinked ancestor.
+  const escapeRoot = join(probeRoot, 'escape')
+  const escapeWorkspace = join(escapeRoot, 'workspace')
+  const escapeOutside = join(escapeRoot, 'outside')
+  await mkdir(escapeWorkspace, { recursive: true })
+  await mkdir(escapeOutside, { recursive: true })
+  await symlink(escapeOutside, join(escapeWorkspace, '.dsh'), process.platform === 'win32' ? 'junction' : 'dir')
+  const escapeConfig = { dirs: ['.dsh/agents'], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
+  const escapedCreate = await isolatedAdmin.createDocument({ config: escapeConfig, root: escapeWorkspace, name: 'escaped-soul' })
+  report(
+    'symlinked .dsh cannot auto-create a soul outside the workspace',
+    escapedCreate.ok === false,
+    escapedCreate.ok ? escapedCreate.document.file : escapedCreate.code,
+  )
+  report(
+    'refused auto-create leaves the outside directory empty',
+    (await readdir(escapeOutside)).length === 0,
+    JSON.stringify(await readdir(escapeOutside)),
+  )
+  const escapedDuplicate = await isolatedAdmin.duplicateDocument({
+    config: escapeConfig,
+    root: escapeWorkspace,
+    file: isolatedBundledFile,
+    name: 'escaped-copy',
+  })
+  report(
+    'symlinked .dsh cannot duplicate a bundled soul outside the workspace',
+    escapedDuplicate.ok === false,
+    escapedDuplicate.ok ? escapedDuplicate.document.file : escapedDuplicate.code,
+  )
+  report(
+    'refused duplicate leaves the outside directory empty',
+    (await readdir(escapeOutside)).length === 0,
+    JSON.stringify(await readdir(escapeOutside)),
+  )
+
+  // Every alias spelling of the isolated packaged directory keeps the bundled
+  // identity and refuses in-place writes/deletes.
+  const aliasWorkspace = join(probeRoot, 'alias-workspace')
+  await mkdir(aliasWorkspace, { recursive: true })
+  await symlink(isolatedBundledDir, join(aliasWorkspace, 'agents-alias'), process.platform === 'win32' ? 'junction' : 'dir')
+  const absoluteConfig = { dirs: [isolatedBundledDir], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
+  const symlinkConfig = { dirs: ['agents-alias'], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
+  const directSave = await isolatedAdmin.saveDocumentSource({
+    config: absoluteConfig,
+    root: aliasWorkspace,
+    file: isolatedBundledFile,
+    source: mutatedSource,
+  })
+  report(
+    'a configured absolute alias of the packaged directory refuses saveDocumentSource',
+    directSave.ok === false,
+    directSave.ok ? directSave.file : directSave.code,
+  )
+  const directDelete = await isolatedAdmin.deleteDocument({ config: absoluteConfig, root: aliasWorkspace, file: isolatedBundledFile })
+  report(
+    'a configured absolute alias of the packaged directory refuses deleteDocument',
+    directDelete.ok === false,
+    directDelete.ok ? directDelete.file : directDelete.code,
+  )
+  const aliasFile = join(aliasWorkspace, 'agents-alias', 'generalist.md')
+  const symlinkSave = await isolatedAdmin.saveDocumentSource({
+    config: symlinkConfig,
+    root: aliasWorkspace,
+    file: aliasFile,
+    source: mutatedSource,
+  })
+  report(
+    'a symlink alias of the packaged directory refuses saveDocumentSource',
+    symlinkSave.ok === false,
+    symlinkSave.ok ? symlinkSave.file : symlinkSave.code,
+  )
+  const symlinkDelete = await isolatedAdmin.deleteDocument({ config: symlinkConfig, root: aliasWorkspace, file: aliasFile })
+  report(
+    'a symlink alias of the packaged directory refuses deleteDocument',
+    symlinkDelete.ok === false,
+    symlinkDelete.ok ? symlinkDelete.file : symlinkDelete.code,
+  )
+  const packagedAfterWrites = await fileState(isolatedBundledFile)
+  report(
+    'refused bundled writes leave the isolated packaged file unchanged',
+    packagedAfterWrites.text === isolatedSource,
+  )
+  report(
+    'refused bundled writes never land, even in the isolated copy',
+    packagedAfterWrites.text.includes(PROBE_WRITE_CANARY) === false,
+  )
+  const aliasListing = await isolatedAdmin.listDocuments({ config: symlinkConfig, root: aliasWorkspace })
+  const aliasRows = aliasListing.documents.filter(row => row.name === 'generalist')
+  report(
+    'a configured alias of the packaged directory lists its souls as bundled',
+    aliasRows.length === 1 && aliasRows[0].bundled === true,
+    JSON.stringify(aliasRows.map(row => ({ name: row.name, bundled: row.bundled }))),
+  )
+  const aliasDetail = await isolatedAdmin.readDocument({ config: symlinkConfig, root: aliasWorkspace, file: aliasFile })
+  report(
+    'read detail classifies an aliased bundled soul as bundled',
+    aliasDetail.ok === true && aliasDetail.document.bundled === true,
+    aliasDetail.ok ? String(aliasDetail.document.bundled) : aliasDetail.message,
+  )
+
+  const duplicateWorkspace = join(probeRoot, 'duplicate-workspace')
+  await mkdir(duplicateWorkspace, { recursive: true })
+  const defaultConfig = { dirs: ['.dsh/agents'], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
+  const duplicated = await isolatedAdmin.duplicateDocument({
+    config: defaultConfig,
+    root: duplicateWorkspace,
+    file: isolatedBundledFile,
+    name: 'generalist-copy',
+  })
+  report(
+    'duplicating a bundled soul into a fresh workspace succeeds',
+    duplicated.ok === true,
+    duplicated.ok ? duplicated.document.file : duplicated.message,
+  )
+  const duplicateFile = join(duplicateWorkspace, '.dsh', 'agents', 'generalist-copy.md')
+  const duplicateText = await readFile(duplicateFile, 'utf8').catch(() => '')
+  report(
+    'the bundled-soul duplicate lands under the workspace soul directory',
+    duplicated.ok === true && duplicated.document.file === duplicateFile && duplicateText.includes('name: generalist-copy'),
+    duplicated.ok ? duplicated.document.file : duplicateFile,
+  )
+
+  // Optional test seam: let the regression suite simulate a concurrent edit of
+  // the packaged source while the probes above are already finished.
+  if (afterProbes !== undefined) await afterProbes({ isolatedPackage, isolatedBundledFile })
+
+  const realAfter = await fileState(realBundledFile)
+  report(
+    'refused packaged writes never reach the real packaged file',
+    realAfter.text.includes(PROBE_WRITE_CANARY) === false,
+  )
+  if (realAfter.hash === realBefore.hash) {
+    report('the real packaged soul file hash is unchanged', realAfter.hash === realBefore.hash, realAfter.hash.slice(0, 16))
+  } else {
+    // A legitimate external edit happened while the probes ran. The run must
+    // preserve it: captured bytes are deliberately not restored.
+    report(
+      'the real packaged soul file retains a concurrent external edit',
+      realAfter.hash !== realBefore.hash && realAfter.text.includes(PROBE_WRITE_CANARY) === false,
+      `hash changed from ${realBefore.hash.slice(0, 16)} to ${realAfter.hash.slice(0, 16)}`,
+    )
+  }
+  return {
+    probeRoot,
+    isolatedPackage,
+    isolatedBundledDir,
+    isolatedBundledFile,
+    realBundledFile,
+    realBefore,
+    realAfter,
+    concurrentExternalEdit: realAfter.hash !== realBefore.hash,
+  }
+}
+
+/**
+ * Assert the scripted command-registry observations produced by `soul-llm.ts`.
+ * Kept as a named helper so the focused regression suite can exercise the exact
+ * pass conditions; the live smoke run remains the real-registry evidence.
+ *
+ * @param {object | undefined} command
+ * @param {(name: string, condition: unknown, detail?: string) => void} [report]
+ * @returns {void}
+ */
+export function checkCommandSurface(command, report = check) {
+  report('user-invocable soul registers a slash command', command?.registered === true, JSON.stringify(command?.commands ?? []))
+  report(
+    'the /orchestrate command is registered',
+    command?.orchestrateRegistered === true,
+    JSON.stringify(command?.commands ?? []),
+  )
+  report('slash command executes successfully', command?.executed?.kind === 'success', JSON.stringify(command?.executed ?? command?.error))
+}
+
 async function main() {
   for (const path of [cliBin, tsconfigPath]) {
     try {
@@ -238,11 +518,18 @@ async function main() {
       throw new Error(`DSH checkout is missing ${path}; set DSH_CHECKOUT to the deepseek-harness checkout`)
     }
   }
+  const canaries = seedEnvironmentCanaries()
   const root = await mkdtemp(join(tmpdir(), 'dsh-soul-smoke-'))
   const home = join(root, '.dsh')
   const observationsPath = join(root, 'observations.jsonl')
   const bindingsPath = join(root, '.dsh', 'agent-soul', 'bindings.json')
   try {
+    check(
+      'smoke canaries are seeded in the runner environment',
+      process.env.SMOKE_CANARY_CREDENTIAL === canaries.markers.credential
+        && process.env.HTTPS_PROXY === canaries.markers.proxy
+        && String(process.env.NODE_OPTIONS ?? '').includes(canaries.markers.loader),
+    )
     await writeSoul(root)
     await writeCommandSoul(root)
     await writeProfile(home)
@@ -273,141 +560,13 @@ async function main() {
       strictOrchestrator.ok ? JSON.stringify(strictOrchestrator.orchestrator.configured) : strictOrchestrator.message,
     )
 
-    // Filesystem safety of the document layer, checked directly against temp
-    // workspaces: the implicit soul-directory creation must not follow a
-    // symlinked ancestor, and the packaged catalog must stay read-only however a
-    // configuration aliases it. The packaged file is restored in `finally`, so a
-    // regression here reports a failure instead of leaving the checkout mutated.
-    const probeRoot = join(root, 'module-probes')
-    const bundledFile = join(BUNDLED_SOULS_DIR, 'generalist.md')
-    const bundledSource = await readFile(bundledFile, 'utf8')
-    try {
-      await mkdir(probeRoot, { recursive: true })
-      const escapeRoot = join(probeRoot, 'escape')
-      const escapeWorkspace = join(escapeRoot, 'workspace')
-      const escapeOutside = join(escapeRoot, 'outside')
-      await mkdir(escapeWorkspace, { recursive: true })
-      await mkdir(escapeOutside, { recursive: true })
-      await symlink(escapeOutside, join(escapeWorkspace, '.dsh'), process.platform === 'win32' ? 'junction' : 'dir')
-      const escapeConfig = { dirs: ['.dsh/agents'], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
-      const escapedCreate = await createDocument({ config: escapeConfig, root: escapeWorkspace, name: 'escaped-soul' })
-      check(
-        'symlinked .dsh cannot auto-create a soul outside the workspace',
-        escapedCreate.ok === false,
-        escapedCreate.ok ? escapedCreate.document.file : escapedCreate.code,
-      )
-      check(
-        'refused auto-create leaves the outside directory empty',
-        (await readdir(escapeOutside)).length === 0,
-        JSON.stringify(await readdir(escapeOutside)),
-      )
-      const escapedDuplicate = await duplicateDocument({
-        config: escapeConfig,
-        root: escapeWorkspace,
-        file: bundledFile,
-        name: 'escaped-copy',
-      })
-      check(
-        'symlinked .dsh cannot duplicate a bundled soul outside the workspace',
-        escapedDuplicate.ok === false,
-        escapedDuplicate.ok ? escapedDuplicate.document.file : escapedDuplicate.code,
-      )
-      check(
-        'refused duplicate leaves the outside directory empty',
-        (await readdir(escapeOutside)).length === 0,
-        JSON.stringify(await readdir(escapeOutside)),
-      )
-
-      const aliasWorkspace = join(probeRoot, 'alias-workspace')
-      await mkdir(aliasWorkspace, { recursive: true })
-      await symlink(BUNDLED_SOULS_DIR, join(aliasWorkspace, 'agents-alias'), process.platform === 'win32' ? 'junction' : 'dir')
-      const absoluteConfig = { dirs: [BUNDLED_SOULS_DIR], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
-      const symlinkConfig = { dirs: ['agents-alias'], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
-      const mutatedSource = `${bundledSource}\n`
-      const directSave = await saveDocumentSource({
-        config: absoluteConfig,
-        root: aliasWorkspace,
-        file: bundledFile,
-        source: mutatedSource,
-      })
-      check(
-        'a configured absolute alias of the packaged directory refuses saveDocumentSource',
-        directSave.ok === false,
-        directSave.ok ? directSave.file : directSave.code,
-      )
-      const directDelete = await deleteDocument({ config: absoluteConfig, root: aliasWorkspace, file: bundledFile })
-      check(
-        'a configured absolute alias of the packaged directory refuses deleteDocument',
-        directDelete.ok === false,
-        directDelete.ok ? directDelete.file : directDelete.code,
-      )
-      const aliasFile = join(aliasWorkspace, 'agents-alias', 'generalist.md')
-      const symlinkSave = await saveDocumentSource({
-        config: symlinkConfig,
-        root: aliasWorkspace,
-        file: aliasFile,
-        source: mutatedSource,
-      })
-      check(
-        'a symlink alias of the packaged directory refuses saveDocumentSource',
-        symlinkSave.ok === false,
-        symlinkSave.ok ? symlinkSave.file : symlinkSave.code,
-      )
-      const symlinkDelete = await deleteDocument({ config: symlinkConfig, root: aliasWorkspace, file: aliasFile })
-      check(
-        'a symlink alias of the packaged directory refuses deleteDocument',
-        symlinkDelete.ok === false,
-        symlinkDelete.ok ? symlinkDelete.file : symlinkDelete.code,
-      )
-      const packagedAfterWrites = await readFile(bundledFile, 'utf8').catch(() => '')
-      check(
-        'refused bundled writes leave the packaged file unchanged',
-        packagedAfterWrites === bundledSource,
-      )
-      const aliasListing = await listDocuments({ config: symlinkConfig, root: aliasWorkspace })
-      const aliasRows = aliasListing.documents.filter(row => row.name === 'generalist')
-      check(
-        'a configured alias of the packaged directory lists its souls as bundled',
-        aliasRows.length === 1 && aliasRows[0].bundled === true,
-        JSON.stringify(aliasRows.map(row => ({ name: row.name, bundled: row.bundled }))),
-      )
-      const aliasDetail = await readDocument({ config: symlinkConfig, root: aliasWorkspace, file: aliasFile })
-      check(
-        'read detail classifies an aliased bundled soul as bundled',
-        aliasDetail.ok === true && aliasDetail.document.bundled === true,
-        aliasDetail.ok ? String(aliasDetail.document.bundled) : aliasDetail.message,
-      )
-
-      const duplicateWorkspace = join(probeRoot, 'duplicate-workspace')
-      await mkdir(duplicateWorkspace, { recursive: true })
-      const defaultConfig = { dirs: ['.dsh/agents'], bindingsFile: '.dsh/agent-soul/bindings.json', bundled: true }
-      const duplicated = await duplicateDocument({
-        config: defaultConfig,
-        root: duplicateWorkspace,
-        file: bundledFile,
-        name: 'generalist-copy',
-      })
-      check(
-        'duplicating a bundled soul into a fresh workspace succeeds',
-        duplicated.ok === true,
-        duplicated.ok ? duplicated.document.file : duplicated.message,
-      )
-      const duplicateFile = join(duplicateWorkspace, '.dsh', 'agents', 'generalist-copy.md')
-      const duplicateText = await readFile(duplicateFile, 'utf8').catch(() => '')
-      check(
-        'the bundled-soul duplicate lands under the workspace soul directory',
-        duplicated.ok === true && duplicated.document.file === duplicateFile && duplicateText.includes('name: generalist-copy'),
-        duplicated.ok ? duplicated.document.file : duplicateFile,
-      )
-    } finally {
-      let current = null
-      try {
-        current = await readFile(bundledFile, 'utf8')
-      } catch {
-        current = null
-      }
-      if (current !== bundledSource) await writeFile(bundledFile, bundledSource, 'utf8')
-    }
+    // Filesystem safety of the document layer runs entirely against a run-owned
+    // package copy; the real packaged source is snapshot-only and never restored.
+    const safety = await probeBundledDocumentSafety({ root })
+    console.log(
+      `packaged soul safety: isolated=${safety.isolatedPackage} real=${safety.realBundledFile} `
+      + `sha256=${safety.realAfter.hash} concurrentExternalEdit=${safety.concurrentExternalEdit}`,
+    )
 
     // The plugin's own patch must replace the shipped Team tool row in a fresh
     // profile whose bundle order is the documented one: the Agent Teams bundle
@@ -430,7 +589,7 @@ async function main() {
 
     console.log(`booting dsh in ${root}`)
     const child = spawn(process.execPath, [
-      '--import', tsxLoader,
+      '--import', tsxLoaderUrl(),
       cliBin,
       '--profile', 'headless',
       'SOUL_SMOKE: spawn the probe soul teammate and wait for its report.',
@@ -465,6 +624,10 @@ async function main() {
     check('spawn_teammate schema exposes agent_type', lead?.spawnHasAgentType === true)
     check('list_agent_souls is registered', lead?.hasListSouls === true)
     check('child environment excludes inherited credentials, proxies, and loader flags', lead?.environmentScrubbed === true)
+    check('child environment drops the seeded credential canary', lead?.envScrub?.credentialCanaryAbsent === true)
+    check('child environment drops the seeded proxy canary', lead?.envScrub?.proxyCanaryAbsent === true)
+    check('child environment drops the seeded loader canary', lead?.envScrub?.loaderCanaryAbsent === true)
+    check('child environment carries no usable provider credential', lead?.envScrub?.providerKeyEmpty === true)
     check('teammate system prompt carries the soul persona', teammate?.personaOk === true)
     check('soul body marker reached the teammate prompt', teammate?.markerOk === true)
     const expectedProbeTools = expectedSoulTools('read', 'grep', 'glob')
@@ -476,8 +639,7 @@ async function main() {
     check('teammate model is routed', teammate?.modelOk === true, String(teammate?.model))
 
     const command = observations.find(entry => entry.kind === 'command')
-    check('user-invocable soul registers a slash command', command?.registered === true, JSON.stringify(command?.commands ?? []))
-    check('slash command executes successfully', command?.executed?.kind === 'success', JSON.stringify(command?.executed ?? command?.error))
+    checkCommandSurface(command, check)
     const commandTeammate = observations.find(entry => entry.kind === 'teammate-command')
     check('command-spawned teammate gets its persona', commandTeammate?.personaOk === true)
     check('command-spawned teammate gets its body marker', commandTeammate?.markerOk === true)
@@ -498,13 +660,30 @@ async function main() {
 
     console.log(`\nsmoke passed: ${checks.filter(entry => entry.ok).length}/${checks.length} checks`)
   } finally {
+    canaries.restore()
     await rm(root, { recursive: true, force: true })
   }
 }
 
-main().catch((error) => {
-  console.error(`\nsmoke failed: ${error instanceof Error ? error.message : String(error)}`)
-  console.error('--- dsh stdout ---\n' + transcript.stdout)
-  console.error('--- dsh stderr ---\n' + transcript.stderr)
-  process.exitCode = 1
-})
+/** Whether this module is the process entry point (import-safe for tests). */
+async function isDirectInvocation() {
+  if (process.argv[1] === undefined) return false
+  try {
+    const [entry, self] = await Promise.all([
+      realpath(resolve(process.argv[1])),
+      realpath(fileURLToPath(import.meta.url)),
+    ])
+    return entry === self
+  } catch {
+    return false
+  }
+}
+
+if (await isDirectInvocation()) {
+  main().catch((error) => {
+    console.error(`\nsmoke failed: ${error instanceof Error ? error.message : String(error)}`)
+    console.error('--- dsh stdout ---\n' + transcript.stdout)
+    console.error('--- dsh stderr ---\n' + transcript.stderr)
+    process.exitCode = 1
+  })
+}

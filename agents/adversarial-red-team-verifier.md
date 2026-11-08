@@ -11,6 +11,7 @@ tools:
   - skill
 model: k3.1-pro
 provider: kimi-code-bridge
+reasoning-effort: max
 ---
 
 ## Role Definition

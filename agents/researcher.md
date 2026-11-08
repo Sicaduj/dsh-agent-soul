@@ -9,8 +9,6 @@ tools:
   - grep
   - skill
   - bash
-model: mimo-v2.6-pro
-provider: xiaomi-token-plan-sgp
 context: fresh
 ---
 

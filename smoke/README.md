@@ -42,7 +42,7 @@ cd "$SMOKE_COPY/plugin"
 node smoke/run-smoke.mjs
 ```
 
-The harness runs **50 checks**. It passed **50/50** directly from this working tree on 2026-11-08
+The harness runs **53 checks**. It passed **53/53** directly from this working tree on 2026-11-09
 (macOS arm64, Node 26.13.0) — a dated point-in-time result, not a platform matrix. It asserts,
 against the real Cordis runtime and real temporary directories rather than mocks:
 
@@ -70,7 +70,9 @@ against the real Cordis runtime and real temporary directories rather than mocks
 - its inherited tool set is exactly the soul's `tools` list, with the Team tools still available;
 - its model is routed (`deepseek-v4-pro` recorded as the child Session's `model/selection`);
 - a `user-invocable` soul registers a slash command that executes and spawns a second
-  correctly-configured teammate;
+  correctly-configured teammate. That soul declares the shell spelling this POSIX host does not
+  register (`tools: ["pwsh", "read"]`): the child inherits the live `bash` tool, never advertises
+  `pwsh`, and its durable binding keeps the declared `["pwsh", "read"]` list;
 - the durable binding document is written at the portable
   `<workspace>/.dsh/agent-soul/bindings.json` location; the first recorded binding's soul name,
   tool matrix, and routed model are validated, and a binding exists under each teammate's soul name;
@@ -95,7 +97,7 @@ objects; they never write the real package or workspace state. Run all of them w
 node --test smoke/
 ```
 
-On 2026-11-08 that command ran **81/81 tests** across eight `node:test` modules (the remediation
+On 2026-11-09 that command ran **95/95 tests** across nine `node:test` modules (the remediation
 pair shares one table row):
 
 | Suite | Cases | Coverage |
@@ -107,10 +109,36 @@ pair shares one table row):
 | `smoke/storage-fixes.test.mjs` | 18 | transactional refusal of corrupt/unsupported/malformed binding documents with bytes preserved; typed missing/unreadable/corrupt/unsupported/unsafe diagnostics; revalidation after an earlier healthy read (including `get` fail-closed on a partial malformed document); the unpersisted-pending-mutation exception; invalid-snapshot refusal (`E_BINDING_INVALID_RECORD`); repair visibility; trash-failure source preservation; packaged rename collision vs local shadowing; the relative/absolute `bindingsFile` rule including symlinked `.dsh`/`.dsh/agent-soul`, dangling/document symlinks, and trash/restore containment; and the live-catalog missing-default warning |
 | `smoke/orchestrator-fixes.test.mjs` | 8 (97 assertions) | handler-seam fault injection for first-enable and already-active queue rollback (exact/partial/fallback/inactive/unknown reports), the corrected bundled doctrine (conditional route, supported task states, strict/budget-scoped correction, quote fix), and the `spawn_teammate` context resolution contract |
 | `smoke/smoke-fixes.test.mjs` | 7 (72 assertions) | isolated packaged-write probes and concurrent-edit preservation, seeded environment canaries and explicit `/orchestrate` command assertion, canonicalized symlink run roots, atomic/tolerant readiness barriers, and honest incomplete/unexecuted-suite reporting |
+| `smoke/windows-shell-alias.test.mjs` | 14 | the portable `bash` ↔ `pwsh` shell name through the real modules: exact-match preference and counterpart resolution in `lib/tool-names.js`, request order and dedupe in `resolveRestrictableNames`, spawn validation accepting a counterpart, the apply matrix restricting to the live spelling, the orchestrator enable path resolving instead of skipping, and the GUI catalog/validator advertising `portableAliasOf` and saving either spelling |
 
 These suites are static/source-contract and route-level evidence where noted; none renders the
 browser or executes real UI interactions. Assertion tallies can be printed with
 `AGENT_SOUL_ASSERTION_TALLY=1`.
+
+## Optional Windows parity probe
+
+`smoke/run-windows-parity.mjs` covers the mirror image of the harness shell check without a Windows
+machine. It boots a real `dsh --profile headless` run whose composed profile disables the
+`tool-bash` row and mounts a tiny test-only plugin that registers a stand-in `pwsh` tool, then
+publishes a soul declaring `bash`. The real spawn validation and apply path must resolve the
+counterpart and hand the child the live `pwsh` tool, and the durable binding must keep the
+declared `bash` spelling.
+
+```sh
+node smoke/run-windows-parity.mjs
+# when the checkout is elsewhere:
+DSH_CHECKOUT=/path/to/deepseek-harness node smoke/run-windows-parity.mjs
+```
+
+It passed **14/14** checks on **2026-11-09** (macOS arm64, Node 26.13.0). The run asserts the
+inverted profile dump (the `tool-bash` row disabled, the real `tool-pwsh` row still gated to
+Windows, the stand-in plugin mounted), a clean `dsh run` exit, a spawned teammate with its persona
+and body, and the child's inherited tools: `pwsh` is present and `bash` is absent while the binding
+still records `["bash", "read", "grep", "glob"]`. This is **simulated Windows evidence on a POSIX
+host** — it does not run Windows, PowerShell, or DSH's real Windows shell registration, and it is a
+development verification harness rather than shipped plugin code. Prerequisites are the same as the
+main harness (a DSH checkout with `tsx`; no credentials), and it must not run while another headless
+DSH boot is active.
 
 ## Remediation runtime
 
@@ -167,16 +195,17 @@ archive must not be the live installation.
 
 ## Current aggregate results
 
-On 2026-11-08 the focused suites passed **81/81**:
+On 2026-11-09 the focused suites passed **95/95**:
 
 ```sh
 node --test smoke/
 ```
 
-The direct-tree smoke harness passed **50/50**, and the candidate remediation runtime passed
-**169/169** with **2/2 suites** on both canonical and symlink-prefixed disposable run roots. These
-are point-in-time results for the current macOS arm64 / Node 26.13.0 environment, not claims for
-other platforms or Node versions.
+The direct-tree smoke harness passed **53/53**, and the optional
+`node smoke/run-windows-parity.mjs` probe passed **14/14**. The candidate remediation runtime's
+**169/169** with **2/2 suites** result is its 2026-11-08 run on both canonical and symlink-prefixed
+disposable run roots; it was not re-run for 0.4.1. These are point-in-time results for the current
+macOS arm64 / Node 26.13.0 environment, not claims for other platforms or Node versions.
 
 ## Explicitly unrun or outside this evidence
 
@@ -188,5 +217,8 @@ other platforms or Node versions.
 - **Full orchestration lifecycle:** Orchestrator mode is not activated end to end; its command
   registration is asserted, and rollback/doctrine behavior is covered at the handler seam with an
   in-memory Agent double.
+- **Live Windows or PowerShell:** not run. `smoke/run-windows-parity.mjs` simulates the inverted
+  composition on macOS with a test-only stand-in `pwsh` tool; it does not exercise Windows,
+  PowerShell, or DSH's real Windows shell registration.
 - **Other operating systems or Node versions:** not run.
 - **Full DSH repository suite:** outside this plugin package's scope.

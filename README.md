@@ -38,6 +38,9 @@ Agent Team (Lead, optionally the orchestrator)
   instead of becoming a vague copy of the Lead.
 - **Real permissions.** `tools:` is enforced through DSH's scoped tool restriction, not just
   suggested in a prompt.
+- **Platform-neutral tools.** A soul may name its shell tool as `bash` or `pwsh`. DSH registers one
+  spelling per platform and the plugin resolves the declaration to the registered counterpart, so
+  the same `tools:` list can be reused on a POSIX and a Windows session.
 - **Right model per job.** Run cheap/fast models for routine work and a larger model for the work
   that needs it.
 - **Optional human shortcuts.** A soul with `user-invocable: true` also becomes a slash command
@@ -147,10 +150,12 @@ refers to those merged feature changes, not to subsequent documentation edits. O
 0.3.0-or-earlier installation, the packaged souls and `defaults/orchestrator.md` are always
 read-only and those controls do not exist — skip the `bundledEditable` paragraphs in this README.
 
-**Working-tree scope.** This README also documents post-merge review fixes present in the current
-working tree. They are not part of the 0.4.0 release history, and a published 0.4.0 installation may
-not contain them. The behavior, commands, and test counts below describe this working tree; the
-merged-feature release notes above are unchanged.
+**Working-tree scope (0.4.1).** This README documents the working tree whose manifest is `0.4.1`
+(branch `feat/windows-pwsh-shell-aliases`): the portable shell tool names described under
+[Windows and PowerShell](#windows-and-powershell), together with the earlier post-merge review fixes.
+None of that is part of the 0.4.0 release history, and a published 0.4.0 installation does not contain
+it. The behavior, commands, and test counts below describe this working tree; the merged-feature
+release notes above are unchanged.
 
 ## Requirements and install
 
@@ -648,7 +653,7 @@ and preserved by the GUI as extra frontmatter.
 |---|---|---|---|
 | `name` | yes | — | Strict identity. Lower-kebab-case (`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`), at most 64 characters, unique per catalog. `lead` is reserved for the Team Lead: the parser rejects it with `name: "lead" is reserved for the Team Lead`, so such a file is invalid and excluded from the catalog, every save/create/duplicate path refuses it without writing, and spawn rejects it before any roster or binding change. `leadership`, `lead-review`, and `lead-2` remain valid. |
 | `description` | yes | — | The orchestration trigger. Non-empty, at most 2000 characters, written as one YAML line. Keep it to "what it does + when to use it"; the Lead matches tasks by this text, and the catalog bullet truncates it to 600 characters on one line. |
-| `tools` | no | inherit all | Permission matrix for inherited tools. Omit or `*` = inherit everything; a list (or comma-separated string) = allow exactly those inherited tools; `[]` = hide every inherited tool. Names are tool names visible in the session, e.g. `read`, `grep`, `bash`, `web_search`. **Do not list Team tools** (`spawn_teammate`, `send_message`, `list_agents`, `wait_agent`, `interrupt_agent`, `team_task_*`, `list_agent_souls`); they are Agent-scoped and cannot be restricted. The GUI save validator and spawn both reject them. The Lead-only `manage_agent_souls` tool is likewise rejected because it cannot be delegated. |
+| `tools` | no | inherit all | Permission matrix for inherited tools. Omit or `*` = inherit everything; a list (or comma-separated string) = allow exactly those inherited tools; `[]` = hide every inherited tool. Names are tool names visible in the session, e.g. `read`, `grep`, `bash`, `web_search`. The shell tool is the one portable name: DSH registers it as `bash` on POSIX and `pwsh` on Windows, and a soul may name either spelling — an exact registration wins and the other spelling of the pair resolves to it, so the same list works on both platforms (every other name stays exact). **Do not list Team tools** (`spawn_teammate`, `send_message`, `list_agents`, `wait_agent`, `interrupt_agent`, `team_task_*`, `list_agent_souls`); they are Agent-scoped and cannot be restricted. The GUI save validator and spawn both reject them. The Lead-only `manage_agent_souls` tool is likewise rejected because it cannot be delegated. |
 | `model` | no | inherit Lead | A model id (`deepseek-flash`), a full route (`deepseek-official/deepseek-flash`), or an id resolved against the providers' advertised catalogs. Omitted = inherit the Lead's model. An unresolvable declaration makes the spawn fail; it does not make the file invalid. |
 | `provider` | no | — | Provider route when `model` has no `provider/` prefix. If `model` already has a prefix, a different `provider` is a configuration error. |
 | `reasoning-effort` | no | provider default | A provider/model reasoning effort id. Validated against the model when the LLM catalog advertises efforts; if it cannot be verified, a warning is logged and the route is used. Declare it **together with a model**: a soul carrying only `reasoning-effort` (no model) is refused at GUI save and fails at spawn; unlike the orchestrator definition, where effort-without-model is valid and ignored. |
@@ -684,6 +689,38 @@ YAML tips:
   Only set `reasoning-effort` to an effort the provider advertises.
 - **Context**: prefer `fresh` for independent work; use `fork` only when the teammate genuinely
   needs the Lead's prior turns. `fork` history can contain tools the soul itself cannot call.
+
+### Windows and PowerShell
+
+DSH's shipped composition registers one shell spelling per platform: `bash` on POSIX compositions
+and `pwsh` on Windows compositions. The one-shot and persistent variants of each family share that
+model-facing name. An Agent Soul is platform-neutral, so its `tools:` list may name either spelling:
+
+- an exact registration always wins — a session that registers `bash` gives a `bash` declaration
+  the `bash` tool;
+- when the declared spelling is absent, the plugin substitutes the registered counterpart, so
+  `tools: [pwsh, read]` on a POSIX session grants `bash` and `read`;
+- only this pair is aliased. Any other name is matched exactly, so a typo is still a typo.
+
+The declared spelling is kept in the durable binding (the record stays platform-neutral and the
+resolution happens when the soul is applied), and the teammate permission matrix and the
+orchestrator tool matrix both restrict to the resolved live name — a `bash` declaration on a
+Windows session becomes the `pwsh` tool. Spawn validation accepts a declared shell name whose
+counterpart is live; genuinely unknown names, Team tools, and the Lead-only `manage_agent_souls`
+are still rejected with the same messages.
+
+In the GUI, when a live Lead catalog is available, the tool catalog advertises the missing
+counterpart as a marked portable alias (an extra `{ name, description, portableAliasOf }` entry — see
+[the catalog shape](docs/GUI-INTERNALS.md#host-overview-catalogs)), so both spellings appear as
+normal chips, neither is flagged as unknown in the preview, and both save on either platform. No
+bundled soul file changed for this: the definitions that declare a tool matrix keep `bash`, which
+now resolves on a Windows session; `generalist` and `software-engineer` declare none and inherit
+every tool.
+
+The shipped verification is simulated, not a Windows certification: on a POSIX host the optional
+`smoke/run-windows-parity.mjs` probe boots a real headless DSH profile with the `tool-bash` row
+disabled and a test-only stand-in `pwsh` tool, then spawns a `bash`-declaring soul and asserts the
+child inherits `pwsh`. No live Windows or PowerShell run backs this page.
 
 ### Body sections
 
@@ -734,7 +771,10 @@ The GUI's save-time validator additionally rejects Team tools and the Lead-only 
 tool, unknown tools whenever the live Lead catalog is the source, duplicate names, and unresolvable
 model declarations, so a fix made in the page does not wait until the next spawn to fail. A
 live-but-empty catalog rejects every non-Team name; only a missing catalog (no live Lead, source
-`none`) skips the unknown-tool membership check. Spawn remains the authoritative validation boundary.
+`none`) skips the unknown-tool membership check. The portable shell pair needs no special case: the
+live catalog advertises the counterpart of the session's shell tool as a marked alias entry, so
+both `bash` and `pwsh` are known names on either platform. Spawn remains the authoritative
+validation boundary.
 
 ## Orchestrator mode
 
@@ -1380,7 +1420,13 @@ They are not shared with other browsers.
   still apply, but the inherited history may mention tools the soul no longer allows; the
   teammate cannot call them.
 - **Soul tool names must be visible in the live session.** The spawn validates the list against
-  the Lead's restrictable catalog; an unknown name fails before a teammate is created.
+  the Lead's restrictable catalog; an unknown name fails before a teammate is created. The portable
+  shell pair is the one exception: a declared `bash`/`pwsh` resolves to the registered counterpart
+  (an exact registration wins), and no other name is aliased.
+- **No live Windows or PowerShell run.** Portable shell-name resolution is verified on macOS with a
+  simulated inverted composition — the real headless runtime with the `tool-bash` row disabled and a
+  test-only stand-in `pwsh` tool — not on a Windows host with PowerShell. Windows registration,
+  quoting, and shell-dialect behavior are outside this bundle's evidence.
 - **Orchestrator mode is per session and command-activated.** It is off by default. The model
   override is session-scoped, not a profile default. The previous model is restored only when it
   was captured in the same process; after a reload there is no captured original.
@@ -1394,9 +1440,10 @@ They are not shared with other browsers.
   are instructions the model follows with the task board and Team tools; there is no automatic
   retry driver. Model/tool overrides are enforced by the Harness.
 - **Orchestrator tool names are best-effort.** A name that is not currently restrictable (including
-  a Team tool) is skipped with a warning; it does not fail the mode. A failure of the tool
-  restriction service itself aborts the enable and is reported as a failed enable (see **Turn it on
-  and off** for what state a failure leaves behind).
+  a Team tool) is skipped with a warning; it does not fail the mode. The shell pair resolves to the
+  registered spelling first, so a `bash`/`pwsh` declaration is applied instead of skipped. A failure
+  of the tool restriction service itself aborts the enable and is reported as a failed enable (see
+  **Turn it on and off** for what state a failure leaves behind).
 - **Catalog budgets are per root.** Over-limit entries are omitted (with a diagnostic) and the
   health card shows the pressure; the full catalog text can exceed the prompt budget.
 - **Multiple live Sessions** can coexist. Command status uses the Lead whose Session directory
@@ -1439,15 +1486,17 @@ node --check index.js
 for f in lib/*.js; do node --check "$f" || exit 1; done
 node --check client.js
 
-# focused module suites (keyless; temporary directories only), 81 tests
+# focused module suites (keyless; temporary directories only), 95 tests
 node --test smoke/
 
-# end-to-end harness (safe directly; 50 checks)
+# end-to-end harness (safe directly; 53 checks)
 node smoke/run-smoke.mjs
 ```
 
-On 2026-11-08, `node --test smoke/` passed **81/81** focused tests (the storage suite grew to 18
-cases). End-to-end verification boots a real `dsh --profile headless` process from a DSH source checkout
+On 2026-11-09, `node --test smoke/` passed **95/95** focused tests, including the 14 cases in
+`smoke/windows-shell-alias.test.mjs` that pin the portable shell-name resolution across the resolver,
+spawn validation, the apply tool matrix, the orchestrator probe, and the GUI catalog/validator.
+End-to-end verification boots a real `dsh --profile headless` process from a DSH source checkout
 with a temporary `DSH_HOME`, a scripted LLM adapter, and this bundle selected through its real
 manifest and `cordis.patch.yml`. It asserts the workspace-independent bundled defaults (an empty
 workspace sees the packaged catalog and doctrine, and `bundled: false` restores strict
@@ -1464,15 +1513,25 @@ node smoke/run-smoke.mjs
 DSH_CHECKOUT=/path/to/deepseek-harness node smoke/run-smoke.mjs
 ```
 
-The harness runs **50 checks** and passed **50/50** on 2026-11-08 — a dated point-in-time result on
+The harness runs **53 checks** and passed **53/53** on 2026-11-09 — a dated point-in-time result on
 macOS arm64 with Node 26.13.0, re-runnable directly with `node smoke/run-smoke.mjs` — starting with
 a composed fresh profile whose `--dump-config` proves this bundle's own patch disables the shipped
-`tool-agent-team` row. The command list is asserted: a malformed or missing `/orchestrate`
-registration now fails the harness, though the mode itself is still not activated end-to-end. The
-bundled doctrine resolution that makes it available in any workspace is verified directly by the
-harness. The default checkout path is `/Users/zosyn/LLM/deepseek-harness`. The fixtures are designed
+`tool-agent-team` row. The command-spawned probe soul declares the shell spelling this POSIX session
+does not register (`pwsh`); the harness asserts the child inherits `bash`, never advertises `pwsh`,
+and keeps the declared `["pwsh","read"]` list in the durable binding. The command list is asserted: a
+malformed or missing `/orchestrate` registration now fails the harness, though the mode itself is
+still not activated end-to-end. The bundled doctrine resolution that makes it available in any
+workspace is verified directly by the harness. The default checkout path is
+`/Users/zosyn/LLM/deepseek-harness`. The fixtures are designed
 to use no credentials or network access; network syscalls were not independently monitored. See
 [`smoke/README.md`](smoke/README.md).
+
+The optional `node smoke/run-windows-parity.mjs` probe covers the inverted composition. On
+2026-11-09 it passed **14/14** checks: it boots a real headless DSH profile with the `tool-bash` row
+disabled and a test-only plugin that registers a stand-in `pwsh` tool, publishes a
+`bash`-declaring soul, and asserts the child inherits `pwsh` and never advertises `bash`, while the
+durable binding keeps the declared `bash` spelling. This is simulated Windows evidence on a POSIX
+host, not a live Windows/PowerShell certification.
 
 The focused remediation runtime is separate from the smoke harness. On 2026-11-08,
 `node smoke/remediation-runtime.mjs --target candidate --only all` passed **169/169** with **2/2
@@ -1512,6 +1571,7 @@ refresh is always safe and reloads the dictionaries and client module.
 | [`lib/apply.js`](lib/apply.js) | Applies a Soul to a teammate; fail-closed plan resolution (pending plan, then durable binding) and pending-spawn handoff. |
 | [`lib/commands.js`](lib/commands.js) | User-invocable slash commands. |
 | [`lib/model.js`](lib/model.js) | Model-route resolution. |
+| [`lib/tool-names.js`](lib/tool-names.js) | Frozen portable shell-name resolver (`bash` ↔ `pwsh`) shared by spawn validation, the teammate tool matrix, the orchestrator probe, and the GUI tool catalog. |
 | [`lib/composition.js`](lib/composition.js) | Team-tool row detection, repair, and opt-in automatic claim. |
 | [`lib/bindings.js`](lib/bindings.js) | Typed durable binding store (fail-closed reads, transactional refusal of untrusted documents). |
 | [`lib/admin.js`](lib/admin.js) | Document layer: split/compose/validate, scan, path safety, trash. |

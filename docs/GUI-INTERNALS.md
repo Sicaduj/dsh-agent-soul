@@ -17,9 +17,11 @@ and the focused `node:test` suites add direct coverage of these surfaces —
 real `client.js` artifact only for registration/locale/source contracts (no hooks, DOM, fetch,
 timers, or rendered interaction), `smoke/bundled-editable.test.mjs` covers the packaged-editable document
 layer plus the GUI save conflict mapping, `smoke/remediation-admin.test.mjs` covers the
-agent-tool output schema, and `smoke/gui-fixes.test.mjs` covers the client artifact contracts and
-live-route validation/recovery fixes. Route and payload shapes below are still derived from the source
-handlers in `lib/gui-host.js` and should be checked against them when in doubt.
+agent-tool output schema, `smoke/gui-fixes.test.mjs` covers the client artifact contracts and
+live-route validation/recovery fixes, and `smoke/windows-shell-alias.test.mjs` covers the portable
+`bash`/`pwsh` shell-name resolution through the real spawn, apply, orchestrator, and GUI-route
+modules. Route and payload shapes below are still derived from the source handlers in
+`lib/gui-host.js` and should be checked against them when in doubt.
 
 ### Module map
 
@@ -36,6 +38,7 @@ handlers in `lib/gui-host.js` and should be checked against them when in doubt.
 | `lib/preferences.js` | plugin-owned default-Soul preference document (`preferences.json`): atomic read/write, real-path fence, default resolution (selection → any live catalog definition named `generalist` → failure) |
 | `lib/orchestrator.js` | single orchestrator definition: parse/validate/compose, `/orchestrate` command, session-scoped mode runtime (prompt sections, model/tool overrides, rollback) |
 | `lib/orchestrator-mode.js` | shared pure durable-mode fold + Host session projection definition (`agentSoulOrchestrator`); the only place off-words and command-log settlement semantics live |
+| `lib/tool-names.js` | frozen portable shell-name resolver: `SHELL_TOOL_ALIAS_PAIRS` (`bash` ↔ `pwsh`), `shellCounterpart`, `resolveToolName`, `toolNameKnown`, `resolveRestrictableNames` |
 | `lib/admin-tool.js` | Lead tool `manage_agent_souls` (document + orchestrator actions) over the same layers |
 | `client.js` | classic browser artifact: Settings → "Agent Soul" page (Souls + Orchestrator tabs, dialogs), the Plugins-page row-config contribution ("Use Default Agent Souls" toggle), and the Session-header Orchestrator-mode badge |
 | `index.js` | Cordis wiring: deps, creation fence, per-agent install (tools/commands/catalog/tool/orchestrator reapply), GUI install |
@@ -69,6 +72,13 @@ route-inheritance change from PR #5, still apply and are not reverted by leaving
 **Working-tree fixes.** The D01–D18 review fixes (including D15b) and their focused suites are
 present in the current working tree, not in that release history. Behavior described in the sections
 below may therefore differ from a published 0.4.0 installation.
+
+**0.4.1 working tree (portable shell names).** On branch `feat/windows-pwsh-shell-aliases` the
+manifest is `0.4.1` and the GUI tool catalog advertises the missing `bash`/`pwsh` spelling as one
+marked portable-alias entry (`portableAliasOf`); the save validator and preview accept either
+spelling, and the spawn, apply, and orchestrator paths resolve it to the live one. This change and
+its suite are not in the 2026-11-08 UTC release history. See "Portable shell names (0.4.1, working
+tree)" at the end of this document.
 
 ### Handler terms
 
@@ -178,13 +188,15 @@ Route names and payloads (the browser half addresses them without the leading sl
 ### `GET /agent-soul/overview`
 
 200 body (example values are illustrative; `plugin.version` is read from the real manifest —
-`0.4.0` at this revision (the 0.4.0 version bump, merged to `main` 2026-11-08 UTC; 0.3.0 manifests
-report `0.3.0`; earlier manifests report their own versions and predate the authoring mode) — and
-the no-`pluginMeta` fallback constant `PLUGIN_META_DEFAULTS` in `lib/gui-host.js` matches it):
+`0.4.1` at this revision (the working-tree bump on `feat/windows-pwsh-shell-aliases`; 0.4.0
+manifests report `0.4.0`, 0.3.0 manifests report `0.3.0`, and earlier manifests report their own
+versions and predate the authoring mode). The no-`pluginMeta` fallback constant
+`PLUGIN_META_DEFAULTS` in `lib/gui-host.js` reports `0.4.1`; it is used only when the Host
+passes no plugin metadata):
 
 ```jsonc
 {
-  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.4.0", "root": "/abs/workspace" },
+  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.4.1", "root": "/abs/workspace" },
   "settings": {
     "dirs": [".dsh/agents"],
     "resolvedDirs": ["/abs/workspace/.dsh/agents"],
@@ -748,10 +760,12 @@ token-only styles. Phases are history: everything in the P0–P4 sections is sti
   `TEAM_TOOL_NAMES` and, whenever `catalogs.source === 'live-lead'`, inside that Lead's restrictable
   catalog. A live-but-empty catalog therefore rejects every non-Team name with the explanation that
   the Lead reports no restrictable tools; only a missing catalog (`source: 'none'`) skips the
-  membership check. Team and Lead-only names are always rejected, a non-empty
-  `model`/`provider`/`reasoning-effort` declaration must resolve through `deps.resolveModel`, and a
-  `name` already used by another valid document in the same catalog is a duplicate. Spawn-time
-  validation remains the final boundary.
+  membership check. The catalog carries the portable alias of the session's shell tool, so `bash` and
+  `pwsh` both validate on either platform without a special case. Team and Lead-only names are always
+  rejected, a non-empty `model`/`provider`/`reasoning-effort` declaration must resolve through
+  `deps.resolveModel`, and a `name` already used by another valid document in the same catalog is a
+  duplicate. Spawn-time validation remains the final boundary; it resolves the same shell pair (an
+  exact registration wins), so a saved either-spelling list is accepted there too.
 
 ### Host: overview catalogs
 
@@ -760,7 +774,12 @@ token-only styles. Phases are history: everything in the P0–P4 sections is sti
 ```jsonc
 {
   "source": "live-lead" | "none",
-  "tools": [{ "name": "bash", "description": "Execute a bash command…" }],
+  "tools": [
+    { "name": "bash", "description": "Execute a bash command…" },
+    { "name": "pwsh",                       // portable alias: advertised, not registered here
+      "description": "Portable shell alias: this session registers its shell as \"bash\"; naming \"pwsh\" resolves to it.",
+      "portableAliasOf": "bash" }
+  ],
   "models": [{ "provider": "deepseek-official", "model": "deepseek-flash", "name": "DeepSeek-V4.1-Flash" }],
   "teamTools": ["interrupt_agent", "spawn_teammate", "team_task_update"]
 }
@@ -775,6 +794,15 @@ exists or the tools service is unavailable. Models come from `llm.listProviders(
 sorted `TEAM_TOOL_NAMES` list: those tools are Agent-scoped and never restrictable, so a teammate
 soul must not name them; the orchestrator matrix *may* name them, and the browser uses this list
 to explain them as always-available instead of flagging them as unknown.
+
+The shell tool is one portable capability, so the catalog gains one synthetic entry per live shell
+spelling whose counterpart is absent (`bash` on POSIX, `pwsh` on Windows; the pair is the frozen
+`lib/tool-names.js` list). That entry carries the exact description
+`Portable shell alias: this session registers its shell as "<live>"; naming "<counterpart>" resolves to it.`
+and `portableAliasOf: "<live>"`; entries are sorted by name, `source` stays `'live-lead'`, a catalog
+containing both spellings or neither gains no alias, and no non-shell name is ever aliased. The
+browser chips, the preview diagnostics, and the save validator all read this catalog, so both
+spellings are known names and either can be saved on either platform.
 
 The browser validates the whole overview payload before rendering it: `documents` must be an
 array and `plugin`, `settings`, and `runtime` must be objects (`catalogs` is read from the same
@@ -906,8 +934,11 @@ Four new endpoints (still exact registrations, trust fence first, JSON, no-store
 
 - **Tools picker** — chips built from `overview.catalogs.tools`; clicking toggles the tool in the
   draft's `tools` list; an "Inherit every tool" state maps to `*`; unknown names already present are
-  shown as removable warning chips. The comma-separated text field remains for advanced use and the
-  two views stay in sync.
+  shown as removable warning chips. The catalog's portable shell-alias entry is an ordinary chip:
+  both `bash` and `pwsh` are in the known-name list, so neither is shown as an unknown warning chip,
+  and the alias description is the chip tooltip (the save validator derives availability from the
+  same catalog, so both spellings save). The comma-separated text field remains for advanced use and
+  the two views stay in sync.
 - **Model picker** — cascading selects: provider (from `catalogs.models` providers; "Inherit from the
   Lead" empty option), model (options for the chosen provider), with the free-text model/provider
   fields kept under Advanced. The resolved route from the preview response is shown beneath.
@@ -1179,7 +1210,9 @@ soul catalog text; unknown variables stay literal).
   (`ORCHESTRATOR_TEMPLATE_CONTENT`) client-side, POSTs them as `{ fields, sections }`, and then
   opens the dialog on the saved result (see the default-set note above). The
   orchestrator tools picker treats `catalogs.teamTools` names as always-available (explained, never
-  shown as unknown), because Team tools cannot be restricted but may be listed in this matrix.
+  shown as unknown), because Team tools cannot be restricted but may be listed in this matrix. A
+  `bash`/`pwsh` name is also not treated as unavailable: the apply path resolves it to the live
+  spelling (an exact registration wins) instead of skipping it.
 - UI chrome copy lives in the eight locale dictionaries; raw Host messages, diagnostics, and file
   content can remain untranslated. Token-only styles; no new fetch hosts; the same relative fetch
   style for the two orchestrator routes.
@@ -1384,3 +1417,36 @@ packaged doctrine keep the 0.3.0 read-only authoring behavior (no in-place editi
   the package is reinstalled or updated; the packaged catalog and doctrine are shared by every
   workspace in the profile while bindings and trash stay per workspace; the packaged doctrine
   becomes globally edited.
+
+## Portable shell names (0.4.1, working tree)
+
+The shell tool has one model-facing name per platform: DSH registers `bash` on POSIX and `pwsh` on
+Windows compositions (the one-shot and persistent variants share the name per family). A soul is
+platform-neutral, so `lib/tool-names.js` freezes the pair (`SHELL_TOOL_ALIAS_PAIRS`) and exposes
+`shellCounterpart`, `resolveToolName`, `toolNameKnown`, and `resolveRestrictableNames`. The rules
+are uniform across the surfaces below:
+
+- an exact registration always wins;
+- a declared shell name whose counterpart is live resolves to the counterpart;
+- only `bash` ↔ `pwsh` aliases — every other name stays exact;
+- the declared spelling is preserved in the durable binding, and resolution happens when the soul
+  is applied.
+
+**Host paths.** Spawn validation accepts a declared shell name when either spelling is visible
+(`toolNameKnown`), while Team tools, the Lead-only `manage_agent_souls`, and genuinely unknown names
+keep their existing refusals. The teammate tool matrix (`lib/apply.js`) probes each requested name
+exactly and then through its counterpart, then installs one final `restrict({ allow })` naming the
+resolved tools in request order with duplicates deduped; only unresolved names warn. The
+orchestrator probe (`lib/orchestrator.js`) uses the same resolver, so a doctrine `bash` list applies
+on a `pwsh` session instead of being skipped.
+
+**GUI.** `toolsCatalogOf` adds the missing counterpart of every live shell spelling as one synthetic
+catalog entry `{ name, description: 'Portable shell alias: this session registers its shell as "<live>"; naming "<counterpart>" resolves to it.', portableAliasOf: "<live>" }`;
+`source` remains `'live-lead'` and the list is sorted by name. The tool chips and preview read that
+catalog, and `saveValidator` derives tool membership from it, so both spellings preview clean and
+save on either platform. Team-tool/Lead-only rejections, the live-but-empty catalog behavior, and
+the empty/no-Lead degradations are unchanged, and `client.js` needed no change. The specification
+suite is `smoke/windows-shell-alias.test.mjs` (14 cases); the optional
+`smoke/run-windows-parity.mjs` probe (14/14 on 2026-11-09) boots a real headless profile with
+`tool-bash` disabled and a test-only stand-in `pwsh` tool — simulated Windows evidence, not a live
+Windows/PowerShell certification.

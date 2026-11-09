@@ -96,6 +96,7 @@ tool share the document layer, while the command and runtime share the applicati
 | [`index.js`](../index.js) | Cordis plugin entry; config normalization; deps; creation fence; veto-only admission and lifecycle-safe per-Agent installation; pre-existing-Agent activation policy | `name`, `inject`, `normalizeConfig(raw, logger)`, `resolveRoot(ctx, agent)`, `createDeps(ctx, config, catalog, bindings, pending, logger)`, `apply(ctx, rawConfig)` |
 | [`lib/soul.js`](../lib/soul.js) | Soul parser/validator (including the reserved `lead` identity), persona composition, catalog discovery and prompt text | `parseFrontmatter`, `parseSoulMarkdown`, `composePersona`, `catalogPromptText`, `createCatalog` |
 | [`lib/model.js`](../lib/model.js) | Resolve a frontmatter `model`/`provider`/`reasoning-effort` into one route | `resolveModelRoute(raw, services)` |
+| [`lib/tool-names.js`](../lib/tool-names.js) | Frozen portable shell-name resolver: `bash` ↔ `pwsh` are two spellings of one model-facing shell tool; only that pair aliases | `SHELL_TOOL_ALIAS_PAIRS`, `shellCounterpart`, `resolveToolName`, `toolNameKnown`, `resolveRestrictableNames` |
 | [`lib/spawn.js`](../lib/spawn.js) | Spawn orchestration shared by the tool and slash commands; default-Soul resolution; soul-only creation fence; list/command operations | `commandNameFor`, `nextTeammateName`, `assertSoulOnlyTeamChild`, `spawnTeamMember`, `describeSouls`, `spawnSoulFromCommand` |
 | [`lib/preferences.js`](../lib/preferences.js) | Plugin-owned default-Soul preference document, default resolution, GUI-facing preference block | `PREFERENCES_FILE_NAME`, `BUILTIN_DEFAULT_SOUL`, `preferencesPathOf`, `readPreferences`, `savePreferences`, `resolveDefaultSoul`, `describePreferences`, `createPreferenceStore` |
 | [`lib/apply.js`](../lib/apply.js) | Apply one soul to a freshly created or cold-resumed teammate; fail-closed plan resolution (pending plan, then durable binding); pending-spawn handoff; bounded cold-resume admission diagnostics | `createPendingSpawns`, `createAdmissionDiagnostics`, `SoulPlanUnavailableError`, `applyTeammateSoul` |
@@ -255,14 +256,20 @@ Both `spawn_teammate` (Lead tool) and a user-invocable slash command enter throu
    fallback.
 3. Validate the soul's tool list against the Lead's visible tool definitions:
    - Team tools are rejected: they are own-scope and cannot be restricted.
-   - Any name not visible in the current session is rejected before a teammate exists.
+   - A name is accepted when it resolves to a visible tool: an exact registration wins, and the one
+     portable exception is the shell pair — a declared `bash`/`pwsh` resolves to the registered
+     counterpart (DSH registers `bash` on POSIX, `pwsh` on Windows), so a platform-neutral soul is
+     accepted on either host. No other name is aliased.
+   - Any other name not visible in the current session is rejected before a teammate exists.
    - When the `tools` service is unavailable, the check is skipped; a failure of
      `tools.definitions(lead)` itself is logged and the check is skipped.
 4. Resolve `context`: explicit tool argument → soul `context` → `config.defaultContext`; reject
    anything other than `fresh`/`fork`. The Agent Teams provider is `freshProvider`/`forkProvider`.
 5. Resolve the model declaration through `deps.resolveModel`. `undefined` means inherit.
 6. Build the plan:
-   `{ name, persona, tools, model, context, sourceLabel }`.
+   `{ name, persona, tools, model, context, sourceLabel }`. `tools` keeps the declared names as
+   written (either shell spelling included); resolution happens when the soul is applied, and the
+   durable binding records the declaration rather than a per-host resolved name.
 7. Put the plan in `deps.pending` under `deps.pendingKey(lead, requestedName)`, call
    `ctx.agentTeams.spawnTeammate`, and remove the pending entry in `finally`. After the spawn
    resolves, write the durable binding for `member.id`.
@@ -279,10 +286,12 @@ Both `spawn_teammate` (Lead tool) and a user-invocable slash command enter throu
      publication instead of running the child under the deployment persona;
    - register the persona section `deployment:persona-prefix` at the deployment persona order,
      with the composed persona text;
-   - probe every `tools` name with `restrict({ allow: [name] })`, immediately disposing the probe;
-     names that throw are not restrictable in this scope (Team tools, unknown names) and are
-     skipped with a warning; apply one final `restrict({ allow: restrictable })` (or `allow: []` to
-     deny all inherited tools);
+   - resolve every `tools` name with `resolveRestrictableNames`: probe it exactly first and then
+     through its shell counterpart, immediately disposing each probe. The final restriction names
+     the resolved tools in request order, deduplicated (a list naming both `bash` and `pwsh` over one
+     live spelling restricts once); names that resolve to nothing are not restrictable in this scope
+     (Team tools, unknown names) and are skipped with a warning; apply one final
+     `restrict({ allow: restrictable })` (or `allow: []` to deny all inherited tools);
    - select the resolved model with `agent.model.select(route)`;
    - persist the binding only when the plan came from the pending spawn (a cold-resume plan already
      exists in the store).
@@ -498,7 +507,11 @@ outcome is qualified in step 10 under **Enable**).
    with the error instead).
 2. Re-analyze the source to obtain the parsed definition (the public detail does not carry it).
 3. Resolve the optional model route and probe the optional tools list before touching the current
-   bundle. A failure here aborts with no partial state.
+   bundle. Each requested tool name is probed exactly and then through its shell counterpart, so a
+   doctrine `bash` declaration applies on a `pwsh` session (an exact registration wins and only the
+   pair aliases); only genuinely unresolved names are skipped with a warning. A missing tool
+   restriction service here aborts with no partial state; one name that cannot be restricted does
+   not.
 4. Build prompt texts: substitute variables in each section. The persona text is
    `ORCHESTRATOR_FIXED_IDENTITY` followed by the substituted editable identity (or the fixed text
    alone when the section is empty), so the document can add boundaries but never remove the runtime
@@ -837,7 +850,9 @@ parser itself does not require any of the four headings; the document layer uses
 ```
 
 `model` is `null` when the soul inherited the Lead's model; `context` may be `null`;
-`sourceLabel` may be `null` in old records. The store retains the newest 500 records **per
+`sourceLabel` may be `null` in old records. `tools` records the declared list verbatim — including
+`bash` or `pwsh` — so a binding stays platform-neutral; the live spelling is resolved when the
+soul is applied. The store retains the newest 500 records **per
 bindings document**: normally one per workspace root. An intentionally shared absolute
 `bindingsFile` shares both the child-id keyspace and the retention budget; it does not create a
 second root namespace. Use the default workspace-relative file for separate workspace state.
@@ -1239,12 +1254,13 @@ verify the bundled-default resolution that makes the command available in any wo
 the command's registration. The rollback branches are covered at the handler seam with an in-memory
 Agent double (`smoke/orchestrator-fixes.test.mjs`), not a full Host lifecycle.
 
-The executable checks are `node --check`, the focused `node:test` suites under `smoke/` — 81 cases
-across eight `*.test.mjs` modules — and the keyless end-to-end harness. The suites are
+The executable checks are `node --check`, the focused `node:test` suites under `smoke/` — 95 cases
+across nine `*.test.mjs` modules — and the keyless end-to-end harness. The suites are
 remediation-bindings + remediation-admin 15, bundled-editable 16, config-toggle 8, gui-fixes 9
-(159 assertions), storage-fixes 18, orchestrator-fixes 8 (97 assertions), and smoke-fixes 7
-(72 assertions). `run-smoke.mjs` is safe to run directly from this package tree: its document
-write-refusal probes use a run-owned package copy, and the real `agents/generalist.md` is only
+(159 assertions), storage-fixes 18, orchestrator-fixes 8 (97 assertions), smoke-fixes 7
+(72 assertions), and windows-shell-alias 14. `run-smoke.mjs` is safe to run directly from this
+package tree: its document write-refusal probes use a run-owned package copy, and the real
+`agents/generalist.md` is only
 snapshotted before and after, never restored; a concurrent legitimate edit is preserved and
 reported. A disposable copy remains optional.
 
@@ -1273,9 +1289,12 @@ dumps that fresh profile's composed config and asserts the shipped `tool-agent-t
 by this bundle's own patch (the portable counterpart of a per-machine profile override), then asserts
 the Lead catalog, soul spawn, persona composition, exact tool matrices, model routing, user-invocable
 command execution, durable bindings, seeded environment-canary scrubbing, and an asserted
-`/orchestrate` registration — **50 checks** in total. The harness passed **50/50** directly on
-2026-11-08 (macOS arm64, Node 26.13.0). It seeds removable credential/proxy/loader canaries into the
-runner environment and asserts the allowlisted child environment drops each one; this proves those
+`/orchestrate` registration, and the portable shell-name resolution (the command-spawned soul
+declares the absent `pwsh` spelling on this POSIX host; the child inherits `bash`, never advertises
+`pwsh`, and the binding keeps the declared `["pwsh","read"]` list) — **53 checks** in total. The
+harness passed **53/53** directly on 2026-11-09 (macOS arm64, Node 26.13.0). It seeds removable
+credential/proxy/loader canaries into the runner environment and asserts the allowlisted child
+environment drops each one; this proves those
 variables are removed, not that every possible inherited secret is. The mode itself is still not
 activated end-to-end. The `bundledEditable` behavior is covered by the keyless `node:test`
 module [`smoke/bundled-editable.test.mjs`](../smoke/bundled-editable.test.mjs), which runs against a
@@ -1291,11 +1310,13 @@ in `smoke/gui-fixes.test.mjs` (client artifact contracts and live route validati
 `smoke/storage-fixes.test.mjs` (binding/delete/rename/path semantics),
 `smoke/orchestrator-fixes.test.mjs` (handler-seam rollback and doctrine/context contracts), and
 `smoke/smoke-fixes.test.mjs` (isolated probes, canaries, and remediation reporting). Per-module
-counts live in [`../smoke/README.md`](../smoke/README.md). On 2026-11-08 `node --test smoke/`
-passed **81/81** (15 remediation, 16 bundled-editable with 222 assertions, 8 config-toggle with 129,
-9 gui-fixes with 159, 18 storage-fixes, 8 orchestrator-fixes with 97, 7 smoke-fixes with 72). The
-direct-tree smoke run passed 50/50, and the candidate remediation runtime passed **169/169** with
-2/2 suites on both a canonical and a symlink-prefixed disposable run root.
+counts live in [`../smoke/README.md`](../smoke/README.md). On 2026-11-09 `node --test smoke/`
+passed **95/95** (15 remediation, 16 bundled-editable with 222 assertions, 8 config-toggle with 129,
+9 gui-fixes with 159, 18 storage-fixes, 8 orchestrator-fixes with 97, 7 smoke-fixes with 72, and 14
+windows-shell-alias cases for the portable `bash`/`pwsh` resolution). The direct-tree smoke run
+passed 53/53, the optional inverted-composition probe `smoke/run-windows-parity.mjs` passed
+**14/14**, and the candidate remediation runtime — not re-run for 0.4.1 — passed **169/169** with
+2/2 suites on both a canonical and a symlink-prefixed disposable run root in its 2026-11-08 run.
 
 The config-toggle and gui-fixes client cases evaluate the real artifact with a minimal
 React/module-loader double and assert registration and source strings. They do **not** execute hooks,
@@ -1305,9 +1326,10 @@ remediation runner publishes an honest summary (`status`, `complete`, `incomplet
 atomic readiness/temp-and-rename pattern, and readers retry partial readiness JSON, so an interrupted
 run cannot read as a full pass. The baseline remediation run still needs an archived
 `QAS_BASELINE_DIR`; rendered-browser checks, real providers/model quality, full orchestrator
-activation, and other OS/Node combinations remain unrun. See
-[`../smoke/README.md`](../smoke/README.md) for the historical 2026-11-07 symlink observation and
-full limits.
+activation, other OS/Node combinations, and a live Windows/PowerShell run remain unrun (the
+`smoke/run-windows-parity.mjs` probe simulates the inverted composition on a POSIX host with a
+stand-in `pwsh` tool). See [`../smoke/README.md`](../smoke/README.md) for the historical 2026-11-07
+symlink observation and full limits.
 
 ## Sharp edges
 
@@ -1358,9 +1380,11 @@ full limits.
   the catalog source is `live-lead`, rejects unknown tools — including when that live catalog is
   empty, where every non-Team name is unknown. Only a missing catalog (`source: 'none'`) skips the
   membership check. The orchestrator apply path probes and *skips* non-restrictable/unavailable names
-  with a warning; only a restriction-service failure aborts. The three paths intentionally have
-  different strictness because a soul runs later while an orchestrator definition may target a
-  changing tool set.
+  with a warning; only a restriction-service failure aborts. All three paths accept either `bash` or
+  `pwsh` through `lib/tool-names.js` (exact registration first, then the counterpart), and the GUI
+  gets the same result from the catalog entry it advertises; no path aliases a non-shell name. The
+  three paths intentionally have different strictness because a soul runs later while an
+  orchestrator definition may target a changing tool set.
 - **The Team tool surface is installed in every member scope.** `spawn_teammate` and
   `interrupt_agent` are Lead-only by the Team service contract; `interrupt_agent` is only registered
   when `config.interrupt` is true. `list_agent_souls` is technically callable by a teammate even

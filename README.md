@@ -717,10 +717,14 @@ bundled soul file changed for this: the definitions that declare a tool matrix k
 now resolves on a Windows session; `generalist` and `software-engineer` declare none and inherit
 every tool.
 
-The shipped verification is simulated, not a Windows certification: on a POSIX host the optional
-`smoke/run-windows-parity.mjs` probe boots a real headless DSH profile with the `tool-bash` row
-disabled and a test-only stand-in `pwsh` tool, then spawns a `bash`-declaring soul and asserts the
-child inherits `pwsh`. No live Windows or PowerShell run backs this page.
+The repeatable local verification is the optional `smoke/run-windows-parity.mjs` probe: on a
+POSIX host it boots a real headless DSH profile with the `tool-bash` row disabled and a test-only
+stand-in `pwsh` tool, then spawns a `bash`-declaring soul and asserts the child inherits `pwsh`. A
+live Windows 11 Pro run on 2026-11-09 also exercised the path directly — on a session whose live
+catalog exposed `pwsh` and no `bash`, all three reduced-matrix souls spawned and their children's
+in-program bindings carried `pwsh` with no `bash` key — see
+[Development and testing](#development-and-testing) for the evidence and for what the Windows run
+did not cover.
 
 ### Body sections
 
@@ -1423,10 +1427,17 @@ They are not shared with other browsers.
   the Lead's restrictable catalog; an unknown name fails before a teammate is created. The portable
   shell pair is the one exception: a declared `bash`/`pwsh` resolves to the registered counterpart
   (an exact registration wins), and no other name is aliased.
-- **No live Windows or PowerShell run.** Portable shell-name resolution is verified on macOS with a
-  simulated inverted composition — the real headless runtime with the `tool-bash` row disabled and a
-  test-only stand-in `pwsh` tool — not on a Windows host with PowerShell. Windows registration,
-  quoting, and shell-dialect behavior are outside this bundle's evidence.
+- **Windows evidence is partial.** Maintainer-run Windows 11 Pro sessions on 2026-11-09 verified
+  installation and the spawn/apply shell-alias path: `researcher`, `scribe`, and
+  `adversarial-red-team-verifier` spawned from their bundled `bash` declarations, and each child's
+  in-program bindings were exactly the soul's seven declared tools with `pwsh` substituted for
+  `bash` (plus the ten Team tools), with no `bash` key, no warnings, and empty `list_agent_souls`
+  diagnostics. An earlier Windows run the same day exercised the full-matrix `software-engineer`
+  path and shell execution. The GUI catalog alias (chips/preview/save), the orchestrator `tools`
+  matrix, and cold-resume binding persistence have **not** been exercised on Windows; the POSIX
+  suites remain their evidence. The Windows session did not print the package version, but a
+  `bash` declaration spawning successfully where only `pwsh` is registered is 0.4.1 behavior —
+  0.4.0 rejected that declaration.
 - **Orchestrator mode is per session and command-activated.** It is off by default. The model
   override is session-scoped, not a profile default. The previous model is restored only when it
   was captured in the same process; after a reload there is no captured original.
@@ -1530,8 +1541,35 @@ The optional `node smoke/run-windows-parity.mjs` probe covers the inverted compo
 2026-11-09 it passed **14/14** checks: it boots a real headless DSH profile with the `tool-bash` row
 disabled and a test-only plugin that registers a stand-in `pwsh` tool, publishes a
 `bash`-declaring soul, and asserts the child inherits `pwsh` and never advertises `bash`, while the
-durable binding keeps the declared `bash` spelling. This is simulated Windows evidence on a POSIX
-host, not a live Windows/PowerShell certification.
+durable binding keeps the declared `bash` spelling. This is the repeatable simulated-Windows
+evidence on a POSIX host; the live Windows run described next covers the same spawn/apply path in
+the real environment.
+
+### Live Windows verification (2026-11-09)
+
+A maintainer-run Windows 11 Pro session (`session-d5aa7840-4427-4a86-82f0-621835b3f5dc`, DSH Web
+profile whose live catalog exposed `pwsh` and no `bash`) exercised the portable alias through real
+spawns, not the stand-in probe: the Lead spawned one teammate per reduced-matrix soul and had each
+run `console.log(JSON.stringify(Object.keys(tools).sort()))` inside its `run_code` program. The
+exact sorted binding lists were:
+
+| Soul | Declared shell | Bound shell | Declared non-Team tools | Bindings |
+|---|---|---|---|---|
+| `researcher` | `bash` | `pwsh` | `web_search`, `web_fetch`, `read`, `glob`, `grep`, `skill` | 17 = 7 + 10 Team tools |
+| `scribe` | `bash` | `pwsh` | `read`, `glob`, `grep`, `write`, `edit`, `skill` | 17 = 7 + 10 Team tools |
+| `adversarial-red-team-verifier` | `bash` | `pwsh` | `read`, `glob`, `grep`, `read_image`, `working_directory`, `skill` | 17 = 7 + 10 Team tools |
+
+All three spawns were accepted with empty `member.diagnostics`; every list contained the ten Team
+tools and exactly that soul's declared non-Team tools, with `pwsh` in place of `bash` and no extra
+or missing name; no child list contained a `bash` key; no `non-restrictable`, "not a tool visible",
+or runtime error text appeared; and `list_agent_souls` diagnostics stayed `[]`. The preceding
+Windows 11 Pro tool-surface run the same day had already exercised installation, the full-matrix
+`software-engineer` soul (40 bindings including `pwsh`), and shell execution across the 30 tested
+tools with zero failures.
+
+Not covered by the Windows runs: the GUI catalog alias (chips, preview diagnostics, save), the
+orchestrator `tools` matrix, cold-resume binding persistence, and rendered-browser interaction.
+`smoke/run-windows-parity.mjs` remains the repeatable simulated check for the spawn/apply path.
 
 The focused remediation runtime is separate from the smoke harness. On 2026-11-08,
 `node smoke/remediation-runtime.mjs --target candidate --only all` passed **169/169** with **2/2

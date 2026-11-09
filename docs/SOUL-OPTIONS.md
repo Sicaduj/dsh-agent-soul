@@ -304,11 +304,13 @@ These summarize a file; they are not editable.
   a captured model restore. The handler-level tests use an in-memory Agent double, not a full real
   Host lifecycle; inspect the effective mode, doctrine, and route after a compound failure.
 - **Verification scope:** no automated check renders the browser page or runs a full real
-  orchestrator lifecycle; real providers/model quality and other OS/Node versions are unrun, and the
-  portable shell pair is verified with a simulated inverted composition on macOS rather than on a
-  Windows host with PowerShell. Localization covers plugin chrome, not raw Host diagnostics/messages
-  or file content. Baseline remediation needs an archived `QAS_BASELINE_DIR`. See
-  [`../README.md`](../README.md#known-limitations).
+  orchestrator lifecycle; real providers/model quality and other OS/Node versions are unrun. The
+  portable shell pair's spawn/apply path was additionally exercised in a maintainer-run Windows 11
+  Pro session on 2026-11-09 (the three reduced-matrix souls received `pwsh` for their declared
+  `bash`, with no warnings), while its GUI and orchestrator paths are covered only by the POSIX
+  suites and the simulated inverted-composition probe. Localization covers plugin chrome, not raw
+  Host diagnostics/messages or file content. Baseline remediation needs an archived
+  `QAS_BASELINE_DIR`. See [`../README.md`](../README.md#known-limitations).
 
 ## File mapping cheat sheet
 

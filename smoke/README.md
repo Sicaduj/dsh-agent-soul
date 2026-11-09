@@ -134,9 +134,11 @@ It passed **14/14** checks on **2026-11-09** (macOS arm64, Node 26.13.0). The ru
 inverted profile dump (the `tool-bash` row disabled, the real `tool-pwsh` row still gated to
 Windows, the stand-in plugin mounted), a clean `dsh run` exit, a spawned teammate with its persona
 and body, and the child's inherited tools: `pwsh` is present and `bash` is absent while the binding
-still records `["bash", "read", "grep", "glob"]`. This is **simulated Windows evidence on a POSIX
-host** — it does not run Windows, PowerShell, or DSH's real Windows shell registration, and it is a
-development verification harness rather than shipped plugin code. Prerequisites are the same as the
+still records `["bash", "read", "grep", "glob"]`. This is the repeatable **simulated Windows
+evidence on a POSIX host** — the probe itself does not run Windows, PowerShell, or DSH's real Windows
+shell registration, and it is a development verification harness rather than shipped plugin code.
+(A maintainer-run Windows 11 Pro session on 2026-11-09 independently confirmed the spawn/apply half
+in the real environment; see [`../README.md`](../README.md#development-and-testing).) Prerequisites are the same as the
 main harness (a DSH checkout with `tsx`; no credentials), and it must not run while another headless
 DSH boot is active.
 
@@ -217,8 +219,11 @@ macOS arm64 / Node 26.13.0 environment, not claims for other platforms or Node v
 - **Full orchestration lifecycle:** Orchestrator mode is not activated end to end; its command
   registration is asserted, and rollback/doctrine behavior is covered at the handler seam with an
   in-memory Agent double.
-- **Live Windows or PowerShell:** not run. `smoke/run-windows-parity.mjs` simulates the inverted
-  composition on macOS with a test-only stand-in `pwsh` tool; it does not exercise Windows,
-  PowerShell, or DSH's real Windows shell registration.
+- **Live Windows or PowerShell:** maintainer-run Windows 11 Pro sessions on 2026-11-09 exercised
+  installation, the full-matrix `software-engineer` path, and the spawn/apply shell-alias path for
+  the three reduced-matrix souls (each child bound `pwsh` for its declared `bash`, with no warnings).
+  The GUI alias path and orchestrator tools matrix were not exercised there; the repeatable
+  `smoke/run-windows-parity.mjs` probe still simulates the inverted composition on macOS with a
+  test-only stand-in `pwsh` tool and does not itself run Windows or PowerShell.
 - **Other operating systems or Node versions:** not run.
 - **Full DSH repository suite:** outside this plugin package's scope.

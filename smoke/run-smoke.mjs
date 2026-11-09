@@ -62,6 +62,17 @@ function check(name, condition, detail = '') {
   if (!ok) throw new Error(`smoke assertion failed: ${name}${detail === '' ? '' : ` (${detail})`}`)
 }
 
+/**
+ * The DSH base composition registers exactly one shell spelling per platform
+ * (`tool-bash` on POSIX, `tool-pwsh` on Windows). The command-probe soul
+ * declares the *other* spelling on purpose, so the real spawn validation and
+ * apply path must resolve the counterpart and hand the child the live tool.
+ * The optional smoke/run-windows-parity.mjs probe covers the inverted
+ * composition on a POSIX host.
+ */
+const LIVE_SHELL_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash'
+const DECLARED_SHELL_TOOL = LIVE_SHELL_TOOL === 'bash' ? 'pwsh' : 'bash'
+
 /** Read a JSON Lines observation file, tolerating a missing file. */
 async function readObservations(path) {
   try {
@@ -111,6 +122,11 @@ One short report through send_message.
 /**
  * Publish the user-invocable soul used to verify slash-command registration
  * and execution through the real commands service.
+ *
+ * Its tools list declares the counterpart of this host's live shell tool, so
+ * the real spawn validation and apply path must resolve it and grant the child
+ * the live spelling. The durable binding keeps the declared spelling for the
+ * platform-neutral plan.
  */
 async function writeCommandSoul(root) {
   const dir = join(root, '.dsh', 'agents')
@@ -119,6 +135,7 @@ async function writeCommandSoul(root) {
 name: probe-cli
 description: User-invocable probe soul used by the smoke run to verify slash-command registration and execution.
 tools:
+  - ${DECLARED_SHELL_TOOL}
   - read
 model: deepseek-flash
 user-invocable: true
@@ -131,7 +148,7 @@ You are the command-line probe. COMMAND_SOUL_MARKER
 
 ## Hard Rules
 
-- Use only the read tool.
+- Use only the read tool and the session shell tool.
 
 ## Output Format
 
@@ -643,8 +660,18 @@ async function main() {
     const commandTeammate = observations.find(entry => entry.kind === 'teammate-command')
     check('command-spawned teammate gets its persona', commandTeammate?.personaOk === true)
     check('command-spawned teammate gets its body marker', commandTeammate?.markerOk === true)
-    const expectedCommandTools = expectedSoulTools('read')
+    const expectedCommandTools = expectedSoulTools(LIVE_SHELL_TOOL, 'read')
     check('command-spawned teammate tool matrix is enforced', JSON.stringify([...(commandTeammate?.tools ?? [])].sort()) === JSON.stringify(expectedCommandTools), JSON.stringify(commandTeammate?.tools))
+    check(
+      `command-spawned teammate inherits the live ${LIVE_SHELL_TOOL} shell tool`,
+      (commandTeammate?.tools ?? []).includes(LIVE_SHELL_TOOL),
+      JSON.stringify(commandTeammate?.tools),
+    )
+    check(
+      `command-spawned teammate never advertises the absent ${DECLARED_SHELL_TOOL} spelling`,
+      !(commandTeammate?.tools ?? []).includes(DECLARED_SHELL_TOOL),
+      JSON.stringify(commandTeammate?.tools),
+    )
 
     const bindings = JSON.parse(await readFile(bindingsPath, 'utf8'))
     const binding = Object.values(bindings.bindings ?? {})[0]
@@ -654,6 +681,12 @@ async function main() {
     check('binding records the tool matrix', JSON.stringify(binding?.tools) === JSON.stringify(['read', 'grep', 'glob']))
     const bindingNames = Object.values(bindings.bindings ?? {}).map(entry => entry.name).sort()
     check('both soul bindings were recorded', bindingNames.includes('probe') && bindingNames.includes('probe-cli'), JSON.stringify(bindingNames))
+    const commandBinding = Object.values(bindings.bindings ?? {}).find(entry => entry.name === 'probe-cli')
+    check(
+      'command soul binding keeps the portable shell declaration',
+      JSON.stringify(commandBinding?.tools) === JSON.stringify([DECLARED_SHELL_TOOL, 'read']),
+      JSON.stringify(commandBinding?.tools),
+    )
 
     const routed = await findRoutedSession(join(home, 'sessions'))
     check('child Session log records the routed model selection', routed !== undefined, routed?.file ?? 'not found')

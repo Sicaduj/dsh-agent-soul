@@ -1326,10 +1326,13 @@ remediation runner publishes an honest summary (`status`, `complete`, `incomplet
 atomic readiness/temp-and-rename pattern, and readers retry partial readiness JSON, so an interrupted
 run cannot read as a full pass. The baseline remediation run still needs an archived
 `QAS_BASELINE_DIR`; rendered-browser checks, real providers/model quality, full orchestrator
-activation, other OS/Node combinations, and a live Windows/PowerShell run remain unrun (the
-`smoke/run-windows-parity.mjs` probe simulates the inverted composition on a POSIX host with a
-stand-in `pwsh` tool). See [`../smoke/README.md`](../smoke/README.md) for the historical 2026-11-07
-symlink observation and full limits.
+activation, the GUI alias path and orchestrator tools matrix on Windows, cold-resume binding
+persistence on Windows, and other OS/Node combinations remain unrun. A maintainer-run Windows 11
+Pro session on 2026-11-09 did cover installation, the full-matrix `software-engineer` path, and the
+spawn/apply alias path for the three reduced-matrix souls (children bound `pwsh` for their declared
+`bash`, with no warnings); `smoke/run-windows-parity.mjs` remains the repeatable inverted-composition
+probe on a POSIX host with a stand-in `pwsh` tool. See [`../smoke/README.md`](../smoke/README.md) for
+the historical 2026-11-07 symlink observation and full limits.
 
 ## Sharp edges
 

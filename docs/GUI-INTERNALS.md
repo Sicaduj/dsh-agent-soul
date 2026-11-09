@@ -1448,5 +1448,9 @@ save on either platform. Team-tool/Lead-only rejections, the live-but-empty cata
 the empty/no-Lead degradations are unchanged, and `client.js` needed no change. The specification
 suite is `smoke/windows-shell-alias.test.mjs` (14 cases); the optional
 `smoke/run-windows-parity.mjs` probe (14/14 on 2026-11-09) boots a real headless profile with
-`tool-bash` disabled and a test-only stand-in `pwsh` tool — simulated Windows evidence, not a live
-Windows/PowerShell certification.
+`tool-bash` disabled and a test-only stand-in `pwsh` tool. A maintainer-run Windows 11 Pro session on
+2026-11-09 additionally confirmed the spawn/apply half in the real environment: on a `pwsh`-only
+session all three reduced-matrix souls spawned from their `bash` declarations and their children's
+bindings carried `pwsh` with no `bash` key and no warnings. The GUI half (catalog entry, chips,
+preview, save) and the orchestrator matrix remain covered only by the route/unit tests here and the
+stand-in probe; no rendered-browser check exists.

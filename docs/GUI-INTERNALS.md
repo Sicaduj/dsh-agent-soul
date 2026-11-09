@@ -1450,4 +1450,3 @@ suite is `smoke/windows-shell-alias.test.mjs` (14 cases); the optional
 `smoke/run-windows-parity.mjs` probe (14/14 on 2026-11-09) boots a real headless profile with
 `tool-bash` disabled and a test-only stand-in `pwsh` tool — simulated Windows evidence, not a live
 Windows/PowerShell certification.
-

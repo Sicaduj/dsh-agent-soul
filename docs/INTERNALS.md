@@ -26,9 +26,10 @@ document describes the resulting architecture.
 
 ## What the plugin does
 
-Agent Teams spawns teammates through `spawn_teammate`. This bundle's profile patch disables the
-shipped `tool-agent-team` row and inserts `agent-soul-team`, a soul-aware copy of the Team
-tool surface. It keeps the shipped tools and adds:
+Agent Teams runs on the standard subagent tree: stock DSH 0.2.2 delegates with `subagent` and
+`subagent_fork`, and `spawn_teammate` is a tool this plugin adds only for a Team-enabled Lead.
+This bundle's profile patch inserts `agent-soul-team` and leaves the shipped `tool-agent-team`
+row enabled; the base row keeps `team_task_*` and the shared `team:policy`. The plugin adds:
 
 1. **Soul definitions** — Markdown files with YAML frontmatter (`name`, `description`, `tools`,
    optional `model`/`provider`/`reasoning-effort`/`context`/`user-invocable`) and a body with the
@@ -526,11 +527,14 @@ outcome is qualified in step 10 under **Enable**).
    restriction service here aborts with no partial state; one name that cannot be restricted does
    not.
 4. Build prompt texts: substitute variables in each section. The persona text is
-   `ORCHESTRATOR_FIXED_IDENTITY` followed by the substituted editable identity (or the fixed text
-   alone when the section is empty), so the document can add boundaries but never remove the runtime
-   role. The five non-identity sections become `orchestrator:plan`, `:delegation`, `:state`,
-   `:verification`, `:recovery`; extra markdown becomes `orchestrator:extra`. Empty sections are
-   skipped.
+   `orchestratorFixedIdentity(teamModeEnabled)` followed by the substituted editable identity (or
+   the fixed text alone when the section is empty), so the document can add boundaries but never
+   remove the runtime role. Because `spawn_teammate` is plugin-provided and hidden outside Team
+   mode, the fixed delegation sentence is a per-assembly function: it names `spawn_teammate` only
+   when Team mode is enabled and otherwise points at the stock `subagent`/`subagent_fork` path (or
+   reports the missing surface). The five non-identity sections become `orchestrator:plan`,
+   `:delegation`, `:state`, `:verification`, `:recovery`; extra markdown becomes
+   `orchestrator:extra`. Empty sections are skipped.
 5. Compute orders from the live prompt service: `TEAM_POLICY - 100`, `+10`, `+20`, `+30`, `+40`,
    and `+50` for extras.
 6. Capture the current Lead model only for a genuine first explicit enable (a route exists, no
@@ -765,7 +769,7 @@ The catalog text is `catalogPromptText(snapshot, { maxPromptChars, commandPrefix
 ```text
 ## Available teammate souls
 
-A teammate started with `spawn_teammate({ ..., agent_type: "<name>" })` runs with the matching soul: its role definition is applied at the deployment-persona position (a configured deployment prefix line is still emitted first), its tool list becomes a hard permission matrix, and its model becomes the routed model. Every Team child must run a defined Agent Soul. If no soul matches the task, omit `agent_type` and the configured default Agent Soul is used; if no default is usable, `spawn_teammate` fails and names the reason. Never start a child with `subagent` or `subagent_fork` (both are hidden, guarded, and rejected at creation), and never invent a soul name. Match a task to a soul by its description; call `list_agent_souls` for full detail.
+A teammate started with `spawn_teammate({ ..., agent_type: "<name>" })` runs with the matching soul: its role definition is applied at the deployment-persona position (a configured deployment prefix line is still emitted first), its tool list becomes a hard permission matrix, and its model becomes the routed model. Every Team child must run a defined Agent Soul. If no soul matches the task, omit `agent_type` and the configured default Agent Soul is used; if no default is usable, `spawn_teammate` fails and names the reason. Never start a Team child with `subagent` or `subagent_fork` (both are guarded, and a strict soul tools list also hides them; the creation fence rejects a child without a Soul plan), and never invent a soul name. If `spawn_teammate` is not visible, report the missing Agent Soul surface rather than falling back to a generic child. Match a task to a soul by its description; call `list_agent_souls` for full detail.
 
 - <name> — <one-line description, <= 600 chars> (tools: <a, b | all | none>; model: <raw | inherit>; command: /<commandPrefix><name> | AI only)
 ```
@@ -1285,8 +1289,8 @@ layer's filesystem fence directly (a symlinked `.dsh` cannot auto-create or dupl
 workspace; with the default config, a configured absolute, workspace-relative, or symlink alias of
 the packaged `agents/` directory still classifies as `bundled` and refuses save/delete, leaving the
 packaged file unchanged; a bundled-soul duplicate still lands under `<workspace>/.dsh/agents`), then
-dumps that fresh profile's composed config and asserts the shipped `tool-agent-team` row is disabled
-by this bundle's own patch (the portable counterpart of a per-machine profile override), then asserts
+dumps that fresh profile's composed config and asserts the shipped `tool-agent-team` row stays
+enabled alongside this bundle's row, then asserts
 the Lead catalog, soul spawn, persona composition, exact tool matrices, model routing, user-invocable
 command execution, durable bindings, seeded environment-canary scrubbing, and an asserted
 `/orchestrate` registration, and the portable shell-name resolution (the command-spawned soul
@@ -1311,8 +1315,8 @@ in `smoke/gui-fixes.test.mjs` (client artifact contracts and live route validati
 `smoke/orchestrator-fixes.test.mjs` (handler-seam rollback and doctrine/context contracts), and
 `smoke/smoke-fixes.test.mjs` (isolated probes, canaries, and remediation reporting). Per-module
 counts live in [`../smoke/README.md`](../smoke/README.md). On 2026-11-13 `node --test smoke/`
-passed **109/109** (15 remediation, 16 bundled-editable with 222 assertions, 8 config-toggle with 129,
-10 gui-fixes with 176, 18 storage-fixes, 8 orchestrator-fixes with 97, 7 smoke-fixes with 72, 14
+passed **110/110** (15 remediation, 16 bundled-editable with 222 assertions, 8 config-toggle with 129,
+10 gui-fixes with 176, 18 storage-fixes, 9 orchestrator-fixes with 97, 7 smoke-fixes with 72, 14
 windows-shell-alias, and 13 team-runtime cases). The direct-tree smoke run passed 58/58, the optional
 inverted-composition probe `smoke/run-windows-parity.mjs` passed **14/14**, and the candidate
 remediation runtime passed **179/179** with 2/2 suites on a fresh disposable run root.
@@ -1387,10 +1391,10 @@ the historical 2026-11-07 symlink observation and full limits.
   gets the same result from the catalog entry it advertises; no path aliases a non-shell name. The
   three paths intentionally have different strictness because a soul runs later while an
   orchestrator definition may target a changing tool set.
-- **The Team tool surface is installed in every member scope.** `spawn_teammate` and
-  `interrupt_agent` are Lead-only by the Team service contract; `interrupt_agent` is only registered
-  when `config.interrupt` is true. `list_agent_souls` is technically callable by a teammate even
-  though it is Lead-facing. `manage_agent_souls` is installed only for the Lead.
+- **The Team tool surface is installed in every member scope.** `spawn_teammate` is Lead-only.
+  `interrupt_agent` belongs to the base `tool-subagent-control` row and is registered there unless
+  that row sets `interrupt: false`; this plugin does not own the switch. `list_agent_souls` is
+  registered only in the Lead scope, and `manage_agent_souls` is installed only for the Lead.
 - **Catalog budgets vs health.** The catalog keeps whole entries and may omit later entries; health
   measures the full rendered catalog with a very large budget so over-budget pressure is visible.
   `maxDefinitions` caps the valid definitions kept per root.

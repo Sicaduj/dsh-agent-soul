@@ -465,7 +465,9 @@ test('orchestrator enable resolves a doctrine bash declaration to the live pwsh 
   assert.equal(run.runtime.isActive(run.agent), true, 'orchestrator mode is live')
   assert.deepEqual(finalAllow(run.state), ['pwsh', 'read'],
     'the applied restriction names the registered pwsh tool and the exact read tool')
-  assert.equal(run.state.sections.some(section => String(section.text).includes('ORCH-ALIAS-DOCTRINE')), true,
+  assert.equal(run.state.sections.some(section => (typeof section.text === 'function'
+    ? String(section.text({}))
+    : String(section.text)).includes('ORCH-ALIAS-DOCTRINE')), true,
     'the doctrine section is installed')
   const skipWarnings = run.warnings.filter(message => message.includes('non-restrictable tool(s) stay visible'))
   assert.equal(skipWarnings.length, 1, 'one skip warning is logged')

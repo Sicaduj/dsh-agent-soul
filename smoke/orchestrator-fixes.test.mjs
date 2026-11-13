@@ -39,7 +39,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { createOrchestratorRuntime, installOrchestratorCommand } from '../lib/orchestrator.js'
+import { createOrchestratorRuntime, installOrchestratorCommand, orchestratorFixedIdentity } from '../lib/orchestrator.js'
 import { installSoulSurface } from '../lib/tools.js'
 
 /** The real package root, used only to read the bundled defaults. */
@@ -142,6 +142,7 @@ function fakeAgent(options = {}) {
     events: [],
     queued: [],
     queueError: null,
+    teamEnabled: false,
   }
   const agent = {
     id: 'fake-lead',
@@ -183,6 +184,7 @@ function fakeAgent(options = {}) {
       tools: {
         restrict(request) { state.restrictions.push(request); return { dispose() {} } },
         definitions() { return [] },
+        get(name) { return name === 'spawn_teammate' ? state.spawnTool : undefined },
       },
       effect(callback) {
         const cleanup = callback()
@@ -193,9 +195,18 @@ function fakeAgent(options = {}) {
   return { agent, state }
 }
 
+/** Resolve one prompt-section text (a string or a per-assembly function). */
+function registrationText(registration, context = {}) {
+  return typeof registration.text === 'function'
+    ? String(registration.text(context))
+    : String(registration.text ?? '')
+}
+
 /** Active (not disposed) prompt-section texts, in registration order. */
-function activeTexts(state) {
-  return state.sections.filter(section => section.disposed !== true).map(section => String(section.text ?? ''))
+function activeTexts(state, context = {}) {
+  return state.sections
+    .filter(section => section.disposed !== true)
+    .map(section => registrationText(section, context))
 }
 
 /** Append one pre-invocation command/run event. */
@@ -217,15 +228,25 @@ function pushDone(events, commandId, kind) {
  */
 function harness(options) {
   const warnings = []
+  const { agent, state } = fakeAgent()
   const deps = {
     config: CONFIG,
     rootOf: () => options.root,
     logger: { warn(message) { warnings.push(String(message)) } },
     handlerTails: new WeakMap(),
+    // The real runtime resolves Team mode through the plugin context; the fake
+    // Agent owns the same tool service here.
+    ctx: {
+      tools: agent.ctx.tools,
+      get(name) {
+        if (name === 'subagents') return { rootOf: value => value, namesOf: () => ({ self: 'lead' }) }
+        if (name === 'agentTeams') return { isEnabled: () => state.teamEnabled }
+        return undefined
+      },
+    },
     ...options.resolveModel === undefined ? {} : { resolveModel: options.resolveModel },
   }
   const runtime = createOrchestratorRuntime(deps)
-  const { agent, state } = fakeAgent()
   /** @type {object} */
   let definition
   const agentCtx = { commands: { register(value) { definition = value; return { dispose() {} } } } }
@@ -396,7 +417,7 @@ test('already-active snapshot recreation failure reports the explicit fresh fall
   writeDoctrine(root, { name: 'test-conductor-b', route: 'test-route-b', marker: 'NEW-DOCTRINE-B' })
   // Recreating the pre-invocation doctrine fails; recreating the freshly
   // applied bundle still works, which is the documented fallback.
-  run.state.sectionFault = registration => String(registration.text ?? '').includes('OLD-DOCTRINE-A')
+  run.state.sectionFault = registration => registrationText(registration).includes('OLD-DOCTRINE-A')
   run.state.queueError = new Error('injected queue failure')
   pushRun(run.state.events, 'cmd-1', 'do the task')
   const result = await run.invoke('do the task', 'cmd-1')
@@ -432,7 +453,7 @@ test('already-active double recreation failure reports an inactive mode accurate
   writeDoctrine(root, { name: 'test-conductor-b', route: 'test-route-b', marker: 'NEW-DOCTRINE-B' })
   let freshRegistrations = 0
   run.state.sectionFault = registration => {
-    const text = String(registration.text ?? '')
+    const text = registrationText(registration)
     if (text.includes('OLD-DOCTRINE-A')) return true
     if (text.includes('NEW-DOCTRINE-B')) {
       freshRegistrations += 1
@@ -484,10 +505,20 @@ test('bundled doctrine prompt carries the corrected route, status, gate, and quo
   const delegation = texts.find(value => value.includes('Consult the live soul catalog and inspect relevant definitions before routing work.')) ?? ''
   ok(identity.includes("The shipped default declares no route, so the Lead's current model selection is inherited."),
     'the runtime contract states the conditional route inheritance')
+  ok(identity.includes('does not expose the Agent Soul spawn_teammate tool'),
+    'a non-Team session gets the stock subagent delegation advice, not the plugin-only tool')
+  ok(identity.includes('subagent or subagent_fork'),
+    'the non-Team fallback names the DSH 0.2.2 stock tools')
   ok(!identity.includes('it selects the provider, model, and reasoning effort declared in this file\'s frontmatter'),
     'the old unconditional route claim is gone')
   ok(delegation.includes('`name: adversarial-red-team-verifier`'), 'the verifier name uses matched backticks')
   ok(!/adversarial-red-team-verifier['"]/u.test(delegation), 'the mismatched quote typo is gone')
+  ok(delegation.includes('Use the delegation tool this session actually exposes'),
+    'the bundled doctrine checks the live tool surface instead of assuming spawn_teammate')
+  ok(delegation.includes('the stock tools are `subagent`'),
+    'the bundled doctrine names the DSH 0.2.2 stock delegation tools')
+  ok(!delegation.includes('Generic `subagent` and `subagent_fork` children are disabled for Team members; do not call those tools.'),
+    'the obsolete absolute ban on stock subagent tools is gone')
 
   for (const status of ['`pending`', '`in_progress`', '`completed`', '`deleted`']) {
     ok(stateSection.includes(status), 'the state tracking section lists supported status ' + status)
@@ -504,6 +535,29 @@ test('bundled doctrine prompt carries the corrected route, status, gate, and quo
     'the old unconditional gate correction is gone')
   ok(!verification.includes('{{maxRetries}}') && !verification.includes('{{gateMode}}'),
     'the prompt carries substituted settings, not raw template tokens')
+  run.dispose()
+})
+
+test('the fixed identity follows the delegation tool actually visible in this session', async t => {
+  const soulOnly = orchestratorFixedIdentity(true)
+  assert.match(soulOnly, /spawn_teammate/)
+  assert.match(soulOnly, /never use subagent or subagent_fork/)
+  assert.doesNotMatch(soulOnly, /does not expose/)
+
+  const stock = orchestratorFixedIdentity(false)
+  assert.match(stock, /does not expose the Agent Soul spawn_teammate tool/)
+  assert.match(stock, /DSH 0\.2\.2 subagent or subagent_fork/)
+  assert.match(stock, /do not claim a Soul binding/)
+  assert.doesNotMatch(stock, /never use subagent or subagent_fork/)
+
+  const run = harness({ root: workspace('identity', t) })
+  run.state.teamEnabled = true
+  const result = await run.invoke('', 'identity-spawn-visible')
+  assert.equal(result.kind, 'success')
+  const identity = activeTexts(run.state, { agent: run.agent, scope: {}, toolSet: undefined })
+    .find(value => value.includes('You are the ORCHESTRATOR of this session.'))
+  assert.match(identity ?? '', /spawn_teammate/)
+  assert.doesNotMatch(identity ?? '', /does not expose/)
   run.dispose()
 })
 

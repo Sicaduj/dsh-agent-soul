@@ -19,6 +19,9 @@ state/bindings.json
 state/preferences.json
 state/trash/
 
+# Local verification evidence (screenshots, captured URLs, temporary servers)
+smoke/evidence/
+
 # Logs and editor noise
 *.log
 .idea/

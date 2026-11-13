@@ -40,7 +40,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { createOrchestratorRuntime, installOrchestratorCommand } from '../lib/orchestrator.js'
-import { installTeamTools } from '../lib/tools.js'
+import { installSoulSurface } from '../lib/tools.js'
 
 /** The real package root, used only to read the bundled defaults. */
 const REAL_PACKAGE = fileURLToPath(new URL('..', import.meta.url))
@@ -526,17 +526,18 @@ test('spawn_teammate context schema describes the real defaultContext resolution
     catalog,
     rootOf() { return '/tmp/unused' },
   }
-  const disposer = installTeamTools(
+  const disposer = installSoulSurface(
     { id: 'fake-lead' },
     scope,
     {
-      ctx: { agentTeams: { membership() { return { role: 'lead' } } } },
-      config: { interrupt: true },
+      ctx: { get(name) { return name === 'agentTeams' ? { isEnabled: () => true } : undefined } },
+      config: {},
       catalog,
       deps,
+      member: { role: 'lead', name: 'lead', enabled: true, root: { id: 'fake-lead' } },
     },
   )
-  ok(typeof disposer === 'function', 'the Team tools install a disposer')
+  ok(typeof disposer === 'function', 'the soul surface installs a disposer')
 
   const spawn = registered.find(definition => definition.name === 'spawn_teammate')
   ok(spawn !== undefined, 'spawn_teammate is registered')

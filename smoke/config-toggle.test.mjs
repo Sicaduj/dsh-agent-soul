@@ -74,7 +74,6 @@ const CONFIG = Object.freeze({
   bindingsFile: '.dsh/agent-soul/bindings.json',
   freshProvider: 'spawn',
   forkProvider: 'spawn',
-  claimTeamToolRow: false,
 })
 
 /** Normalized config with in-place editing on. */
@@ -338,7 +337,6 @@ test('POST /agent-soul/config persists bundledEditable through the plugin row', 
     bundled: true,
     bundledEditable: false,
     commandPrefix: '',
-    claimTeamToolRow: false,
     freshProvider: 'spawn',
     forkProvider: 'spawn',
     custom: { keep: true },

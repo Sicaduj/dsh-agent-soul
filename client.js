@@ -8714,8 +8714,9 @@ window.__ModuleLoader__.load({
           })
           : []
         const unknownTools = catalogToolNames.length === 0 ? [] : selectedToolNames.filter(function (name) {
-          // Team tools are always available (they cannot be restricted); listing
-          // one is harmless, so it is explained, not warned about as unknown.
+          // Team collaboration/task tools are kept automatically for every
+          // teammate; listing one is harmless, so it is explained, not warned
+          // about as unknown.
           return catalogToolNames.indexOf(name) === -1 && teamToolNames.indexOf(name) === -1
         })
         const listedTeamTools = selectedToolNames.filter(function (name) {

@@ -166,7 +166,6 @@ async function writeProfile(home) {
     name: 'dsh-profile-headless',
     private: true,
     dependencies: {
-      '@deepseek-ai/dsh-experimental-agent-team-profile': 'workspace:^',
       '@local/dsh-agent-soul': `file:${pluginDir}`,
     },
     dsh: {
@@ -174,7 +173,6 @@ async function writeProfile(home) {
         bundles: [
           '@deepseek-ai/dsh-base',
           '@deepseek-ai/dsh-headless',
-          '@deepseek-ai/dsh-experimental-agent-team-profile',
           '@local/dsh-agent-soul',
         ],
       },
@@ -182,13 +180,18 @@ async function writeProfile(home) {
   }, undefined, 2)}\n`, 'utf8')
   const fixtureUrl = pathToFileURL(join(smokeDir, 'soul-llm.ts')).href
   await writeFile(join(profileDir, 'cordis.patch.yml'), [
-    '# The selected local bundle supplies its real cordis.patch.yml and agent-soul-team row.',
+    '# The base bundle supplies the enabled tool-agent-team row; the plugin bundle adds agent-soul-team.',
     '- id: llm-deepseek',
     '  disabled: true',
     '- id: session-persistence-jsonl',
     '  config:',
     `    root: '${join(home, 'sessions')}'`,
     '    compression: none',
+    '# The scripted smoke run needs Team mode on before the first Lead step.',
+    '- id: agent-team',
+    '  config:',
+    '    maxTasks: 256',
+    '    defaultEnabled: true',
     '- insert:',
     '    - id: soul-smoke-llm',
     `      name: '${fixtureUrl}'`,
@@ -585,16 +588,22 @@ async function main() {
       + `sha256=${safety.realAfter.hash} concurrentExternalEdit=${safety.concurrentExternalEdit}`,
     )
 
-    // The plugin's own patch must replace the shipped Team tool row in a fresh
-    // profile whose bundle order is the documented one: the Agent Teams bundle
-    // first, this bundle last. This is the portable fix, independent of any
-    // per-machine profile patch.
+    // DSH 0.2.2 owns the Team task board. The plugin patch must leave the
+    // shipped tool-agent-team row enabled and add only the soul surface.
     console.log(`checking the composed profile in ${root}`)
     const dump = await runCli(home, root, ['--profile', 'headless', '--dump-config'])
     check('composed fresh profile dump exits 0', dump.exitCode === 0, dump.stderr.slice(0, 400))
+    const baseRowAt = dump.stdout.indexOf('- id: tool-agent-team')
+    const baseRowWindow = baseRowAt < 0 ? '' : dump.stdout.slice(baseRowAt, baseRowAt + 160)
     check(
-      'fresh profile composition disables the shipped Team tool row',
-      /- id: tool-agent-team\n\s+name: '@deepseek-ai\/dsh-experimental-tool-agent-team'[\s\S]{0,300}?\n\s+disabled: true/.test(dump.stdout),
+      'the shipped Team tool row stays enabled',
+      baseRowWindow.includes("name: '@deepseek-ai/dsh-tool-agent-team'")
+        && !baseRowWindow.includes('disabled: true'),
+      baseRowWindow,
+    )
+    check(
+      'the scripted profile enables Team mode by default',
+      /- id: agent-team[\s\S]{0,200}?defaultEnabled: true/.test(dump.stdout),
       dump.stdout.slice(0, 400),
     )
     check('fresh profile mounts the soul-aware Team row', /^- id: agent-soul-team$/m.test(dump.stdout))
@@ -638,8 +647,25 @@ async function main() {
     const lead = observations.find(entry => entry.kind === 'lead')
     const teammate = observations.find(entry => entry.kind === 'teammate')
     check('Lead prompt carries the soul catalog', lead?.catalogInPrompt === true)
+    check('Lead prompt carries the soul-only policy', lead?.soulPolicyInPrompt === true)
+    check('base Team policy generic-subagent advice is shadowed', lead?.baseSubagentAdviceInPrompt === false)
     check('spawn_teammate schema exposes agent_type', lead?.spawnHasAgentType === true)
     check('list_agent_souls is registered', lead?.hasListSouls === true)
+    const leadTools = Array.isArray(lead?.toolNames) ? lead.toolNames : []
+    check(
+      'Lead keeps the base Team task and control tools',
+      ['team_task_create', 'team_task_list', 'team_task_get', 'team_task_update', 'send_message', 'list_agents', 'wait_agent']
+        .every(name => leadTools.includes(name)),
+      JSON.stringify(leadTools),
+    )
+    check(
+      'Lead has exactly the base Team tools plus the plugin tools',
+      new Set(leadTools).size === leadTools.length
+        && leadTools.includes('spawn_teammate')
+        && leadTools.includes('list_agent_souls')
+        && leadTools.includes('manage_agent_souls'),
+      JSON.stringify(leadTools),
+    )
     check('child environment excludes inherited credentials, proxies, and loader flags', lead?.environmentScrubbed === true)
     check('child environment drops the seeded credential canary', lead?.envScrub?.credentialCanaryAbsent === true)
     check('child environment drops the seeded proxy canary', lead?.envScrub?.proxyCanaryAbsent === true)

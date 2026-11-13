@@ -116,13 +116,13 @@ async function profile(home, bindingsFile) {
   await mkdir(dirname(packagePath), { recursive: true })
   await symlink(pluginDir, packagePath, process.platform === 'win32' ? 'junction' : 'dir')
   await json(join(dir, 'package.json'), { name: 'qas-focused-disposable', private: true,
-    dependencies: { '@deepseek-ai/dsh-experimental-agent-team-profile': 'workspace:^', '@local/dsh-agent-soul': `file:${pluginDir}` },
-    dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless', '@deepseek-ai/dsh-experimental-agent-team-profile', '@local/dsh-agent-soul'] } } })
+    dependencies: { '@local/dsh-agent-soul': `file:${pluginDir}` },
+    dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless', '@local/dsh-agent-soul'] } } })
   await writeFile(join(dir, 'cordis.patch.yml'), [
     '- id: llm-deepseek', '  disabled: true', '- id: llm-deepseek-account', '  disabled: true', '- id: deepseek-account', '  disabled: true',
     '- id: session-persistence-jsonl', '  config:', `    root: ${JSON.stringify(join(home, 'sessions'))}`, '    compression: none',
-    '- id: agent-team', '  config:', '    maxMembers: 8', '    maxTasks: 8', '    disposalTimeoutMs: 5000',
-    '- id: agent-soul-team', '  config:', '    freshProvider: spawn', '    forkProvider: fork', '    claimTeamToolRow: false',
+    '- id: agent-team', '  config:', '    maxTasks: 8', '    defaultEnabled: true',
+    '- id: agent-soul-team', '  config:', '    freshProvider: spawn', '    forkProvider: fork',
     '    bundled: true', `    bindingsFile: ${JSON.stringify(bindingsFile)}`,
     '- id: tool-subagent', '  disabled: false', '- id: tool-subagent-fork', '  disabled: false',
     '- insert:', '    - id: remediation-runtime-scripted-llm', `      name: ${JSON.stringify(adapterUrl)}`, '',
@@ -201,8 +201,11 @@ async function concurrency() {
     await mkdir(workspace, { recursive: true }); await profile(home, bindingsFile); await soul(workspace, label, 1)
     const config = { home, workspace, label }
     const boot = await runCli({ ...config, name: `bootstrap-${label}`, mode: 'bootstrap' })
-    config.leadId = boot.rows.find(r => r.kind === 'accepted-worker')?.leadSessionId
+    const bootWorker = boot.rows.find(r => r.kind === 'accepted-worker')
+    config.leadId = bootWorker?.leadSessionId
+    config.primerId = bootWorker?.memberSessionId
     check(`bootstrap.${label}.lead-id`, true, typeof config.leadId === 'string')
+    check(`bootstrap.${label}.primer-id`, true, typeof config.primerId === 'string')
     configs.push(config)
   }
   await json(join(evidence, 'bootstrap-bindings.json'), JSON.parse(await readFile(bindingsFile, 'utf8')))
@@ -210,7 +213,7 @@ async function concurrency() {
   await json(bindingsFile, { version: 1, bindings: {} })
   const ready = configs.map(c => join(shared, `ready-${c.label}.json`)), go = join(shared, 'go')
   const running = await Promise.all(configs.map((config, i) => startCli({ ...config, name: `concurrent-${config.label}`, mode: 'concurrent',
-    sessionId: config.leadId, extra: { QAS_READY: ready[i], QAS_GO: go } })))
+    sessionId: config.leadId, extra: { QAS_READY: ready[i], QAS_GO: go, QAS_PRIMER_CHILD_ID: config.primerId } })))
   const primed = await waitFiles(ready, running)
   check('F002.two-distinct-primed-processes', 2, new Set(primed.map(r => r.pid)).size)
   check('F002.before-first-writes-empty-anchor', {}, JSON.parse(await readFile(bindingsFile, 'utf8')).bindings)
@@ -228,7 +231,7 @@ async function concurrency() {
     await soul(config.workspace, config.label, 2)
     const missing = !Object.hasOwn(anchor.bindings, config.childId)
     const resumed = await runCli({ ...config, name: `cold-${config.label}`, mode: 'cold', sessionId: config.leadId,
-      extra: { QAS_EXPECT_REFUSAL: missing ? '1' : '0' } })
+      extra: { QAS_EXPECT_REFUSAL: missing ? '1' : '0', QAS_CHILD_ID: config.childId } })
     const coldPid = resumed.rows.find(r => r.kind === 'adapter-ready')?.pid
     check(`F002.${config.label}.actual-process-recreation`, true, Number.isSafeInteger(coldPid) && coldPid !== completed[configs.indexOf(config)].pid)
     check(`F002.${config.label}.exact-durable-roster-child`, config.childId, resumed.rows.find(r => r.kind === 'cold-complete')?.memberSessionId)
@@ -240,10 +243,11 @@ async function concurrency() {
   if (target === 'candidate') {
     const missing = JSON.parse(JSON.stringify(anchor)); delete missing.bindings[configs[0].childId]
     await json(bindingsFile, missing)
-    const refused = await runCli({ ...configs[0], name: 'missing-A', mode: 'missing', sessionId: configs[0].leadId, extra: { QAS_EXPECT_REFUSAL: '1' } })
+    const refused = await runCli({ ...configs[0], name: 'missing-A', mode: 'missing', sessionId: configs[0].leadId, extra: { QAS_EXPECT_REFUSAL: '1', QAS_CHILD_ID: configs[0].childId } })
     check('F002.missing-A.completed-process-no-child-request', 0, refused.rows.filter(row => row.kind === 'child-request').length)
     await json(bindingsFile, anchor)
-    await runCli({ ...configs[0], name: 'recovered-A', mode: 'cold', sessionId: configs[0].leadId, extra: { QAS_EXPECT_REFUSAL: '0' } })
+    const recovered = await runCli({ ...configs[0], name: 'recovered-A', mode: 'cold', sessionId: configs[0].leadId, extra: { QAS_EXPECT_REFUSAL: '0', QAS_CHILD_ID: configs[0].childId } })
+    check('F002.recovered-A.completed-process-child-request', 1, recovered.rows.filter(row => row.kind === 'child-request').length)
   }
   await json(join(evidence, 'shared-anchor-result.json'), { target, bindingsFile, configs, retained: retained.map(c => c.label),
     actualProcessRecreation: true, concurrency: 'two independent real CLI processes, both empty stores primed before first accepted writes' })
@@ -313,11 +317,11 @@ export function invocationStatus({ error = null, plannedSuites, completedSuites,
 export async function main() {
   target = option('--target', 'candidate')
   only = option('--only', 'all')
-  if (!['baseline', 'candidate'].includes(target) || !['all', 'concurrency', 'read'].includes(only)) throw new Error('use --target baseline|candidate --only all|concurrency|read')
-  if (target === 'baseline' && process.env.QAS_BASELINE_DIR === undefined) {
-    throw new Error('QAS_BASELINE_DIR must identify an archived original plugin; never use the live installation')
+  if (target !== 'candidate') {
+    throw new Error('only --target candidate is supported on DSH 0.2.2; the historical baseline defect targeted the removed roster API')
   }
-  pluginDir = target === 'baseline' ? resolve(process.env.QAS_BASELINE_DIR) : candidate
+  if (!['all', 'concurrency', 'read'].includes(only)) throw new Error('use --target candidate --only all|concurrency|read')
+  pluginDir = candidate
   checkout = resolve(process.env.DSH_CHECKOUT ?? '/Users/zosyn/LLM/deepseek-harness')
   tsxLoader = pathToFileURL(createRequire(join(checkout, 'package.json')).resolve('tsx')).href
   cliBin = join(checkout, 'apps/cli/src/bin.ts')

@@ -200,7 +200,6 @@ async function writeProfile(home, fakePluginUrl) {
     name: 'dsh-profile-headless',
     private: true,
     dependencies: {
-      '@deepseek-ai/dsh-experimental-agent-team-profile': 'workspace:^',
       '@local/dsh-agent-soul': `file:${pluginDir}`,
     },
     dsh: {
@@ -208,7 +207,6 @@ async function writeProfile(home, fakePluginUrl) {
         bundles: [
           '@deepseek-ai/dsh-base',
           '@deepseek-ai/dsh-headless',
-          '@deepseek-ai/dsh-experimental-agent-team-profile',
           '@local/dsh-agent-soul',
         ],
       },
@@ -223,6 +221,10 @@ async function writeProfile(home, fakePluginUrl) {
     '  config:',
     `    root: '${join(home, 'sessions')}'`,
     '    compression: none',
+    '- id: agent-team',
+    '  config:',
+    '    maxTasks: 256',
+    '    defaultEnabled: true',
     '# Invert the composition: the POSIX shell row is off and the fake pwsh plugin is the only shell.',
     '- id: tool-bash',
     '  disabled: true',

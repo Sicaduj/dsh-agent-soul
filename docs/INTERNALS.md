@@ -10,6 +10,13 @@ them together.
   [`GUI-INTERNALS.md`](GUI-INTERNALS.md)
 - End-to-end harness: [`../smoke/README.md`](../smoke/README.md)
 
+> **DSH 0.2.2 port (0.5.0).** The runtime now uses `ctx.subagents` (rootOf, namesOf,
+> listDescendants, startActivation) and the shipped `tool-agent-team` row stays enabled. The old
+> roster API, `lib/composition.js`, `claimTeamToolRow`, and the plugin's own Team-tool copy are
+> gone. `lib/team.js`, `lib/team-tools.js`, and `lib/team-row.js` replace them. Some historical
+> sections below still describe the pre-port flow; the README, the module map, and the
+> `smoke/team-runtime.test.mjs` suite are authoritative for the port.
+
 Status: P0–P4, the soul-only/default-Soul release, and the release-remediation contracts (reserved
 `lead` identity, built-in-command priority and handler-identity status, orchestrator route
 validation, and actionable cold-resume refusals) are implemented and live. The current working tree
@@ -53,8 +60,8 @@ where only the harness installation resolves, so imports must be `node:` builtin
 
 ```
 profile cordis.patch.yml
-  tool-agent-team (shipped)        → disabled
-  agent-soul-team (index.js)    → this plugin
+  tool-agent-team (base)          → enabled, owns team_task_* and base team:policy
+  agent-soul-team (index.js)      → this plugin
       normalizeConfig
       createCatalog            (lib/soul.js)
       createPreferenceStore    (lib/preferences.js)
@@ -63,9 +70,9 @@ profile cordis.patch.yml
       createOrchestratorRuntime(lib/orchestrator.js)
       await sessionProjections.register(orchestratorModeDefinition) (lib/orchestrator-mode.js)
       deps object              (index.js)
-      creation fence           → assertSoulOnlyTeamChild (lib/spawn.js)
+      creation fence           → install() strict/optional plan resolution (index.js)
       per-Agent install:
-        every Team member      → installTeamTools (lib/tools.js)
+        every Team member      → installSoulSurface (lib/tools.js)
                                  + generic-subagent restriction/guard
                                  + tools/change reconciliation
                                  + team prompt sections
@@ -74,7 +81,7 @@ profile cordis.patch.yml
                                  + manage_agent_souls (lib/admin-tool.js)
                                  + orchestrator.reapplyIfActive
         teammate               → applyTeammateSoul (lib/apply.js)
-      optional ctx.inject(webServer, connection, agents, agentTeams):
+      optional ctx.inject(webServer, connection, connection.authentication, agents, agentTeams, subagents):
         installGui             → lib/gui-host.js routes
                                  → lib/admin.js document layer
                                  → lib/preferences.js default-Soul state
@@ -97,12 +104,14 @@ tool share the document layer, while the command and runtime share the applicati
 | [`lib/soul.js`](../lib/soul.js) | Soul parser/validator (including the reserved `lead` identity), persona composition, catalog discovery and prompt text | `parseFrontmatter`, `parseSoulMarkdown`, `composePersona`, `catalogPromptText`, `createCatalog` |
 | [`lib/model.js`](../lib/model.js) | Resolve a frontmatter `model`/`provider`/`reasoning-effort` into one route | `resolveModelRoute(raw, services)` |
 | [`lib/tool-names.js`](../lib/tool-names.js) | Frozen portable shell-name resolver: `bash` ↔ `pwsh` are two spellings of one model-facing shell tool; only that pair aliases | `SHELL_TOOL_ALIAS_PAIRS`, `shellCounterpart`, `resolveToolName`, `toolNameKnown`, `resolveRestrictableNames` |
-| [`lib/spawn.js`](../lib/spawn.js) | Spawn orchestration shared by the tool and slash commands; default-Soul resolution; soul-only creation fence; list/command operations | `commandNameFor`, `nextTeammateName`, `assertSoulOnlyTeamChild`, `spawnTeamMember`, `describeSouls`, `spawnSoulFromCommand` |
+| [`lib/spawn.js`](../lib/spawn.js) | Spawn/command orchestration; default-Soul resolution; model routing; reserved child id; binding write | `commandNameFor`, `nextTeammateName`, `spawnTeamMember`, `describeSouls`, `spawnSoulFromCommand` |
+| [`lib/team.js`](../lib/team.js) | DSH 0.2.2 subagent-tree adapter: role/name/root, descendant listing, direct-child names, Team size | `teamMemberOf`, `isTeamEnabled`, `isTeamLead`, `parentAgentOf`, `listTeamMembers`, `directChildNames`, `countTeamMembers` |
+| [`lib/team-tools.js`](../lib/team-tools.js) | Base/plugin tool-name sets and the always-kept Team tools | `BASE_TEAM_TOOL_NAMES`, `PLUGIN_TEAM_TOOL_NAMES`, `ALWAYS_KEPT_TOOL_NAMES`, `LEAD_ONLY_TOOL_NAMES`, `GENERIC_SUBAGENT_TOOLS`, `TEAM_TOOL_NAMES` |
+| [`lib/team-row.js`](../lib/team-row.js) | Base `tool-agent-team` row inspection and explicit re-enable through the Plugin Manager | `inspectBaseTeamRow`, `restoreBaseTeamRow` |
 | [`lib/preferences.js`](../lib/preferences.js) | Plugin-owned default-Soul preference document, default resolution, GUI-facing preference block | `PREFERENCES_FILE_NAME`, `BUILTIN_DEFAULT_SOUL`, `preferencesPathOf`, `readPreferences`, `savePreferences`, `resolveDefaultSoul`, `describePreferences`, `createPreferenceStore` |
 | [`lib/apply.js`](../lib/apply.js) | Apply one soul to a freshly created or cold-resumed teammate; fail-closed plan resolution (pending plan, then durable binding); pending-spawn handoff; bounded cold-resume admission diagnostics | `createPendingSpawns`, `createAdmissionDiagnostics`, `SoulPlanUnavailableError`, `applyTeammateSoul` |
 | [`lib/commands.js`](../lib/commands.js) | Register one Lead-scoped slash command per user-invocable soul; reconcile them by handler identity; report collisions | `installSoulCommands`, `createSoulCommandSync`, `soulCommandRegistrationState` |
-| [`lib/tools.js`](../lib/tools.js) | Soul-aware copy of the Team tool surface, prompt sections, and the tools/change-reconciled generic-subagent restriction/guard | `TEAM_TOOL_NAMES`, `GENERIC_SUBAGENT_TOOLS`, `installTeamTools(agent, scope, args)` |
-| [`lib/composition.js`](../lib/composition.js) | Team-tool row composition: Loader inspection, Plugin Manager repair, opt-in automatic claim | `TEAM_TOOL_ROW_ID`, `TEAM_TOOL_PLUGIN_NAME`, `PROFILE_PATCH_FIX`, `inspectTeamToolSurface(ctx)`, `repairTeamToolSurface(options)`, `createCompositionGuard(options)` |
+| [`lib/tools.js`](../lib/tools.js) | Soul surface: `team:policy` shadow, Lead catalog, generic-tool guard, `spawn_teammate`, `list_agent_souls` | `TEAM_TOOL_NAMES`, `SOUL_ONLY_DENIAL`, `soulPolicyText`, `installSoulSurface(agent, scope, args)` |
 | [`lib/bindings.js`](../lib/bindings.js) | Durable per-teammate binding store for cold resume and GUI usage | `createBindingStore(options)` |
 | [`lib/admin.js`](../lib/admin.js) | Document layer: split/compose/validate, scan, read/save/create/duplicate/delete/restore, path safety, hashes | `documentHash`, `resolveSoulDirs`, `resolveGuiRoot`, `splitDocument`, `composeDocument`, `canonicalSkeleton`, `listDocuments`, `readDocument`, `saveDocument`, `saveDocumentSource`, `createDocument`, `duplicateDocument`, `deleteDocument`, `restoreDocument` |
 | [`lib/orchestrator.js`](../lib/orchestrator.js) | Orchestrator definition layer (with declaration-level route validation and an optional live-route validator), compact summary, `/orchestrate` command, session-scoped runtime | `ORCHESTRATE_COMMAND_NAME`, `splitOrchestrator`, `composeOrchestrator`, `canonicalOrchestratorSkeleton`, `orchestratorPathOf`, `readOrchestrator`, `saveOrchestrator`, `orchestratorRouteDiagnostics`, `orchestratorSummary`, `substituteTemplate`, `createOrchestratorRuntime`, `installOrchestratorCommand` |
@@ -113,7 +122,9 @@ tool share the document layer, while the command and runtime share the applicati
 | [`locale/`](../locale/) | Package locale metadata (`en`, `zh`); the page's eight full dictionaries are inside `client.js` | JSON metadata |
 | [`smoke/run-smoke.mjs`](../smoke/run-smoke.mjs) | Keyless end-to-end harness: real headless DSH plus a scripted LLM adapter | runner |
 | [`smoke/soul-llm.ts`](../smoke/soul-llm.ts) | Scripted test-double LLM adapter for the smoke harness | adapter |
-| [`smoke/contract.mjs`](../smoke/contract.mjs) | Shared expected Team-tool contract for the smoke run | `TEAM_TOOL_NAMES`, `expectedSoulTools` |
+| [`smoke/contract.mjs`](../smoke/contract.mjs) | Shared expected base-Team tool contract for the smoke run | `TEAM_TOOL_NAMES`, `expectedSoulTools` |
+| [`smoke/run-web-gui.mjs`](../smoke/run-web-gui.mjs) | Isolated Web GUI harness for Computer Use | runner |
+| [`smoke/team-runtime.test.mjs`](../smoke/team-runtime.test.mjs) | Focused adapter/surface/spawn/team-row contract tests | runner |
 
 This tree ships no `tests/` directory and no test glob or test script:
 [`package.json`](../package.json) has no `scripts` section and ships no test pattern in its `files`
@@ -137,11 +148,10 @@ malformed values throw, which fails activation rather than running with half-app
   maxDefinitions: 64,                    // integer 1..1000
   maxPromptChars: 12000,                 // integer 1000..200000
   bindingsFile: '.dsh/agent-soul/bindings.json', // non-empty string; absolute or workspace-relative (no ~ expansion; real-path fenced)
-  freshProvider: 'spawn',                // non-empty string
-  forkProvider: 'fork',                  // non-empty string
-  interrupt: true,                       // boolean
+  freshProvider: 'spawn',                // non-empty string; registered ctx.subagents provider
+  forkProvider: 'fork',                  // non-empty string; registered ctx.subagents provider
   defaultContext: 'fresh',               // 'fresh' | 'fork'
-  claimTeamToolRow: false,               // boolean; the bundled patch sets true
+  // legacy interrupt / claimTeamToolRow: accepted, logged as obsolete, ignored
 }
 ```
 
@@ -198,7 +208,7 @@ The `deps` object is built once by `index.js` and passed unchanged to every modu
 //   async spawnTeamMember(deps, lead, args),
 //   async describeSouls(deps, lead, options),
 //   async spawnSoulFromCommand(deps, lead, definition, rawInput, options),
-//   composition,              // createCompositionGuard({ ctx, config, logger }) result
+//   markSoul/unmarkSoul/isSoulTeammate(agent), // applied-soul tracking for the creation fence
 //   orchestrator,             // the process-wide runtime, for isActive() reads from lib/tools.js
 //   soulCommandRegistration(agent), // per-Lead { registered, failed } record, for handler-identity status
 //   syncSouls(),              // reconcile every live Lead's soul slash commands
@@ -209,15 +219,15 @@ The `deps` object is built once by `index.js` and passed unchanged to every modu
 adapter/catalog changes cannot leave a stale route cached. Its optional `{ signal }` argument is
 forwarded to adapter model-info resolution and checked between sequential provider/definition calls.
 
-The plugin's required services are `agents`, `agentTeams`, `tools`, `systemPrompt`, and
-`sessionProjections` (`inject`). Optional services are looked up per use: `llm` and
+The plugin's required services are `agents`, `agentTeams`, `subagents`, `tools`,
+`systemPrompt`, and `sessionProjections` (`inject`). Optional services are looked up per use: `llm` and
 `agentDefaultModel` for routing, `workingDirectory` for roots, `commands` for slash commands,
 `sessionTitle` for the orchestrator Session rename, and `webServer` + `connection` for the GUI. A
 missing optional service degrades a feature, not plugin activation.
 
 `apply()` also creates one process-wide `createOrchestratorRuntime(deps)`. It is stored on `deps` as
-`deps.orchestrator` so `lib/tools.js` can read `isActive(agent)` when rendering `team:identity` and
-the model-facing roster; the runtime object is also passed explicitly to the command and lifecycle
+`deps.orchestrator` so `lib/tools.js` can read `isActive(agent)` when rendering the soul policy
+and catalog; the runtime object is also passed explicitly to the command and lifecycle
 wiring.
 
 Before installing any live Agent, `apply()` awaits
@@ -270,16 +280,19 @@ Both `spawn_teammate` (Lead tool) and a user-invocable slash command enter throu
    `{ name, persona, tools, model, context, sourceLabel }`. `tools` keeps the declared names as
    written (either shell spelling included); resolution happens when the soul is applied, and the
    durable binding records the declaration rather than a per-host resolved name.
-7. Put the plan in `deps.pending` under `deps.pendingKey(lead, requestedName)`, call
-   `ctx.agentTeams.spawnTeammate`, and remove the pending entry in `finally`. After the spawn
-   resolves, write the durable binding for `member.id`.
+7. Reserve a child Session id with `randomUUID()`, record the plan under both
+   `deps.pendingKey(lead, requestedName)` and `deps.pendingKey(lead, childId)`, then call
+   `ctx.subagents.startActivation({ provider, label, name, childId, prompt, parent, agentOptions, maxDepth, signal, delivery: 'parent' })`.
+   Both pending entries are released in `finally`; the durable binding is written for
+   `started.childId`. The id key is what lets `agent/created` match the plan even when
+   `namesOf()` cannot see the child name yet.
 8. Return `{ member, soul: { name, tools, model } }` (model rendered as
    `provider/model`, or `null` only when no model was declared and the route was inherited). An
    unresolved declaration throws; it is never reported as inherited `null`. The `spawn_teammate`
    tool rejects a result without a named Soul, so the output contract cannot regress to a plain
    teammate.
 9. The child's `agent/created` listeners run in order: the plugin's creation fence first, then
-   `install()`. For a teammate, `installTeamTools` runs first, then `applyTeammateSoul`:
+   `install()`. For a teammate, `applyTeammateSoul` runs first, then `installSoulSurface`:
    - resolve the plan: pending entry first (consumed, whether or not it resolves), then
      `bindings.get(root, agent.id)`. A missing plan, or a binding read that throws, is a
      `SoulPlanUnavailableError`: admission is fail-closed and the creation listener rejects
@@ -302,12 +315,11 @@ Both `spawn_teammate` (Lead tool) and a user-invocable slash command enter throu
      fully applied soul. `maybeInstall` observes its shared task internally, so an abandoned caller
      cannot produce an unhandled rejection even for the explicit veto.
 
-**Creation fence.** `index.js` registers `assertSoulOnlyTeamChild(deps, agent)` as a serial
-`agent/created` listener before installing anything. It resolves the child's
-`session.header.parentSession` to a live Agent and asks `agentTeams.tryMembership`. A child that
-resolves as `role: 'teammate'` is allowed; a child of a Team member that resolves outside the roster
-(an undefined membership for a provider-owned `origin: 'subagent'` child, or an unclassifiable
-direct child) throws, and the serial listener failure vetoes publication. A seeded host fork is
+**Creation fence.** `install()` is the serial `agent/created` listener. For a teammate it computes
+`teamMemberOf`, then `strict = Team mode enabled || the parent is a known soul teammate`. A strict
+child must resolve a pending (by name or reserved child id) or durable plan; otherwise
+`applyTeammateSoul` throws `SoulPlanUnavailableError` and the listener failure vetoes publication.
+A non-strict child with no durable binding is an ordinary subagent and is skipped. A seeded host fork is
 its own Team root and stays allowed. Because every child Agent creation passes through this event,
 the fence also catches generic children started indirectly through the subagent seam — for example a
 workflow run's `agent()` calls, which start a provider-owned child with the calling Agent as parent;
@@ -325,11 +337,12 @@ published, so activation cannot veto them; it only declines to attach the plugin
 There is no plain no-Soul spawn path. The three independent layers are: the scoped tool restriction,
 the scoped `tools.guard`, and this creation fence.
 
-**Teammate-name contract (DOC-01).** The direct `spawn_teammate` path passes the requested name
-unchanged to `ctx.agentTeams.spawnTeammate`; the Team service refuses a name already used in the
-Team, and the plugin adds one earlier check: a second spawn for the same Lead and requested name while
-the first is still pending is refused by `deps.pending.set` before the Team service is reached
-(`a soul spawn for this Lead and teammate name is already pending`). The slash-command path is
+**Teammate-name contract (DOC-01).** The direct `spawn_teammate` path passes the requested
+1-32 character lower-kebab name to `ctx.subagents.startActivation`; the subagent manager refuses a
+name already used among the Lead's direct children. The plugin adds one earlier check: a second
+spawn for the same Lead and requested name while the first is still pending is refused by
+`deps.pending.set` before activation (`a soul spawn for this Lead and teammate name is already
+pending`). The slash-command path is
 different by design: `nextTeammateName` derives a free name from the roster (`<soul>`,
 `<soul>-2`, … up to the suffix limit). The roster duplicate check and the pending-plan collision are
 different layers; both are clean refusals, neither silently renames the caller's name, and a failed
@@ -571,8 +584,8 @@ log; if on, it runs the same application path with `capturePrevious: false` and 
 must never capture the route or title it just applied.
 
 **Runtime state predicates.** `isActive(agent)` reports whether a bundle currently owns the scope;
-`lib/tools.js` uses it to add the orchestrator wording to `team:identity` and the
-`orchestrator: true` marker on the Lead's `list_agents` row.
+`lib/tools.js` uses it to add the orchestrator wording to the scoped soul policy. The base
+`subagent:identity` context names the Lead; the plugin does not modify the roster projection.
 
 **Disposal.** `agent/disposed` drops that Agent's bundle without restoring a model (the Agent is
 gone). Plugin unload disposes every bundle and restores every captured model.
@@ -699,9 +712,9 @@ orchestrator mode is on, the Lead also gets the orchestrator sections.
 | Registration | Kind | Name | Order in this profile | Scope |
 |---|---|---|---|---|
 | Deployment persona | system-prompt section | `deployment:persona-prefix` | deployment persona order | All agents |
-| Team policy | system-prompt section | `team:policy` | `TEAM_POLICY` = 600 | Every Team member |
-| Soul catalog | system-prompt section | `team:agent-souls` | `TEAM_POLICY + 20` = 620 | Lead only; text function, empty when no definitions |
-| Team identity | system-prompt context | `team:identity` | `TEAM_IDENTITY` | Every Team member; required |
+| Team policy | system-prompt section | `team:policy` (plugin scoped shadow) | `TEAM_POLICY` = 600 | Every Team member; base text preserved + soul-only rule |
+| Soul catalog | system-prompt section | `team:agent-souls` | `TEAM_POLICY + 20` = 620 | Team-enabled Lead only; text function, empty when no definitions |
+| Team identity | system-prompt context (base) | `subagent:identity` | `SUBAGENT_DELEGATION` | Every member; required by `tool-subagent-control` |
 | Orchestrator identity | persona-position system-prompt section | `deployment:persona-prefix` | deployment persona order | Lead, only while mode is on |
 | Orchestrator plan | system-prompt section | `orchestrator:plan` | `TEAM_POLICY - 100` = 500 | Lead, only while mode is on |
 | Orchestrator delegation | system-prompt section | `orchestrator:delegation` | `TEAM_POLICY + 10` = 610 | Lead, only while mode is on |
@@ -1033,53 +1046,40 @@ a prior `session/title` was captured; otherwise the title is untouched and the e
 appends the captured prior title only while the current title is still exactly `orchestrator` (and
 only when a title was captured).
 
-## Team-tool row composition
+## Base Team-tool row
 
-The shipped Agent Teams bundle and this bundle both touch the `tool-agent-team` row. Bundle patch
-layers apply in `dsh.profile.bundles` order, so this bundle's `- id: tool-agent-team disabled: true`
-only takes effect when its layer follows the Agent Teams bundle's layer. In the reverse order the
-Loader warns (`patch: entry "tool-agent-team" not found`) and skips the disable, the later layer
-re-inserts the row, and both rows race for `team:policy` and the Team tool names.
+DSH 0.2.2 ships the task board and `team:policy` in the base bundle's `tool-agent-team` row.
+This plugin's patch only inserts `agent-soul-team`; it must not disable or replace the base row.
 
-`lib/composition.js` reads the live Loader tree through the optional `loader` service; every
-response degrades to `status: 'unknown'` when that service is absent:
-
-| `status` | Meaning |
-|---|---|
-| `replaced` | A `@deepseek-ai/dsh-experimental-tool-agent-team` row is composed and disabled. |
-| `conflict` | At least one such row is composed enabled (`!disabled`, known before its fiber starts). |
-| `absent` | No such row is composed in this profile. |
-| `unknown` | The Loader service is unavailable, or entry enumeration threw. |
-
-`repairTeamToolSurface` locates the manageable row through the optional `pluginManager` service
-(`listPlugins` → matching `moduleName`/`patchId` → `setPluginEnabled(entryId, false)`) and reports
-`applied`/`not-applied` plus the manual `PROFILE_PATCH_FIX` snippet on every failure path. When the
-Loader service is not exposed to plugins (the Web profile's normal case), detection falls back to
-the Plugin Manager listing: any listed `@deepseek-ai/dsh-experimental-tool-agent-team` row with
-`enabled !== false` is treated as a live conflict, so a Plugins-page re-enable that reorders
-bundles still heals on the next activation. `createCompositionGuard` adds the opt-in
-`claimTeamToolRow` path: `scheduleClaim()` waits one tick, awaits the Loader tree (concurrently
-mounted rows must be visible) when available, inspects (manager fallback included), and repairs at
-most once per activation; the persisted override makes the next recomposition clean. On profiles where this bundle's layer precedes the Agent Teams layer (common when the Team bundle is added or re-enabled later), the bundled patch's disable is skipped and that persisted override — not the patch — is the effective composition owner. The guard is logged
-at activation, named in the `installTeamTools` failure message, exposed as the overview
-`runtime.health.teamTools` block, and surfaced through `manage_agent_souls` actions `diagnose` and
-`repair_team_tools`.
+- A profile upgraded from 0.4.x may still carry `- id: tool-agent-team` / `disabled: true`.
+  Activation schedules one `inspectBaseTeamRow` after the Loader settles and logs the warning when
+  the row is disabled or absent.
+- `lib/team-row.js` uses `ctx.get('pluginManager').listPlugins()`, matches
+  `moduleName === '@deepseek-ai/dsh-tool-agent-team'` or `patchId === 'tool-agent-team'`, and
+  reports `enabled`, `disabled`, `absent`, or `unknown`.
+- `manage_agent_souls({ action: "repair_team_tools" })` calls `restoreBaseTeamRow`, which
+  re-enables a disabled row through `setPluginEnabled`; it does not rewrite the profile itself.
+  A read-only or missing row returns the manual profile fix.
+- The overview `runtime.health.teamTools` block carries the same shaped status so the Settings
+  card can render the warning; the client treats `ok === false` as the warning condition.
+- The plugin does **not** auto-repair. A profile edit is an explicit user action, and the old
+  `claimTeamToolRow` behavior is gone (the key is accepted and ignored as obsolete).
 
 ## Lifecycle, effects, and disposal
 
 ### Activation
 
-1. `apply()` builds logger, config, catalog, binding store, pending map, deps, the composition
-   guard, and the orchestrator runtime. The guard inspects the Team-tool row composition once and
-   logs an actionable warning when the shipped row is still active.
-2. It installs the optional GUI in a child `ctx.inject(['webServer', 'connection', 'agents',
-   'agentTeams'], …)`. The child is only created when those services exist (a Web profile). A GUI
-   install failure is logged and does not fail the plugin.
+1. `apply()` builds logger, config, catalog, binding store, pending map, deps, and the
+   orchestrator runtime, then schedules one `inspectBaseTeamRow` after the Loader settles. A
+   disabled/absent base row is logged with the manual fix; it is never auto-edited.
+2. It installs the optional GUI in a child `ctx.inject(['webServer', 'connection',
+   'connection.authentication', 'agents', 'agentTeams', 'subagents'], …)`. The nested verifier is
+   required for `connection.admit` to authenticate the exact routes. The child is only created when those services exist (a Web
+   profile). A GUI install failure is logged and does not fail the plugin.
 3. It registers `agent/created` and `agent/disposed`, then prepares every already-live Agent with
-   `await maybeInstall(agent)`, and finally calls `composition.scheduleClaim()` (a no-op unless
-   `claimTeamToolRow` is on). A pre-existing Agent that fails closed (non-roster child, or roster
-   teammate without a usable Soul plan) is skipped with a warning; it does not fail activation and
-   keeps no plugin registrations.
+   `await maybeInstall(agent)`. A pre-existing generic subagent under a Team-off root is skipped;
+   a pre-existing teammate without a usable Soul plan is skipped with a warning. Neither fails
+   activation or keeps plugin registrations.
 4. `maybeInstall` deduplicates concurrent installation per Agent. `agent/created` listeners are
    awaited by the Team service before creation resolves, which is why the pending spawn plan is
    still available to the child and why a `SoulPlanUnavailableError` vetoes publication. During
@@ -1087,13 +1087,13 @@ at activation, named in the `installTeamTools` failure message, exposed as the o
    pre-existing Agents; every other creation path lets it reject.
 5. For each member:
    - Lead only, first: refresh the catalog so the later registrations see fresh definitions;
-   - every member: `installTeamTools` (Team tools + policy/identity; the Lead also gets the catalog
-     section);
-   - Lead: install the built-in `/orchestrate` **first**, then reconcile the
-     soul commands, install `manage_agent_souls`, then `orchestrator.reapplyIfActive(agent)` (the
-     built-in-first order is what prevents a soul named `orchestrate` from shadowing it on a fresh
-     Lead);
-   - teammate: `applyTeammateSoul`.
+   - Lead: `installSoulSurface` (policy shadow, catalog, guard, `spawn_teammate`,
+     `list_agent_souls`), then the built-in `/orchestrate` **first**, soul commands,
+     `manage_agent_souls`, then `orchestrator.reapplyIfActive(agent)` (the built-in-first order is
+     what prevents a soul named `orchestrate` from shadowing it on a fresh Lead);
+   - teammate: `applyTeammateSoul` (strict for Team-enabled roots/soul parents, optional for an
+     ordinary Team-off subagent), mark the Agent as a soul teammate, then `installSoulSurface`
+     with the policy/guard and no Lead tools.
    Each step is individually wrapped: a failure is logged and the remaining steps still run where
    possible. The disposer list is stored in the `installed` map only after installation.
 6. `agent/disposed` marks the Agent as disposing but deliberately leaves any in-flight installation
@@ -1122,7 +1122,7 @@ the runtime is a process-wide object disposed by the plugin's member effect.
 
 | Effect | Owns | Disposal behavior |
 |---|---|---|
-| Per-Agent `installTeamTools` | `team:policy`, `team:identity`, Lead catalog section, the soul-only restriction + guard bundle, every Team tool | One disposer unregisters everything in reverse order |
+| Per-Agent `installSoulSurface` | scoped `team:policy` shadow, Lead catalog section, generic-tool guard, Lead-only `spawn_teammate`/`list_agent_souls` | One disposer unregisters everything in reverse order |
 | Per-Agent Soul apply | persona section at the deployment-persona order (via `agent.ctx.effect`), tool restriction, model selection | Both the Agent scope and the root installation record own disposers; plugin unload removes persona/restriction, while model selection has no automatic undo (the session survives) |
 | Per-Agent orchestrator bundle | persona section at the deployment-persona order, five doctrine sections, extra section, tool restriction, model selection | Bundle disposal removes sections/restriction. `/orchestrate off` restores the captured model and eligible Session title when present; runtime disposal restores only the captured model, not the title. Agent disposal drops the bundle without restoration |
 | Per-command injection | the Lead's scoped command registrations | Disposes the injected child |
@@ -1310,13 +1310,12 @@ in `smoke/gui-fixes.test.mjs` (client artifact contracts and live route validati
 `smoke/storage-fixes.test.mjs` (binding/delete/rename/path semantics),
 `smoke/orchestrator-fixes.test.mjs` (handler-seam rollback and doctrine/context contracts), and
 `smoke/smoke-fixes.test.mjs` (isolated probes, canaries, and remediation reporting). Per-module
-counts live in [`../smoke/README.md`](../smoke/README.md). On 2026-11-09 `node --test smoke/`
-passed **95/95** (15 remediation, 16 bundled-editable with 222 assertions, 8 config-toggle with 129,
-9 gui-fixes with 159, 18 storage-fixes, 8 orchestrator-fixes with 97, 7 smoke-fixes with 72, and 14
-windows-shell-alias cases for the portable `bash`/`pwsh` resolution). The direct-tree smoke run
-passed 53/53, the optional inverted-composition probe `smoke/run-windows-parity.mjs` passed
-**14/14**, and the candidate remediation runtime — not re-run for 0.4.1 — passed **169/169** with
-2/2 suites on both a canonical and a symlink-prefixed disposable run root in its 2026-11-08 run.
+counts live in [`../smoke/README.md`](../smoke/README.md). On 2026-11-13 `node --test smoke/`
+passed **109/109** (15 remediation, 16 bundled-editable with 222 assertions, 8 config-toggle with 129,
+10 gui-fixes with 176, 18 storage-fixes, 8 orchestrator-fixes with 97, 7 smoke-fixes with 72, 14
+windows-shell-alias, and 13 team-runtime cases). The direct-tree smoke run passed 58/58, the optional
+inverted-composition probe `smoke/run-windows-parity.mjs` passed **14/14**, and the candidate
+remediation runtime passed **179/179** with 2/2 suites on a fresh disposable run root.
 
 The config-toggle and gui-fixes client cases evaluate the real artifact with a minimal
 React/module-loader double and assert registration and source strings. They do **not** execute hooks,

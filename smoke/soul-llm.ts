@@ -78,7 +78,7 @@ function systemTextOf(options: GenerateOptions, messages: MessageLike[]): string
 
 function identityOf(messages: MessageLike[]): string {
   const context = messages.findLast(message => message.role === 'user' && message.source?.kind === 'runtime-context')
-  return context?.source?.sections?.find(section => section.name === 'team:identity')?.text ?? ''
+  return context?.source?.sections?.find(section => section.name === 'subagent:identity')?.text ?? ''
 }
 
 function toolCallNames(messages: MessageLike[]): string[] {
@@ -109,7 +109,7 @@ function teammateChunks(options: GenerateOptions): StreamChunk[] {
     model: options.model,
     provider: options.provider,
     tools,
-    personaOk: system.includes('You are the delegated teammate "probe".'),
+    personaOk: system.includes('You are the soul probe'),
     markerOk: system.includes('SOUL_PROBE_MARKER'),
     toolsOk: JSON.stringify([...tools].sort()) === JSON.stringify(expectedSoulTools('read', 'grep', 'glob')),
     modelOk: options.model === 'deepseek-v4-pro',
@@ -117,7 +117,7 @@ function teammateChunks(options: GenerateOptions): StreamChunk[] {
   observe(observation)
   const result = `SOUL_PROBE_RESULT persona=${observation.personaOk} marker=${observation.markerOk} tools=${observation.toolsOk} model=${observation.modelOk} model_id=${options.model} tool_names=${tools.join(',')}`
   if (!toolCallNames(messages).includes('send_message')) {
-    return toolChunks([{ name: 'send_message', args: { target: 'lead', message: result } }])
+    return toolChunks([{ name: 'send_message', args: { agent: 'lead', message: result } }])
   }
   return textChunks('Probe complete.')
 }
@@ -146,12 +146,16 @@ function leadChunks(options: GenerateOptions): StreamChunk[] {
       && process.env.DYLD_INSERT_LIBRARIES === undefined,
     providerKeyEmpty: process.env.DEEPSEEK_API_KEY === '',
   }
+  const systemText = systemTextOf(options, messages)
   observe({
     kind: 'lead',
     model: options.model,
+    toolNames: options.tools.map(tool => tool.name),
     spawnHasAgentType: spawnProperties !== undefined && Object.hasOwn(spawnProperties, 'agent_type'),
     hasListSouls: listTool !== undefined,
-    catalogInPrompt: systemTextOf(options, messages).includes('Available teammate souls'),
+    catalogInPrompt: systemText.includes('Available teammate souls'),
+    soulPolicyInPrompt: systemText.includes('Delegation is soul-only'),
+    baseSubagentAdviceInPrompt: systemText.includes('Use the names returned by subagent, subagent_fork'),
     envScrub,
     environmentScrubbed: Object.values(envScrub).every(Boolean),
     latestCalls: latestAssistantCalls(messages),
@@ -179,7 +183,7 @@ function commandTeammateChunks(options: GenerateOptions): StreamChunk[] {
     identity: identityOf(messages),
     model: options.model,
     tools: options.tools.map(tool => tool.name),
-    personaOk: system.includes('You are the delegated teammate "probe-cli".'),
+    personaOk: system.includes('You are the command-line probe'),
     markerOk: system.includes('COMMAND_SOUL_MARKER'),
   })
   return textChunks('Command soul teammate complete.')
@@ -232,11 +236,13 @@ class SoulSmokeAdapter extends LlmAdapter {
   async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const identity = identityOf(messagesOf(options))
     let chunks: StreamChunk[]
-    if (identity.startsWith('You are the Team Lead named "lead".')) chunks = leadChunks(options)
-    else if (identity.startsWith('You are teammate "probe-1".')) chunks = teammateChunks(options)
-    else if (identity.startsWith('You are teammate "probe-cli".')) chunks = commandTeammateChunks(options)
-    else throw new Error(`soul smoke: unrecognized team identity ${JSON.stringify(identity)}`)
-    if (identity.startsWith('You are the Team Lead named "lead".')
+    if (identity.startsWith('You are the root agent.')) chunks = leadChunks(options)
+    else if (identity.includes('Your name is "probe-1".')) chunks = teammateChunks(options)
+    else if (identity.includes('Your name is "probe-cli".')) chunks = commandTeammateChunks(options)
+    // Title generation and other non-Agent model calls carry no subagent
+    // identity; answer them with harmless text instead of failing the run.
+    else chunks = textChunks('Agent Soul smoke assistant.')
+    if (identity.startsWith('You are the root agent.')
       && peerText(messagesOf(options)).includes('SOUL_PROBE_RESULT')) {
       await runCommandProbe(peerText(messagesOf(options)))
       chunks = leadChunks(options)

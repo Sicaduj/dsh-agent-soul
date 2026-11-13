@@ -1,17 +1,14 @@
 # @local/dsh-agent-soul — Agent Teams "Soul" layer.
 #
-# Applied after the profile's agent-team bundle. The shipped Team tool row is replaced by
-# this package's row: same Team tool surface, plus soul-aware `spawn_teammate`
-# (`agent_type`), `list_agent_souls`, the Lead prompt catalog, and one user-invocable
-# slash command per soul.
+# Adds the Agent Soul layer on top of the shipped DSH 0.2.2 Agent Teams rows. The base
+# `tool-agent-team` row stays enabled and keeps the Team task board/policy; this package adds
+# soul-aware `spawn_teammate` (`agent_type`), `list_agent_souls`, the Lead prompt catalog,
+# a soul-only delegation guard, and one user-invocable slash command per soul.
 #
-# If the Agent Teams bundle is enabled after this bundle, this layer's disable above
-# targets a row that does not exist yet and is skipped; `claimTeamToolRow: true` asks the
-# plugin to persist the same `tool-agent-team` override through the Plugin Manager after
-# the Loader tree settles. In that mis-ordered profile the persisted profile override, not this
-# patch, is the effective composition owner: keep it while this bundle is installed.
-# Set it to false to keep the plugin from touching profile composition (repair then remains
-# available as the explicit manage_agent_souls action).
+# Profiles upgraded from the pre-0.2.2 plugin may still carry a
+# `- id: tool-agent-team` `disabled: true` override. The plugin warns about that at
+# activation; remove it, or run `manage_agent_souls({ action: "repair_team_tools" })`
+# to re-enable the base row through the Plugin Manager.
 #
 # This row carries no workspace-relative paths, so one installation is portable: every
 # Session resolves user content against its own workspace root. The package itself ships
@@ -37,13 +34,9 @@
 # The GUI can also set `bundledEditable` for you (Plugins page toggle "Use Default Agent Souls", or
 # the "Use default agent souls" switch in the Agent Soul settings card), which rewrites this row config.
 
-- id: tool-agent-team
-  disabled: true
-
 - insert:
     - id: agent-soul-team
       name: '@local/dsh-agent-soul'
       config:
         freshProvider: spawn
         forkProvider: fork
-        claimTeamToolRow: true

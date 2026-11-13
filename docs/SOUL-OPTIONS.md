@@ -25,7 +25,7 @@ on (config key `bundledEditable`, with `bundled: true`), the packaged souls open
 instead and carry no badge. The orchestrator tab shows the bundled doctrine until a workspace file
 overrides it.
 
-What the package currently ships (0.4.1): the souls `adversarial-red-team-verifier`, `generalist`,
+What the package currently ships (0.5.0): the souls `adversarial-red-team-verifier`, `generalist`,
 `researcher`, `scribe`, and `software-engineer`. All five declare no `model`/`provider` override
 and **inherit the Lead's model** (their catalog line reads `model: inherit`). `generalist`, `researcher`, and `software-engineer` declare `context: fresh`;
 `scribe` and `adversarial-red-team-verifier` declare no context. None is `user-invocable`.
@@ -252,7 +252,7 @@ These summarize a file; they are not editable.
   files, scan diagnostics, and the **Team tool surface** composition. The composition warning
   appears only when the shipped `tool-agent-team` row is still active next to this bundle's row; it
   carries the one-line profile patch, and `manage_agent_souls({ action: "repair_team_tools" })` (or
-  `claimTeamToolRow`) applies that override. On a profile where the Agent Teams bundle layer comes
+  `claimTeamToolRow`, both now obsolete) applied that override. On a profile where the old Team bundle layer comes
   after this bundle (common when that bundle is added later), the bundled patch cannot disable the
   row; the persisted override is then the effective replacement — keep it while the bundle is
   installed. Clicking a scan diagnostic opens the named file in the

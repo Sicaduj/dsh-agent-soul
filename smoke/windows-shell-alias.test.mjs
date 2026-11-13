@@ -159,6 +159,7 @@ function spawnHarness({ live, tools }) {
   const { warnings, logger } = warningSink()
   const spawnCalls = []
   const bindingWrites = []
+  const lead = { id: 'lead-1', session: { header: {} } }
   const soul = {
     name: 'probe',
     description: 'Probe the portable shell alias.',
@@ -168,34 +169,40 @@ function spawnHarness({ live, tools }) {
     context: 'fresh',
     sourceLabel: 'workspace',
   }
+  const subagents = {
+    rootOf: agent => agent === lead ? lead : agent,
+    namesOf: agent => ({ self: agent === lead ? 'lead' : String(agent.id) }),
+    getProvider: () => ({ name: 'spawn' }),
+    resolveMaxDepth: () => 1,
+    startActivation: async spec => {
+      spawnCalls.push(spec)
+      return { childId: 'child-1', name: spec.name }
+    },
+  }
   const deps = {
     config: { freshProvider: 'spawn', forkProvider: 'spawn', defaultContext: 'fresh' },
     rootOf: () => '/workspace',
     logger,
     catalog: { refresh: async () => catalogSnapshot(soul) },
     pending: createPendingSpawns(),
-    pendingKey: (root, name) => `${root}\u0000${name}`,
+    pendingKey: (root, name) => `${root?.id ?? root}\u0000${name}`,
     bindings: { set: async (...args) => { bindingWrites.push(args) } },
     resolveModel: async () => undefined,
     ctx: {
       get(service) {
-        if (service !== 'tools') return undefined
-        return { definitions: () => live.map(name => ({ name, description: `${name} probe description` })) }
-      },
-      agentTeams: {
-        spawnTeammate: async (lead, request) => {
-          spawnCalls.push(request)
-          return { member: { id: 'child-1', name: request.name } }
-        },
+        if (service === 'tools') return { definitions: () => live.map(name => ({ name, description: `${name} probe description` })) }
+        if (service === 'subagents') return subagents
+        if (service === 'agentTeams') return { isEnabled: () => true }
+        return undefined
       },
     },
   }
-  return { deps, warnings, spawnCalls, bindingWrites }
+  return { deps, warnings, spawnCalls, bindingWrites, lead }
 }
 
 /** Spawn one probe teammate through the real orchestration entry point. */
 function spawnProbe(harness) {
-  return spawnTeamMember(harness.deps, { id: 'lead-1' }, {
+  return spawnTeamMember(harness.deps, harness.lead, {
     name: 'probe-1',
     description: 'Probe the soul runtime.',
     prompt: 'Report your tool matrix.',
@@ -213,6 +220,9 @@ test('spawn validation accepts a bash declaration on a pwsh-only session', async
     'the resolved soul keeps the portable declaration for the child apply step')
   assert.equal(harness.spawnCalls.length, 1)
   assert.deepEqual(harness.spawnCalls[0].prompt, [{ type: 'text', text: 'Report your tool matrix.' }])
+  assert.equal(harness.spawnCalls[0].provider, 'spawn', 'the fresh provider is used')
+  assert.equal(harness.spawnCalls[0].delivery, 'parent', 'the child result returns to the Lead')
+  assert.equal(harness.spawnCalls[0].maxDepth, 1, 'the composition depth cap is forwarded')
   assert.equal(harness.bindingWrites.length, 1, 'the durable binding was written')
   assert.deepEqual(harness.bindingWrites[0][2].tools, ['bash', 'read', 'grep', 'glob'],
     'the durable plan records the declared spelling, not the resolved one')
@@ -232,7 +242,7 @@ test('spawn validation still rejects unknown, Team, and Lead-only tools', async 
 
   const team = spawnHarness({ live: ['pwsh', 'read', 'send_message'], tools: ['send_message'] })
   const teamError = await rejectionOf(() => spawnProbe(team))
-  assert.match(teamError.message, /"send_message" is a Team tool every teammate keeps and cannot be restricted/)
+  assert.match(teamError.message, /"send_message" is a Team tool every teammate keeps automatically/)
   assert.equal(team.spawnCalls.length, 0)
 
   const leadOnly = spawnHarness({ live: ['pwsh', 'manage_agent_souls'], tools: ['manage_agent_souls'] })
@@ -264,6 +274,9 @@ function applyHarness({ live, tools }) {
           if (unknown.length > 0) throw new Error(`cannot restrict unknown tool(s): ${unknown.join(', ')}`)
           state.restrictions.push(allow)
           return () => {}
+        },
+        definitions() {
+          return [...known].map(name => ({ name, description: `${name} probe description` }))
         },
       },
       systemPrompt: {
@@ -488,7 +501,6 @@ const GUI_CONFIG = Object.freeze({
   bindingsFile: '.dsh/agent-soul/bindings.json',
   freshProvider: 'spawn',
   forkProvider: 'spawn',
-  claimTeamToolRow: false,
 })
 
 /** One role section is enough to compose a valid soul document. */
@@ -506,16 +518,24 @@ function guiWorkspace(t, label) {
  * names through a fake Lead and tools service.
  */
 function guiDeps(root, live) {
-  const lead = { session: { header: {} } }
+  const lead = { id: 'lead-1', session: { header: {} } }
   const definitions = live.map(name => ({ name, description: `${name} probe description` }))
+  const subagents = {
+    rootOf: agent => lead,
+    namesOf: agent => ({ self: agent === lead ? 'lead' : String(agent.id) }),
+    listDescendants: async () => [],
+  }
+  const agentTeams = { isEnabled: () => true }
   return {
     ctx: {
       get(service) {
         if (service === 'tools') return { definitions: () => definitions }
+        if (service === 'subagents') return subagents
+        if (service === 'agentTeams') return agentTeams
         return undefined
       },
       agents: { list: () => [lead] },
-      agentTeams: { tryMembership: () => ({ role: 'lead' }) },
+      agentTeams,
       connection: { requestRejection: () => undefined },
     },
     config: GUI_CONFIG,

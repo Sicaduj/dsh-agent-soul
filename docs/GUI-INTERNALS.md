@@ -28,8 +28,9 @@ modules. Route and payload shapes below are still derived from the source handle
 | Module | Role |
 |---|---|
 | `lib/soul.js` | parse/validate one soul Markdown document (frontmatter + body), catalog scanning and prompt text |
-| `lib/tools.js` | ported Team tools (`spawn_teammate`, messaging, task board) + `team:policy`, `team:identity`, `team:agent-souls` prompt sections |
-| `lib/composition.js` | live Loader inspection of the replaced `tool-agent-team` row (Plugin Manager listing fallback when the Web profile does not expose the Loader), Plugin Manager repair, opt-in `claimTeamToolRow` guard |
+| `lib/tools.js` | soul surface: scoped `team:policy` shadow, Lead `team:agent-souls` catalog, generic-tool guard, `spawn_teammate`, `list_agent_souls` |
+| `lib/team.js` | subagent-tree adapter for roles, names, live descendants, and Team size |
+| `lib/team-row.js` | base `tool-agent-team` row inspection and explicit Plugin Manager re-enable |
 | `lib/apply.js` | applies a soul to a spawned or cold-resumed teammate: fail-closed plan resolution (pending plan, then durable binding), persona section at the deployment-persona order, sections, tool matrix, model route, binding record |
 | `lib/commands.js` | registers one Lead-scoped slash command per user-invocable soul |
 | `lib/admin.js` | GUI/agent-tool document layer: split/compose/validate, directory scanning, path safety, atomic writes, trash |
@@ -73,11 +74,11 @@ route-inheritance change from PR #5, still apply and are not reverted by leaving
 present in the current working tree, not in that release history. Behavior described in the sections
 below may therefore differ from a published 0.4.0 installation.
 
-**0.4.1 working tree (portable shell names).** On branch `feat/windows-pwsh-shell-aliases` the
-manifest is `0.4.1` and the GUI tool catalog advertises the missing `bash`/`pwsh` spelling as one
+**0.5.0 working tree (DSH 0.2.2 port).** The manifest is `0.5.0` and the GUI tool catalog
+advertises the missing `bash`/`pwsh` spelling as one
 marked portable-alias entry (`portableAliasOf`); the save validator and preview accept either
 spelling, and the spawn, apply, and orchestrator paths resolve it to the live one. This change and
-its suite are not in the 2026-11-08 UTC release history. See "Portable shell names (0.4.1, working
+its suite are not in the 2026-11-08 UTC release history. See "Portable shell names (0.5.0, working
 tree)" at the end of this document.
 
 ### Handler terms
@@ -151,12 +152,20 @@ preview, duplicate, and restore endpoints; P4 adds the orchestrator document end
 default-Soul release adds the preference endpoints; the packaged-defaults config toggle pair is
 part of 0.4.0 (see "Release status (2026-11-08 UTC)"). Each is registered on
 `ctx.webServer.register({ kind: 'exact', path, handler })` with the absolute paths below.
-Every handler first consults the composition's trust fence and answers 401/403 when it rejects:
+Every handler first consults the composition's trust fence and answers 401/403/503 when it rejects.
+DSH 0.2.2 exposes `connection.admit({ headers, method, url })`; the GUI child context must also
+inject the nested `connection.authentication` verifier that `admit` reads:
 
 ```js
-const rejection = ctx.connection.requestRejection(req) // 401 | 403 | undefined
-if (rejection !== undefined) { res.writeHead(rejection); res.end(); return }
+const admission = ctx.connection.admit({ headers: req.headers, method: req.method, url: req.url })
+if (admission !== undefined && !('peer' in admission)) {
+  const status = admission.rejection ?? 403 // 401 | 403 | 503
+  res.writeHead(status); res.end(); return
+}
 ```
+
+The legacy `requestRejection(req)` method is kept as a fallback for older profiles. A composition
+without either method fails closed with 403.
 
 `res` is a Node `ServerResponse`; `req` is an `IncomingMessage`. JSON responses set
 `content-type: application/json; charset=utf-8` and `cache-control: no-store`. Unknown methods get
@@ -188,15 +197,13 @@ Route names and payloads (the browser half addresses them without the leading sl
 ### `GET /agent-soul/overview`
 
 200 body (example values are illustrative; `plugin.version` is read from the real manifest —
-`0.4.1` at this revision (the working-tree bump on `feat/windows-pwsh-shell-aliases`; 0.4.0
-manifests report `0.4.0`, 0.3.0 manifests report `0.3.0`, and earlier manifests report their own
-versions and predate the authoring mode). The no-`pluginMeta` fallback constant
-`PLUGIN_META_DEFAULTS` in `lib/gui-host.js` reports `0.4.1`; it is used only when the Host
+`0.5.0` at this revision (the DSH 0.2.2 port). The no-`pluginMeta` fallback constant
+`PLUGIN_META_DEFAULTS` in `lib/gui-host.js` reports `0.5.0`; it is used only when the Host
 passes no plugin metadata):
 
 ```jsonc
 {
-  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.4.1", "root": "/abs/workspace" },
+  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.5.0", "root": "/abs/workspace" },
   "settings": {
     "dirs": [".dsh/agents"],
     "resolvedDirs": ["/abs/workspace/.dsh/agents"],
@@ -206,7 +213,7 @@ passes no plugin metadata):
     "bindingsFile": ".dsh/agent-soul/bindings.json",
     "bindingsPath": "/abs/workspace/.dsh/agent-soul/bindings.json",
     "commandPrefix": "", "defaultContext": "fresh",
-    "freshProvider": "spawn", "forkProvider": "fork", "interrupt": true,
+    "freshProvider": "spawn", "forkProvider": "fork",
     "maxDefinitions": 64, "maxPromptChars": 12000,
     "providers": [{ "id": "deepseek-official", "name": "DeepSeek" }]
   },
@@ -220,11 +227,11 @@ passes no plugin metadata):
       "catalogChars": { "used": 1051, "max": 12000 },
       "duplicates": [], "invalidFiles": 0,
       "diagnostics": 1,
-      "teamTools": {                       // replaced Team-tool row composition
-        "available": true, "status": "replaced", "ok": true,
-        "rows": [{ "id": "tool-agent-team", "disabled": true, "enabled": false }],
-        "message": "the shipped Team tool row is disabled, so agent-soul-team owns the Team tool surface",
-        "fix": "- id: tool-agent-team\n  disabled: true"
+      "teamTools": {                       // base tool-agent-team row status
+        "available": true, "status": "enabled", "ok": true,
+        "rows": [{ "entryId": "tool-agent-team", "enabled": true, "fiberPhase": "active" }],
+        "message": "the shipped tool-agent-team row is enabled, so the base Team tools and policy are available",
+        "fix": "remove the legacy override from the profile patch, or run manage_agent_souls({ action: \"repair_team_tools\" })"
       }
     }
   },
@@ -703,7 +710,7 @@ These boundaries are source- and route-test evidence, not a rendered-browser rep
 `manage_agent_souls` — Lead-only, registered in the Lead member scope next to the soul
 commands. Actions: `list`, `get` (`file`), `save` (`file`, `source` raw markdown), `create`
 (`name`), `delete` (`file`), `diagnose` (live Lead/command-registry snapshot plus the
-`teamTools` composition block for support), `repair_team_tools` (persists the shipped-row disable
+`teamTools` base-row block for support), `repair_team_tools` (re-enables a legacy disabled base row
 through the Plugin Manager and reports the manual fix when that service is unavailable),
 `get_orchestrator` and `save_orchestrator` (`source` raw markdown) for the P4 definition.
 `get_orchestrator` answers the **effective** document: when the workspace file is absent and
@@ -985,7 +992,7 @@ plus full locale coverage.
     not an all-time count); `lastUsedAt` is the newest retained
     `savedAt`;
     `activeMembers` lists live Team member names (via `ctx.agents.list()` +
-    `agentTeams.tryMembership`) whose Session id has a binding for this soul.
+    `teamMemberOf` role `teammate`) whose Session id has a binding for this soul.
   - `commandStatus: { name: string, status: 'registered' | 'ai-only' | 'invalid-name' | 'collision' | 'no-live-lead', message?: string }`
     reusing the P1 preview command-status computation. With a per-Lead registration record,
     `registered` means this soul's own accepted handler is the registry's effective definition and
@@ -999,13 +1006,13 @@ plus full locale coverage.
     collision).
   - `catalogLine: string` — the soul's prompt-catalog bullet from the same single-definition
     snapshot used by the preview route (`''` for invalid rows).
-- `runtime.health: { duplicates: string[], invalidFiles: number, definitions: { used: number, max: number }, catalogChars: { used: number, max: number }, diagnostics: number, teamTools: { available: boolean, status: 'replaced' | 'conflict' | 'absent' | 'unknown', ok: boolean | null, rows: { id: string, disabled: boolean, enabled: boolean }[], message: string, fix: string } }`
+- `runtime.health: { duplicates: string[], invalidFiles: number, definitions: { used: number, max: number }, catalogChars: { used: number, max: number }, diagnostics: number, teamTools: { available: boolean, status: 'enabled' | 'disabled' | 'failed' | 'absent' | 'unknown', ok: boolean | null, rows: { entryId?: string, patchId?: string, moduleName?: string, enabled: boolean, fiberPhase?: string, diagnostic?: string }[], message: string, fix: string } }`
   — duplicate soul names, invalid-file count, the `maxDefinitions` / `maxPromptChars` budgets
   against the full catalog prompt text length (measured with a budget large enough to include
   every entry, so the over-budget state is reachable), the scan diagnostic count, and the live
-  Team-tool row composition (`status: 'conflict'` makes the health card render `teamTools.message`
+  Base tool-agent-team row status (`ok: false` makes the health card render `teamTools.message`
   plus the one-line `teamTools.fix`; `unknown` means the Loader service is unavailable).
-- `runtime.liveTeams` entries gain `memberCount: number | null` (`agentTeams.listMembers(lead).length`
+- `runtime.liveTeams` entries gain `memberCount: number | null` (root plus continuable descendants from `ctx.subagents.listDescendants`
   when available, else null). Their `commands` list is the union of the command-list and
   definition-lookup registry views (P3 fix), so a scoped command hidden from the list view still
   appears when the lookup resolves it.
@@ -1153,7 +1160,7 @@ soul catalog text; unknown variables stay literal).
   title to capture); the announcement records the corresponding `title: unchanged (…)` reason, and
   a later disable has no captured title to restore. A failed bundle creation restores the captured
   title when this was the first enable. Reapply never renames or re-captures.
-- `team:identity` and the model-facing `list_agents` roster mark the Lead as the orchestrator while
+- The scoped soul policy marks the Lead as the orchestrator while
   the mode is active (`orchestrator: true` on the Lead row); the internal Team target stays `lead`.
 - Disable: restore the remembered model selection first when one was captured (a restore failure
   answers with the error and leaves the bundle active for an off retry), then restore the captured
@@ -1247,7 +1254,7 @@ soul catalog text; unknown variables stay literal).
   the live registry so a tool provider that mounts either name after the member was prepared is
   hidden too (and a previously hidden name stays denied while it remains registered). Scoped Team
   tools are unaffected.
-- `index.js` registers an `agent/created` fence (`assertSoulOnlyTeamChild`): when the new Agent's
+- `index.js`'s per-Agent `install()` is the `agent/created` fence: when the new Agent's
   `session.header.parentSession` names a live Team member, the child must resolve as a roster
   teammate or be a seeded host fork (independent lineage). Any other provider-owned child
   (`header.origin === 'subagent'`, or an unclassifiable direct child) throws, which vetoes
@@ -1418,7 +1425,7 @@ packaged doctrine keep the 0.3.0 read-only authoring behavior (no in-place editi
   workspace in the profile while bindings and trash stay per workspace; the packaged doctrine
   becomes globally edited.
 
-## Portable shell names (0.4.1, working tree)
+## Portable shell names (0.5.0, working tree)
 
 The shell tool has one model-facing name per platform: DSH registers `bash` on POSIX and `pwsh` on
 Windows compositions (the one-shot and persistent variants share the name per family). A soul is

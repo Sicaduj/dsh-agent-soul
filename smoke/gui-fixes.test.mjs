@@ -501,6 +501,16 @@ test('D13: the GUI trust fence uses the DSH 0.2.2 connection.admit contract', as
   const refusedResponse = jsonResponse()
   await refusedRoute.handler(request('GET', ROUTE_PATHS.overview), refusedResponse.res)
   equal(refusedResponse.res.status, 403, 'a connection.admit rejection fails closed')
+
+  const unknown = gui.createGuiRoutes(guiDeps(ws, {
+    withLead: true,
+    tools: emptyLiveCatalog(),
+    connection: { admit: () => undefined, requestRejection: () => undefined },
+  }))
+  const unknownRoute = routeOf(unknown, 'GET', ROUTE_PATHS.overview)
+  const unknownResponse = jsonResponse()
+  await unknownRoute.handler(request('GET', ROUTE_PATHS.overview), unknownResponse.res)
+  equal(unknownResponse.res.status, 403, 'an admit call with no PeerAdmission fails closed')
 })
 
 test('D12: a live Lead with no restrictable tools rejects an unknown tool in preview', async t => {

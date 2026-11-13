@@ -1,8 +1,10 @@
 /**
  * Agent Soul for Agent Teams.
  *
- * Replaces the shipped `@deepseek-ai/dsh-experimental-tool-agent-team` row with
- * a soul-aware copy of the Team tool surface. A user defines one Markdown
+ * Adds a soul-aware delegation layer on top of the DSH 0.2.2 Agent Teams rows.
+ * The shipped `tool-agent-team` row stays enabled and owns the shared task
+ * board; this plugin adds `spawn_teammate`, the Lead soul catalog, a scoped
+ * policy shadow, and the soul-only guard/fence. A user defines one Markdown
  * file per Agent Soul (YAML frontmatter + role/inputs/rules/output body) in
  * the directories selected by this row's `dirs` config, relative to the session
  * workspace (default `<workspace>/.dsh/agents`). With `bundled` enabled (the
@@ -20,8 +22,8 @@
  * - its `model` routed for that child session,
  * - a durable binding so cold resume re-applies the same soul.
  *
- * This bundle's patch disables the shipped Team tool row; this plugin owns that
- * surface and requires the Agent Teams service (`ctx.agentTeams`).
+ * This plugin requires the subagent-based Team service (`ctx.agentTeams`) and
+ * `ctx.subagents`; it does not replace the base Team tool row.
  *
  * @module @local/dsh-agent-soul
  */
@@ -32,21 +34,22 @@ import { resolveGuiRoot } from './lib/admin.js'
 import { createCatalog } from './lib/soul.js'
 import { applyTeammateSoul, createAdmissionDiagnostics, createPendingSpawns, SoulPlanUnavailableError } from './lib/apply.js'
 import { assertBindingFileSpec, createBindingStore } from './lib/bindings.js'
-import { createCompositionGuard } from './lib/composition.js'
+import { parentAgentOf, teamMemberOf } from './lib/team.js'
+import { inspectBaseTeamRow } from './lib/team-row.js'
 import { createSoulCommandSync } from './lib/commands.js'
 import { installGui } from './lib/gui-host.js'
 import { resolveModelRoute } from './lib/model.js'
 import { createOrchestratorRuntime, installOrchestratorCommand } from './lib/orchestrator.js'
 import { orchestratorModeDefinition } from './lib/orchestrator-mode.js'
 import { createPreferenceStore } from './lib/preferences.js'
-import { assertSoulOnlyTeamChild, describeSouls, spawnSoulFromCommand, spawnTeamMember } from './lib/spawn.js'
-import { installTeamTools } from './lib/tools.js'
+import { describeSouls, spawnSoulFromCommand, spawnTeamMember } from './lib/spawn.js'
+import { installSoulSurface } from './lib/tools.js'
 
 /** Cordis plugin name. */
 export const name = 'agent-soul-team'
 
 /** Services this plugin cannot work without; the row stays inactive without them. */
-export const inject = ['agents', 'agentTeams', 'tools', 'systemPrompt', 'sessionProjections']
+export const inject = ['agents', 'agentTeams', 'subagents', 'tools', 'systemPrompt', 'sessionProjections']
 
 /** Default soul directory spec, relative to each session workspace root. */
 const DEFAULT_DIRS = ['.dsh/agents']
@@ -62,9 +65,13 @@ const CONFIG_KEYS = new Set([
   'bindingsFile',
   'freshProvider',
   'forkProvider',
-  'interrupt',
   'defaultContext',
-  'claimTeamToolRow',
+])
+
+/** Removed keys that upgraded profiles may still carry; accepted and ignored. */
+const LEGACY_CONFIG_KEYS = new Map([
+  ['interrupt', 'the base tool-subagent-control row owns interrupt; remove the key'],
+  ['claimTeamToolRow', 'the base tool-agent-team row now stays enabled; remove the key'],
 ])
 
 /** Human-readable message for one arbitrary thrown value. */
@@ -119,7 +126,11 @@ export function normalizeConfig(raw, logger) {
     throw new TypeError('agent-soul config must be an object')
   }
   for (const key of Object.keys(input)) {
-    if (!CONFIG_KEYS.has(key)) logger.warn(`agent-soul: ignoring unknown config key "${key}"`)
+    if (LEGACY_CONFIG_KEYS.has(key)) {
+      logger.warn(`agent-soul: config.${key} is obsolete and ignored: ${LEGACY_CONFIG_KEYS.get(key)}`)
+    } else if (!CONFIG_KEYS.has(key)) {
+      logger.warn(`agent-soul: ignoring unknown config key "${key}"`)
+    }
   }
   const config = {
     dirs: DEFAULT_DIRS,
@@ -131,9 +142,7 @@ export function normalizeConfig(raw, logger) {
     bindingsFile: '.dsh/agent-soul/bindings.json',
     freshProvider: 'spawn',
     forkProvider: 'fork',
-    interrupt: true,
     defaultContext: 'fresh',
-    claimTeamToolRow: false,
   }
   if (input.dirs !== undefined) {
     if (!Array.isArray(input.dirs) || input.dirs.length === 0) {
@@ -176,19 +185,11 @@ export function normalizeConfig(raw, logger) {
   }
   if (input.freshProvider !== undefined) config.freshProvider = stringValue(input.freshProvider, 'freshProvider')
   if (input.forkProvider !== undefined) config.forkProvider = stringValue(input.forkProvider, 'forkProvider')
-  if (input.interrupt !== undefined) {
-    if (typeof input.interrupt !== 'boolean') throw new TypeError('agent-soul config.interrupt must be a boolean')
-    config.interrupt = input.interrupt
-  }
   if (input.defaultContext !== undefined) {
     if (input.defaultContext !== 'fresh' && input.defaultContext !== 'fork') {
       throw new TypeError('agent-soul config.defaultContext must be "fresh" or "fork"')
     }
     config.defaultContext = input.defaultContext
-  }
-  if (input.claimTeamToolRow !== undefined) {
-    if (typeof input.claimTeamToolRow !== 'boolean') throw new TypeError('agent-soul config.claimTeamToolRow must be a boolean')
-    config.claimTeamToolRow = input.claimTeamToolRow
   }
   return config
 }
@@ -228,6 +229,8 @@ function pendingKeyOf(leadOrRoot, name) {
 
 /** Resolve the soul-specific services into one shared deps object. Exported for direct regression tests. */
 export function createDeps(ctx, config, catalog, bindings, pending, logger) {
+  /** Agents that resolved and applied a Soul plan. */
+  const soulAgents = new WeakSet()
   const deps = {
     ctx,
     config,
@@ -239,11 +242,14 @@ export function createDeps(ctx, config, catalog, bindings, pending, logger) {
     // Bounded best-effort record of cold-resume admission refusals. The shared
     // subagent lifecycle wraps the veto as a generic NOT_RESUMABLE, so the
     // Soul-specific reason must stay reachable through the plugin's own surface
-    // (send_message translation and list_agent_souls diagnostics).
+    // (list_agent_souls diagnostics).
     admissionDiagnostics: createAdmissionDiagnostics(),
     logger,
     rootOf: agent => resolveRoot(ctx, agent),
     pendingKey: pendingKeyOf,
+    markSoul: agent => soulAgents.add(agent),
+    unmarkSoul: agent => soulAgents.delete(agent),
+    isSoulTeammate: agent => soulAgents.has(agent),
     async resolveModel(raw, options = {}) {
       // Providers and their catalogs are live registration surfaces. Resolve
       // for every request instead of retaining a route across topology changes.
@@ -292,8 +298,8 @@ export async function apply(ctx, rawConfig) {
   // One process-wide runtime; it keeps a per-Lead bundle of doctrine sections,
   // tool restrictions, and the model selection captured by `/orchestrate`.
   const orchestrator = createOrchestratorRuntime(deps)
-  // The Team tool surface reads this to call the Lead the orchestrator and to
-  // mark it on the model-facing roster while the mode is active.
+  // The soul policy and GUI read this to describe the orchestrator role while
+  // the mode is active.
   deps.orchestrator = orchestrator
   // Soul files change while the Host runs (GUI, agent tool, editor). The
   // reconciler keeps each Live Lead's slash commands in step with the catalog;
@@ -305,20 +311,19 @@ export async function apply(ctx, rawConfig) {
   // its name owned by another handler (the built-in `/orchestrate`), so the
   // name-only fallback would falsely report `registered`.
   deps.soulCommandRegistration = (agent) => commandSync.registrationOf(agent)
-  // This bundle replaces the shipped Team tool row; the replacement is
-  // deterministic only when this bundle's patch layer follows the Agent Teams
-  // bundle's layer. Inspect the composed tree once and say so loudly instead of
-  // degrading silently when a mis-ordered profile leaves both rows active.
-  const composition = createCompositionGuard({ ctx, config, logger })
-  deps.composition = composition
-  try {
-    const teamSurface = composition.inspect()
-    if (teamSurface.ok === false) {
-      logger.warn(`agent-soul: ${teamSurface.message}\n${teamSurface.fix}`)
+  // The base tool-agent-team row owns the task board and policy in DSH 0.2.2.
+  // A profile upgraded from the old plugin may still disable it; report that
+  // once the Loader has settled instead of silently running a half Team.
+  void (async () => {
+    try {
+      const loader = ctx.get('loader')
+      if (typeof loader?.await === 'function') await loader.await()
+      const row = await inspectBaseTeamRow(ctx)
+      if (row.ok === false) logger.warn(`agent-soul: ${row.message}\n${row.fix}`)
+    } catch (error) {
+      logger.warn(`agent-soul: cannot inspect the base tool-agent-team row: ${messageOf(error)}`)
     }
-  } catch (error) {
-    logger.warn(`agent-soul: cannot inspect the Team-tool composition: ${messageOf(error)}`)
-  }
+  })()
 
   // The session-header badge is driven by a Host projection over the same
   // durable command log. Register before any live Agent installation so a
@@ -337,7 +342,7 @@ export async function apply(ctx, rawConfig) {
   // ACP) never activate this child, and every non-GUI capability keeps working.
   // The child injects the Host services its routes touch directly (the trust
   // fence and the team roster); its `get()` reads stay optional per call.
-  ctx.inject(['webServer', 'connection', 'agents', 'agentTeams'], (guiCtx) => {
+  ctx.inject(['webServer', 'connection', 'agents', 'agentTeams', 'subagents'], (guiCtx) => {
     try {
       installGui(guiCtx, {
         ctx: guiCtx,
@@ -345,7 +350,6 @@ export async function apply(ctx, rawConfig) {
         catalog,
         bindings,
         logger,
-        composition,
         root: resolveGuiRoot(ctx),
         pluginMeta: pluginMeta(),
         preferences: deps.preferences,
@@ -410,18 +414,13 @@ export async function apply(ctx, rawConfig) {
       }
       return
     }
-    let membership
-    try {
-      membership = ctx.agentTeams.tryMembership(agent)
-    } catch (error) {
-      logger.warn(`agent-soul: cannot resolve Team membership: ${messageOf(error)}`)
-      return
-    }
-    if (membership === undefined) return
-    const memberLabel = `${membership.role} "${membership.name}" (${agent.id})`
+    const member = teamMemberOf(ctx, agent)
+    if (member === undefined) return
+    const memberLabel = `${member.role} "${member.name}" (${agent.id})`
 
     /** @type {Array<() => void>} */
     const disposers = []
+    let strict = false
     let disposed = false
     const disposeRegistrations = () => {
       if (disposed) return
@@ -445,30 +444,23 @@ export async function apply(ctx, rawConfig) {
       cancelInstallation('the Agent was disposed, the plugin was torn down, or creation was aborted')
       return true
     }
+    const installSurface = () => {
+      try {
+        disposers.push(installSoulSurface(agent, agent.ctx, { ctx, config, catalog, deps, member }))
+      } catch (error) {
+        logger.warn(`agent-soul: installing the soul surface for ${memberLabel} failed: ${messageOf(error)}`)
+      }
+    }
 
     try {
-      if (membership.role === 'lead') {
+      if (member.role === 'lead') {
         try {
           await catalog.refresh(resolveRoot(ctx, agent))
         } catch (error) {
           logger.warn(`agent-soul: soul scan failed: ${messageOf(error)}`)
         }
         if (stopIfGone()) return
-      }
-      try {
-        disposers.push(installTeamTools(agent, agent.ctx, { ctx, config, catalog, deps }))
-      } catch (error) {
-        let hint = ''
-        try {
-          if (composition.inspect().ok === false) {
-            hint = '; another Team-tool row owns this Agent scope — run manage_agent_souls({ action: "repair_team_tools" }) or add the profile-patch override'
-          }
-        } catch {
-          // The tool-install failure is the actionable one.
-        }
-        logger.warn(`agent-soul: installing Team tools failed: ${messageOf(error)}${hint}`)
-      }
-      if (membership.role === 'lead') {
+        installSurface()
         // Built-in commands are installed BEFORE soul commands so a
         // user-invocable soul named `orchestrate` can never shadow the
         // built-in `/orchestrate` command on a fresh Lead. A colliding soul
@@ -503,17 +495,25 @@ export async function apply(ctx, rawConfig) {
         }
         if (stopIfGone()) return
       } else {
-        // Plan resolution is the one admission veto: a roster teammate without
-        // a pending or durable Soul plan must not be published Soul-less.
-        // Post-plan failures are handled as logged skips by the catch below.
-        const applied = await applyTeammateSoul(agent, membership, deps)
+        // A Team-enabled root and every soul teammate's descendants are strict:
+        // a child without a pending or durable Soul plan must not be published
+        // Soul-less. When Team mode is off, a plain subagent is ordinary DSH
+        // delegation; only a durable Soul binding opts it into this surface.
+        const parent = parentAgentOf(ctx, agent)
+        strict = member.enabled === true || member.detached === true || deps.isSoulTeammate(parent)
+        const applied = await applyTeammateSoul(agent, member, deps, { optional: !strict })
+        if (applied.skipped === true) return
+        deps.markSoul(agent)
+        disposers.push(() => deps.unmarkSoul(agent))
         disposers.push(applied.dispose)
+        if (stopIfGone()) return
+        installSurface()
         if (stopIfGone()) return
       }
       if (stopIfGone()) return
       installed.set(agent, { dispose: disposeRegistrations })
     } catch (error) {
-      // No failure path may leave Team tools or a partially applied soul
+      // No failure path may leave the soul surface or a partially applied soul
       // behind. Only plan resolution is allowed to veto publication; disposal,
       // cancellation, and unexpected apply failures resolve after cleanup.
       disposeRegistrations()
@@ -529,7 +529,7 @@ export async function apply(ctx, rawConfig) {
         // already the actionable one and is preserved as the wrapper's cause.
         try {
           deps.admissionDiagnostics?.record?.({
-            teammate: typeof membership.name === 'string' ? membership.name : agent.id,
+            teammate: typeof member.name === 'string' ? member.name : agent.id,
             code: typeof error.code === 'string' ? error.code : 'SOUL_PLAN_UNAVAILABLE',
             reason: typeof error.reason === 'string' ? error.reason : undefined,
             message: messageOf(error),
@@ -543,8 +543,33 @@ export async function apply(ctx, rawConfig) {
         }
         throw error
       }
+      if (strict) {
+        // A strict child must not be admitted with only part of its Soul
+        // effects. Convert an unexpected post-plan failure into the same
+        // admission veto class so the serial creation listener rejects
+        // publication instead of running the child with inherited tools.
+        const failure = new SoulPlanUnavailableError(
+          `teammate "${member.name}" could not be admitted because applying its Agent Soul failed: ${messageOf(error)}`,
+          { cause: error, reason: 'apply-failed' },
+        )
+        try {
+          deps.admissionDiagnostics?.record?.({
+            teammate: member.name,
+            code: failure.code,
+            reason: failure.reason,
+            message: failure.message,
+            at: Date.now(),
+          })
+        } catch {
+          // Best-effort diagnostics; the veto below is the contract.
+        }
+        if (options.logFailure !== false) {
+          logger.warn(`agent-soul: cannot admit ${memberLabel}: ${failure.message} (code ${failure.code}, reason apply-failed)`)
+        }
+        throw failure
+      }
       if (options.logFailure !== false) {
-        logger.warn(`agent-soul: member installation for ${memberLabel} was SKIPPED after an unexpected failure: ${messageOf(error)}; Team tools and partial Soul effects were unwound. Re-spawn this teammate; if it recurs, report this log line.`)
+        logger.warn(`agent-soul: member installation for ${memberLabel} was SKIPPED after an unexpected failure: ${messageOf(error)}; the soul surface and partial Soul effects were unwound. Re-spawn this teammate; if it recurs, report this log line.`)
       }
     }
   }
@@ -564,13 +589,11 @@ export async function apply(ctx, rawConfig) {
     return task
   }
 
-  // Serial creation fence: a provider-owned child of a Team member that did not
-  // enter through the roster throws here, which vetoes publication. A generic
-  // subagent child can therefore never become a soul-less Team child.
-  ctx.on('agent/created', ({ agent, signal }) => {
-    assertSoulOnlyTeamChild(deps, agent)
-    return maybeInstall(agent, { signal })
-  })
+  // Serial creation fence: install() throws SoulPlanUnavailableError for a
+  // child of a Team-enabled root or soul teammate that has no pending or
+  // durable plan, which vetoes publication. A generic subagent child can
+  // therefore never become a soul-less Team child.
+  ctx.on('agent/created', ({ agent, signal }) => maybeInstall(agent, { signal }))
   ctx.on('agent/disposed', ({ agent }) => {
     try {
       // Mark first: an in-flight install sees this at its next boundary and
@@ -599,17 +622,9 @@ export async function apply(ctx, rawConfig) {
   }, 'agent-soul.members()')
 
   for (const agent of ctx.agents.list()) {
-    // Pre-existing non-roster children are never retrofitted with Team tools;
-    // creation itself is vetoed above, but activation must not fail on them.
-    try {
-      assertSoulOnlyTeamChild(deps, agent)
-    } catch (error) {
-      logger.warn(`agent-soul: skipping non-roster child Agent ${agent.id}: ${messageOf(error)}`)
-      continue
-    }
     // A pre-existing live teammate without a Soul plan cannot be vetoed (its
     // publication already happened), so activation skips it with a warning
-    // rather than failing the whole plugin or leaving Team tools attached.
+    // rather than failing the whole plugin or leaving a half surface attached.
     // New and cold-resumed teammates reach the same error through the serial
     // `agent/created` listener, where it vetoes publication.
     try {
@@ -619,12 +634,4 @@ export async function apply(ctx, rawConfig) {
       logger.warn(`agent-soul: skipping pre-existing Agent ${agent.id}: ${messageOf(error)}`)
     }
   }
-
-  // With `claimTeamToolRow` on, reconcile a mis-ordered profile once the Loader
-  // tree has settled: persist the shipped-row override through the Plugin
-  // Manager and let the profile reload. Off by default, and a no-op when the
-  // composition already replaces the row.
-  void composition.scheduleClaim().catch((error) => {
-    logger.warn(`agent-soul: scheduling the Team-tool repair failed: ${messageOf(error)}`)
-  })
 }

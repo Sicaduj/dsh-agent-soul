@@ -2,9 +2,9 @@
 
 Keyless end-to-end and focused verification for the plugin from its own project directory. The
 end-to-end harness boots a real `dsh --profile headless` process from the DSH source checkout with a
-temporary `DSH_HOME`, the Agent Teams bundle, and this workspace's plugin, then drives it with a
-scripted LLM adapter (`soul-llm.ts`). The fixtures require no credentials or network access by
-design; the harness does not monitor network syscalls.
+temporary `DSH_HOME`, the DSH 0.2.2 base bundle (which owns the Team task board), and this
+workspace's plugin, then drives it with a scripted LLM adapter (`soul-llm.ts`). The fixtures
+require no credentials or network access by design; the harness does not monitor network syscalls.
 
 > **Safety — the direct package tree is supported.** The document write-refusal probes run against a
 > run-owned copy of the package imported through its own file URL. The real
@@ -42,7 +42,7 @@ cd "$SMOKE_COPY/plugin"
 node smoke/run-smoke.mjs
 ```
 
-The harness runs **53 checks**. It passed **53/53** directly from this working tree on 2026-11-09
+The harness runs **58 checks**. It passed **58/58** directly from this working tree on 2026-11-13
 (macOS arm64, Node 26.13.0) — a dated point-in-time result, not a platform matrix. It asserts,
 against the real Cordis runtime and real temporary directories rather than mocks:
 
@@ -97,7 +97,7 @@ objects; they never write the real package or workspace state. Run all of them w
 node --test smoke/
 ```
 
-On 2026-11-09 that command ran **95/95 tests** across nine `node:test` modules (the remediation
+On 2026-11-13 that command ran **107/107 tests** across ten `node:test` modules (the remediation
 pair shares one table row):
 
 | Suite | Cases | Coverage |
@@ -110,6 +110,7 @@ pair shares one table row):
 | `smoke/orchestrator-fixes.test.mjs` | 8 (97 assertions) | handler-seam fault injection for first-enable and already-active queue rollback (exact/partial/fallback/inactive/unknown reports), the corrected bundled doctrine (conditional route, supported task states, strict/budget-scoped correction, quote fix), and the `spawn_teammate` context resolution contract |
 | `smoke/smoke-fixes.test.mjs` | 7 (72 assertions) | isolated packaged-write probes and concurrent-edit preservation, seeded environment canaries and explicit `/orchestrate` command assertion, canonicalized symlink run roots, atomic/tolerant readiness barriers, and honest incomplete/unexecuted-suite reporting |
 | `smoke/windows-shell-alias.test.mjs` | 14 | the portable `bash` ↔ `pwsh` shell name through the real modules: exact-match preference and counterpart resolution in `lib/tool-names.js`, request order and dedupe in `resolveRestrictableNames`, spawn validation accepting a counterpart, the apply matrix restricting to the live spelling, the orchestrator enable path resolving instead of skipping, and the GUI catalog/validator advertising `portableAliasOf` and saving either spelling |
+| `smoke/team-runtime.test.mjs` | 12 | DSH 0.2.2 adapter contracts: root/teammate mapping and parent-chain fallback, descendant listing/counts/direct names, name collision and live fallback, soul-policy shadow, `installSoulSurface` gating and guard, reserved child-id activation/model routing/pending release, Team-off and activation-failure refusals, strict/optional soul application with always-kept Team tools, and base-row inspect/restore |
 
 These suites are static/source-contract and route-level evidence where noted; none renders the
 browser or executes real UI interactions. Assertion tallies can be printed with
@@ -145,8 +146,9 @@ DSH boot is active.
 ## Remediation runtime
 
 `smoke/remediation-runtime.mjs` is the focused real-runtime harness. It boots fresh headless CLI
-processes with scripted models and `claimTeamToolRow: false`, and never installs or repairs the real
-profile. It primes two real plugin stores in separate processes before concurrently spawning through
+processes with scripted models, and never installs or repairs the real profile. The direct
+`tools.execute` probes resolve a step tool set first, because `spawn_teammate` and
+`list_agent_souls` are conditional registrations in DSH 0.2.2. It primes two real plugin stores in separate processes before concurrently spawning through
 a shared absolute bindings file, then uses actual process recreation to check cold resume and
 fail-closed missing-binding behavior. It also invokes `get_orchestrator` through the registered
 tools/results pipeline for bundled, valid-workspace, and invalid-workspace definitions, checks exact
@@ -167,8 +169,8 @@ DSH_CHECKOUT=/path/to/deepseek-harness \
 node smoke/remediation-runtime.mjs --target candidate --only all
 ```
 
-The candidate run on **2026-11-08** passed **169/169** checks with **2/2 suites**, both with a
-canonical root and with a symlink-prefixed root. Each run writes `summary.json` with `status`
+The candidate run on **2026-11-13** passed **179/179** checks with **2/2 suites** on a fresh
+disposable root. Each run writes `summary.json` with `status`
 (`PASS`/`FAIL`), `complete`, `incompleteSuites`, `unexecutedSuites`, `runnerChecks`,
 `adapterAssertions`, suite counts, per-check rows, child-process evidence, and input digests. A run
 that stops at the first failure therefore reports the incomplete and unexecuted suites and cannot
@@ -181,39 +183,52 @@ the run stopped at `F001.bundled.workspace-file-path` with **131 pass / 1 fail a
 executed**. That historical path comparison has been fixed by canonicalizing the run root; the
 current run above covers both root styles.
 
-For a before/after comparison, reconstruct the original plugin commit in a separate archive and
-name it explicitly. The baseline mode succeeds only when it reproduces one lost binding plus cold
-refusal and the exact `INVALID_TOOL_OUTPUT` defects; do not point it at a live installation:
-
-```sh
-QAS_RUN_ROOT=/path/to/new/disposable-baseline-run \
-QAS_BASELINE_DIR=/path/to/archived-original-plugin \
-DSH_CHECKOUT=/path/to/deepseek-harness \
-node smoke/remediation-runtime.mjs --target baseline --only all
-```
-
-Both path placeholders must name directories you created or identified for this run; the baseline
-archive must not be the live installation.
+The historical `--target baseline` mode is obsolete: it was written against the removed roster API.
+The runner now rejects any target other than `candidate` with a clear message. Use an archived
+pre-0.2.2 checkout only with its matching DSH version, outside this port's verification scope.
 
 ## Current aggregate results
 
-On 2026-11-09 the focused suites passed **95/95**:
+On 2026-11-13 the focused suites passed **107/107**:
 
 ```sh
 node --test smoke/
 ```
 
-The direct-tree smoke harness passed **53/53**, and the optional
-`node smoke/run-windows-parity.mjs` probe passed **14/14**. The candidate remediation runtime's
-**169/169** with **2/2 suites** result is its 2026-11-08 run on both canonical and symlink-prefixed
-disposable run roots; it was not re-run for 0.4.1. These are point-in-time results for the current
-macOS arm64 / Node 26.13.0 environment, not claims for other platforms or Node versions.
+The direct-tree smoke harness passed **58/58**, the optional
+`node smoke/run-windows-parity.mjs` probe passed **14/14**, and the candidate remediation runtime
+passed **179/179** with **2/2 suites** on a fresh disposable root. These are point-in-time results
+for the current macOS arm64 / Node 26.13.0 environment, not claims for other platforms or Node
+versions.
+
+## Web GUI harness (Computer Use)
+
+`smoke/run-web-gui.mjs` boots an isolated `dsh web` process with a temporary `DSH_HOME`, the
+`dsh-base`/`dsh-web-app` bundles, the scripted adapter, and this package. It prints the
+authenticated `/ui/?token=...` URL and keeps running until SIGINT/SIGTERM; it never touches the
+live profile.
+
+```sh
+node smoke/run-web-gui.mjs
+# then open the printed URL with Computer Use
+```
+
+The scripted session is driven from the browser: open a new Session, send a prompt, and the fixture
+spawns `probe-1`; Settings → Agent Soul then shows the live Team and member count. The CUA pass
+verifies the overview, soul list/editor save, orchestrator tab, default-souls toggle, and the
+base-row/health status. Screenshots and the captured URL live under `smoke/evidence/gui-022/`
+(gitignored).
+
+Computer Use needs Accessibility and Screen Recording permission for the DSH helper. Check
+`cua.getCapabilities()`; if either permission is false, grant it in the DSH Computer Use
+permission page or macOS System Settings before testing. Without the grant the GUI pass is blocked,
+not passed.
 
 ## Explicitly unrun or outside this evidence
 
-- **Baseline remediation:** not run; it requires an archived original plugin in `QAS_BASELINE_DIR`.
-- **Rendered browser behavior:** not run. Client source-contract cases do not execute hooks, DOM,
-  fetch, timers, or rendered interactions.
+- **Baseline remediation:** unsupported on DSH 0.2.2; the runner rejects it.
+- **Rendered browser behavior:** covered separately by `smoke/run-web-gui.mjs` and Computer Use;
+  the focused `node:test` suites remain source/route-contract tests.
 - **Real providers and model quality:** not exercised; scripted fixtures establish no paid-provider,
   credential, network-syscall, or model-quality evidence.
 - **Full orchestration lifecycle:** Orchestrator mode is not activated end to end; its command

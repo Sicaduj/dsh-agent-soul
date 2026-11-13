@@ -47,7 +47,6 @@ const CONFIG = Object.freeze({
   bindingsFile: '.dsh/agent-soul/bindings.json',
   freshProvider: 'spawn',
   forkProvider: 'spawn',
-  claimTeamToolRow: false,
 })
 
 /** The eight locales the plugin registers, in the order the artifact declares them. */
@@ -144,14 +143,22 @@ function loadGui(pkg) {
  */
 function guiDeps(ws, options = {}) {
   const withLead = options.withLead === true
-  const lead = { session: { header: {} } }
+  const lead = { id: 'lead-1', session: { header: {} } }
+  const subagents = {
+    rootOf: agent => lead,
+    namesOf: agent => ({ self: agent === lead ? 'lead' : String(agent.id) }),
+    listDescendants: async () => [],
+  }
+  const agentTeams = { isEnabled: () => true }
   const ctx = {
     get(name) {
       if (name === 'tools') return options.tools
+      if (name === 'subagents') return subagents
+      if (name === 'agentTeams') return agentTeams
       return undefined
     },
     agents: { list: () => (withLead ? [lead] : []) },
-    agentTeams: { tryMembership: () => ({ role: 'lead' }) },
+    agentTeams,
     connection: { requestRejection: () => undefined },
   }
   return {

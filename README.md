@@ -10,28 +10,38 @@ delegated teammate: its identity, what it is for, what tools it may use, which m
 whether a human may invoke it directly. The body is the operating contract the teammate runs under.
 
 This bundle is a soul-aware layer on top of the DSH 0.2.2 Agent Teams rows: the shipped
-`tool-agent-team` row stays enabled and owns the task board/policy, while this package adds
-`spawn_teammate` and the Lead's soul catalog. **Every** teammate runs a defined Agent Soul:
+`tool-agent-team` row stays enabled and owns the task board/policy, while this package adds a
+Team-only `spawn_teammate` plus the Lead's soul catalog. **Every** teammate it spawns runs a
+defined Agent Soul:
 `spawn_teammate({ ..., agent_type: "researcher" })` picks one explicitly, and omitting
 `agent_type` uses the configured default Soul (the live catalog's `generalist`—normally the bundled
 definition—unless another Soul is selected in **Settings → Agent Soul**). There is no plain
-no-Soul spawn path: generic `subagent` / `subagent_fork` calls are denied for Team members and
-their children are rejected at creation (a strict soul `tools:` list also hides them). A
+no-Soul `spawn_teammate` path: generic `subagent` / `subagent_fork` calls are denied for Team
+members and their children are rejected at creation (a strict soul `tools:` list also hides them). A
 **Settings → Agent Soul** page edits the Markdown definitions section by section, and an optional
 **orchestrator definition** can give the Lead a stricter planning/delegation doctrine — but only in
 a session where a human turns it on with `/orchestrate` (optionally as `/orchestrate <task>`, which
 enables the mode and submits that task as the next message).
 
+> **Tool surface in DSH 0.2.2-rc.3.** The base harness delegates with `subagent` (fresh context)
+> and `subagent_fork` (inherited context); stock DSH has no `spawn_teammate`. This package adds
+> `spawn_teammate` and `list_agent_souls` **only for a Team-enabled Lead**, because that is the
+> only path that can bind a child to a defined Agent Soul. In a session where those tools are
+> absent (Team mode off, or the plugin is not mounted), the stock `subagent`/`subagent_fork`
+> tools are the valid delegation path; children started that way are ordinary Soul-less DSH
+> subagents. Do not assume `spawn_teammate` exists merely because a soul document mentions it.
+
 ```
 Agent Team (Lead, optionally the orchestrator)
-├─ spawn_teammate({ ..., agent_type: "<name>" })                  ← explicit Soul teammate
-├─ spawn_teammate({ name, description, prompt })                  ← default-Soul teammate
+├─ spawn_teammate({ ..., agent_type: "<name>" })                  ← explicit Soul teammate (plugin, Team mode on)
+├─ spawn_teammate({ name, description, prompt })                  ← default-Soul teammate (plugin, Team mode on)
 │    ├─ persona      body is added at the deployment-persona position (after a configured prefix line)
 │    ├─ tools        `tools:` becomes a hard permission matrix for inherited tools
 │    ├─ model        `model:` becomes the child's routed LLM model
 │    ├─ context      `context:` picks fresh or fork as the default
 │    └─ binding      persisted so a cold-resumed teammate keeps its soul
-├─ subagent / subagent_fork                                       ← denied + creation-fenced for Team members
+├─ subagent / subagent_fork                                       ← stock DSH 0.2.2 delegation; Soul-less
+│                                                                    (denied + creation-fenced under this plugin's Team mode)
 └─ /orchestrate [<task>] (optional)                               ← Lead doctrine, model, tool matrix, title
 ```
 
@@ -58,9 +68,10 @@ Agent Team (Lead, optionally the orchestrator)
   already lists the bundled souls and `/orchestrate` works in every Lead session, in whichever
   workspace that session was opened; a local soul or workspace `orchestrator.md` shadows the
   bundled copy without extra configuration.
-- **No soul-less delegation.** The default Soul makes an unmatched task still run under a reviewable
-  persona and tool matrix; every new or cold-resumed Team child must resolve a Soul plan or be
-  refused, and generic `subagent` and `subagent_fork` calls are denied to Team members.
+- **No soul-less delegation in Team mode.** The default Soul makes an unmatched task still run
+  under a reviewable persona and tool matrix; every new or cold-resumed Team child must resolve a
+  Soul plan or be refused, and generic `subagent` and `subagent_fork` calls are denied to Team
+  members. Outside Team mode those stock tools remain ordinary DSH delegation and carry no Soul.
 - **Visible activation.** A successful enable answers with an **ORCHESTRATOR MODE ACTIVE** block;
   a failed enable answers with the error. A failure before any state is touched leaves the mode
   unchanged (a failed first enable leaves it off). Ordinary replacement failures attempt to restore
@@ -88,9 +99,10 @@ Agent Team (Lead, optionally the orchestrator)
 >   plan and no durable binding is refused rather than admitted with the deployment persona. At
 >   plugin activation, a pre-existing live teammate in that state is skipped with a warning and gets
 >   no Team tools; its publication already happened and cannot be vetoed.
-> - **Generic children are closed.** Team members lose `subagent` / `subagent_fork` (hidden,
->   guarded, and vetoed at creation), and a provider that mounts either tool later is hidden by the
->   same dynamic restriction. The creation fence also vetoes provider-owned children that
+> - **Generic children are closed.** Team members' `subagent` / `subagent_fork` calls are guarded
+>   and children without a Soul plan are vetoed at creation; a strict soul `tools:` list also hides
+>   both tools. A provider that mounts either tool later is denied by the same live guard. The
+>   creation fence also vetoes provider-owned children that
 >   other tools start through the same subagent seam — for example a workflow run's `agent()`
 >   children — so generic child orchestration cannot run under a Team member; delegate with
 >   `spawn_teammate` and a defined Soul instead. Non-roster children that are already live when the
@@ -479,9 +491,11 @@ the diagnostics block; the first invalid field is focused.
 **Health card.** The runtime health block shows the definition budget (`maxDefinitions`), the
 catalog-character budget (`maxPromptChars`, measured against the full rendered catalog), duplicate
 soul names, invalid file count, scan diagnostics, and the **Team tool surface** composition. The
-last one warns when the shipped `tool-agent-team` row is still active next to this bundle's row and
-shows the one-line profile patch that fixes it. Bars turn red past the limit; a scan diagnostic that
-names a file opens it in the editor. Health is informative: it does not block saving.
+last one reports when the shipped `tool-agent-team` row is disabled, failed, or absent, because
+DSH 0.2.2 needs that row for `team_task_*` and the base Team policy; it shows the one-line repair
+(`manage_agent_souls({ action: "repair_team_tools" })` or removal of the legacy override). An
+enabled row is the healthy state. Bars turn red past the limit; a scan diagnostic that names a file
+opens it in the editor. Health is informative: it does not block saving.
 
 **Plugin settings & runtime card.** Shows the workspace root being edited, resolved soul
 directories, the **Use default agent souls** switch (status **On - packaged defaults are editable
@@ -1001,7 +1015,7 @@ case-insensitive aliases such as `Identity and Boundaries`, `Planning`, `Delegat
 
 | Area | Effect |
 |---|---|
-| Persona | The fixed runtime identity ("You are the ORCHESTRATOR of this session…") is always first; the edited **Identity & Boundaries** text is appended after it. Editing or emptying that section can add boundaries but cannot remove the runtime role or the soul-only delegation rule. |
+| Persona | The fixed runtime identity ("You are the ORCHESTRATOR of this session…") is always first; the edited **Identity & Boundaries** text is appended after it. Editing or emptying that section can add boundaries but cannot remove the runtime role or the delegation rule. The fixed delegation sentence follows the tools actually visible: `spawn_teammate` when the Agent Soul layer is active in Team mode, otherwise the stock `subagent`/`subagent_fork` path with no Soul binding. |
 | Session title | Renamed to exactly `orchestrator` on a successful explicit enable when the optional session-title service is mounted and a prior title exists to restore; otherwise the title is left unchanged and the announcement says which reason applies. |
 | Team identity / roster | `subagent:identity` (from `tool-subagent-control`) names the Lead and its peers. The Lead's model-facing tree name remains `lead`; the plugin does not add an orchestrator-specific roster row. |
 | Prompt sections | Plan Generation (`TEAM_POLICY − 100`), Delegation (`+10`), State (`+20`), Quality Verification (`+30`), Exception & Recovery (`+40`), extras (`+50`). Empty sections are not registered. |
@@ -1089,9 +1103,10 @@ The shared Team policy and Team identity context are still registered. The teamm
 tools are restricted to the soul's matrix when one is declared (the Team tools remain visible
 because they are own-scope registrations), and its model is selected from the resolved route. A
 teammate sees no soul catalog section of its own. Every teammate also carries the soul-only tool
-fence: `subagent` and `subagent_fork` are removed from its visible global tools and denied by a
-scoped guard. The restriction follows the live tool registry, so a provider that mounts either tool
-after the teammate was prepared is hidden too. There is no intentional no-Soul spawn path: a new or
+fence: `subagent` and `subagent_fork` are denied by a scoped guard, and a declared soul `tools:`
+list also hides them from that teammate's inherited tool set. The guard follows the live tool
+registry, so a provider that mounts either tool after the teammate was prepared is denied too.
+There is no intentional no-Soul spawn path: a new or
 cold-resumed roster teammate must resolve a pending spawn plan or a durable binding, and admission
 is rejected (creation vetoed) when neither exists or the binding cannot be read.
 
@@ -1144,11 +1159,18 @@ soul-aware delegation gate and catalog:
 | `list_agent_souls` | Team-enabled Lead only | List every valid soul plus diagnostics (including cold-resume admission refusals with `source: "admission:<name>"`); `include_body` returns the full operating contract. | `include_body` (default false). |
 | `manage_agent_souls` | Lead only (Team mode not required) | Manage the same Markdown files as the GUI. Actions: `list`, `get`, `save`, `create`, `delete`, `diagnose` (command registry, Team mode, and base-row status), `repair_team_tools` (re-enable a legacy disabled `tool-agent-team` row), `get_orchestrator`, `save_orchestrator`. | `action`, `file`, `name`, `source`. |
 
-The base tools remain the model's coordination surface: `send_message({ agent, message })`,
-`list_agents()`, `wait_agent({ timeout_ms })`, and the `team_task_*` compare-and-set board.
-`interrupt_agent` is present only when the base `tool-subagent-control` row enables it. The plugin's
-soul permission matrix always keeps the base collaboration/task tools, even when a soul's
-`tools:` list is a strict allow-list; the GUI explains them as kept tools.
+The stock DSH 0.2.2-rc.3 delegation tools are `subagent` (fresh child context; parameters
+`description`, `prompt`, optional `cwd`, `name`, `provider`, `model`, `reasoning_effort`, and
+`agent_preset` when configured) and `subagent_fork` (same shape, child inherits completed turns).
+This plugin does not register either name. They remain the valid path when Team mode is off; a child
+started with them is an ordinary DSH subagent and does **not** run a defined Agent Soul.
+
+The base collaboration tools remain the model's coordination surface:
+`send_message({ agent, message })` (agent name), `list_agents()` (no arguments),
+`wait_agent({ timeout_ms })`, and the `team_task_*` compare-and-set board.
+`interrupt_agent({ agent })` is present only when the base `tool-subagent-control` row enables it.
+The plugin's soul permission matrix always keeps the base collaboration/task tools, even when a
+soul's `tools:` list is a strict allow-list; the GUI explains them as kept tools.
 
 Generic `subagent` and `subagent_fork` are not Team tools. A Team-enabled Lead or any soul
 teammate is denied at the tool guard, and the plugin's `agent/created` fence rejects a local child
@@ -1280,7 +1302,8 @@ They are not shared with other browsers.
 | **The log says member installation was `SKIPPED after an unexpected failure` or `cancelled`** | The error and teammate identity in the warning. Partial soul-surface and Soul registrations were unwound; the host stays alive, but this teammate may be running without its Soul effects. | Re-spawn the teammate. For a cancellation, retrying creation or resume is enough. For an unexpected apply failure, preserve and report the warning line if it recurs. Only a missing/unreadable Soul plan is an intentional creation veto. |
 | **A `subagent` / `subagent_fork` call is denied** | The caller is a Team-enabled Lead or a soul teammate, so the soul-only guard denies the call; the tools may still be visible when the soul inherits all tools. | Use `spawn_teammate` with a valid `agent_type`, or omit it to use the default Soul. Generic children are rejected at creation even if the tools are invoked indirectly. |
 | **A workflow run's `agent()` calls fail inside a Team session** | The `agent/created` fence: provider-owned children under a Team member are vetoed, so the child start fails. | Delegate with `spawn_teammate`; generic child orchestration (workflow children included) does not run inside a Team session. |
-| **`spawn_teammate` and `list_agent_souls` are missing, or the health card warns that the base Team row is disabled** | Whether Team mode is on in the Session model menu; the Agent Soul settings card's base-row warning; `manage_agent_souls({ action: "diagnose" })`; any legacy `- id: tool-agent-team` `disabled: true` override. | Turn on **Use Agent Teams** in the Session model menu. If the base row is disabled, run `manage_agent_souls({ action: "repair_team_tools" })` or remove the override from the profile patch and reload. |
+| **`spawn_teammate` and `list_agent_souls` are missing** | Whether Team mode is on in the Session model menu; whether this package is mounted; `manage_agent_souls({ action: "diagnose" })`. Stock DSH 0.2.2 has no `spawn_teammate` at all; the plugin adds it only to a Team-enabled Lead. | If you need a defined Soul, turn on **Use Agent Teams** in the Session model menu and retry. If you only need ordinary delegation, use the stock `subagent` (fresh) or `subagent_fork` (inherited) tool; its child will not run a defined Agent Soul. |
+| **The health card warns that the base Team row is disabled** | `manage_agent_souls({ action: "diagnose" })` and any legacy `- id: tool-agent-team` `disabled: true` override. The base row owns `team_task_*` and the shared Team policy, not the plugin's spawn tool. | Run `manage_agent_souls({ action: "repair_team_tools" })` or remove the override from the profile patch and reload. Do not disable the base row to "make room" for this plugin. |
 | **Config change has no effect** | The profile still has the old row; the page shows read-only active values. The two `bundledEditable` switches share one state record, and a settled write refreshes the overview and clean editor views. Polling reports **Applied.** only after a read shows the written value; otherwise it reports an unverified result. | Edit the bundle/profile row and reload the bundle; restart if the profile manager keeps the old row. If the switch reports an unverified result, reload the page or reopen the view and inspect the effective flag; that status is not success. |
 
 ## Known limitations
@@ -1461,14 +1484,14 @@ node --check index.js
 for f in lib/*.js; do node --check "$f" || exit 1; done
 node --check client.js
 
-# focused module suites (keyless; temporary directories only), 109 tests
+# focused module suites (keyless; temporary directories only), 110 tests
 node --test smoke/
 
 # end-to-end harness (safe directly; 58 checks)
 node smoke/run-smoke.mjs
 ```
 
-On 2026-11-13, `node --test smoke/` passed **109/109** focused tests, including the 14 cases in
+On 2026-11-13, `node --test smoke/` passed **110/110** focused tests, including the 14 cases in
 `smoke/windows-shell-alias.test.mjs` and the 10 DSH 0.2.2 adapter/surface/spawn/team-row cases in
 `smoke/team-runtime.test.mjs`.
 End-to-end verification boots a real `dsh --profile headless` process from a DSH source checkout

@@ -56,9 +56,9 @@ against the real Cordis runtime and real temporary directories rather than mocks
   and duplicating a bundled soul into a fresh workspace still lands under
   `<workspace>/.dsh/agents`. The real packaged file is only snapshotted around the probes: an
   unchanged digest and a preserved concurrent external edit are both honest outcomes;
-- the composed fresh profile (`--dump-config`) exits cleanly, disables the shipped
-  `tool-agent-team` row through this bundle's own patch, mounts `agent-soul-team`, and lists exactly
-  one `tool-agent-team` row — the portable counterpart of a per-machine profile override;
+- the composed fresh profile (`--dump-config`) exits cleanly, keeps the shipped
+  `tool-agent-team` row enabled through this bundle's own patch, mounts `agent-soul-team`, and
+  lists exactly one `tool-agent-team` row — the base row owns the task board and Team policy;
 - the plugin installs its soul surface for the Lead: the Team tools with an `agent_type` field,
   `list_agent_souls`, and one slash command per user-invocable soul. `/orchestrate` registration is
   an explicit pass assertion, so its absence now fails the run; the mode itself is not activated
@@ -97,7 +97,7 @@ objects; they never write the real package or workspace state. Run all of them w
 node --test smoke/
 ```
 
-On 2026-11-13 that command ran **109/109 tests** across ten `node:test` modules (the remediation
+On 2026-11-13 that command ran **110/110 tests** across ten `node:test` modules (the remediation
 pair shares one table row):
 
 | Suite | Cases | Coverage |
@@ -107,7 +107,7 @@ pair shares one table row):
 | `smoke/config-toggle.test.mjs` | 8 (129 assertions) | the fifteen-endpoint/eleven-path route pair, the config GET/POST contract and refusal codes, config-editor persistence with every other row key preserved, the connection trust fence, and static client-artifact registration/locale/source assertions |
 | `smoke/gui-fixes.test.mjs` | 10 (176 assertions) | client contracts for search wording (all eight dictionaries), raw draft persistence/restore, shared toggle state and clean-view invalidation, poll terminal states (never false Applied), Session-root/dirty-Orchestrator guard, overview shape validation, and live-empty catalog tool rejection through the real Host routes |
 | `smoke/storage-fixes.test.mjs` | 18 | transactional refusal of corrupt/unsupported/malformed binding documents with bytes preserved; typed missing/unreadable/corrupt/unsupported/unsafe diagnostics; revalidation after an earlier healthy read (including `get` fail-closed on a partial malformed document); the unpersisted-pending-mutation exception; invalid-snapshot refusal (`E_BINDING_INVALID_RECORD`); repair visibility; trash-failure source preservation; packaged rename collision vs local shadowing; the relative/absolute `bindingsFile` rule including symlinked `.dsh`/`.dsh/agent-soul`, dangling/document symlinks, and trash/restore containment; and the live-catalog missing-default warning |
-| `smoke/orchestrator-fixes.test.mjs` | 8 (97 assertions) | handler-seam fault injection for first-enable and already-active queue rollback (exact/partial/fallback/inactive/unknown reports), the corrected bundled doctrine (conditional route, supported task states, strict/budget-scoped correction, quote fix), and the `spawn_teammate` context resolution contract |
+| `smoke/orchestrator-fixes.test.mjs` | 9 (97 assertions) | handler-seam fault injection for first-enable and already-active queue rollback (exact/partial/fallback/inactive/unknown reports), the corrected bundled doctrine (conditional route, supported task states, strict/budget-scoped correction, quote fix), and the `spawn_teammate` context resolution contract |
 | `smoke/smoke-fixes.test.mjs` | 7 (72 assertions) | isolated packaged-write probes and concurrent-edit preservation, seeded environment canaries and explicit `/orchestrate` command assertion, canonicalized symlink run roots, atomic/tolerant readiness barriers, and honest incomplete/unexecuted-suite reporting |
 | `smoke/windows-shell-alias.test.mjs` | 14 | the portable `bash` ↔ `pwsh` shell name through the real modules: exact-match preference and counterpart resolution in `lib/tool-names.js`, request order and dedupe in `resolveRestrictableNames`, spawn validation accepting a counterpart, the apply matrix restricting to the live spelling, the orchestrator enable path resolving instead of skipping, and the GUI catalog/validator advertising `portableAliasOf` and saving either spelling |
 | `smoke/team-runtime.test.mjs` | 13 | DSH 0.2.2 adapter contracts: root/teammate mapping and parent-chain fallback, descendant listing/counts/direct names, name collision and live fallback, soul-policy shadow, `installSoulSurface` gating and guard, reserved child-id activation/model routing/pending release, Team-off and activation-failure refusals, strict/optional soul application with always-kept Team tools, and base-row inspect/restore |
@@ -189,7 +189,7 @@ pre-0.2.2 checkout only with its matching DSH version, outside this port's verif
 
 ## Current aggregate results
 
-On 2026-11-13 the focused suites passed **109/109**:
+On 2026-11-13 the focused suites passed **110/110**:
 
 ```sh
 node --test smoke/

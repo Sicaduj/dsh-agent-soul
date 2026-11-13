@@ -250,12 +250,12 @@ These summarize a file; they are not editable.
 - **Health** — definition count vs `maxDefinitions`, catalog character usage vs `maxPromptChars`
   (measured on the full catalog so over-budget pressure is visible), duplicate names, invalid
   files, scan diagnostics, and the **Team tool surface** composition. The composition warning
-  appears only when the shipped `tool-agent-team` row is still active next to this bundle's row; it
-  carries the one-line profile patch, and `manage_agent_souls({ action: "repair_team_tools" })` (or
-  `claimTeamToolRow`, both now obsolete) applied that override. On a profile where the old Team bundle layer comes
-  after this bundle (common when that bundle is added later), the bundled patch cannot disable the
-  row; the persisted override is then the effective replacement — keep it while the bundle is
-  installed. Clicking a scan diagnostic opens the named file in the
+  appears when the shipped `tool-agent-team` row is disabled, failed, or absent, because DSH 0.2.2
+  needs that row for `team_task_*` and the shared Team policy. An enabled row is the healthy state.
+  The warning carries the one-line repair: run
+  `manage_agent_souls({ action: "repair_team_tools" })` or remove the legacy
+  `- id: tool-agent-team` / `disabled: true` override. The obsolete `claimTeamToolRow` key no
+  longer disables or replaces the base row. Clicking a scan diagnostic opens the named file in the
   editor when it matches a catalog document.
 
 ---

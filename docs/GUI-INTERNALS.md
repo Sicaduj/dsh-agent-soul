@@ -1248,12 +1248,11 @@ soul catalog text; unknown variables stay literal).
   callers cannot leak an unhandled rejection. At plugin activation, a pre-existing live teammate
   without a plan is skipped with a warning and its partial registrations (including the Team tools)
   are unwound.
-- `lib/tools.js` installs two scoped fences in every Team member scope: a `restrict({ deny: [...] })`
-  for whichever of `subagent` / `subagent_fork` are visible, and a `tools.guard()` that denies both
-  names even after the visible set changes. The restriction is reconciled on `tools/change`, probing
-  the live registry so a tool provider that mounts either name after the member was prepared is
-  hidden too (and a previously hidden name stays denied while it remains registered). Scoped Team
-  tools are unaffected.
+- `lib/tools.js` installs a `tools.guard()` in every Team member scope that denies
+  `subagent` / `subagent_fork` when the caller is Team-enabled or a Soul teammate. The guard is
+  evaluated per call, so a tool provider that mounts either name after the member was prepared is
+  denied too; it does not remove the names from the visible set. A strict soul `tools:` list hides
+  them for that teammate through the ordinary tool matrix. Scoped Team tools are unaffected.
 - `index.js`'s per-Agent `install()` is the `agent/created` fence: when the new Agent's
   `session.header.parentSession` names a live Team member, the child must resolve as a roster
   teammate or be a seeded host fork (independent lineage). Any other provider-owned child

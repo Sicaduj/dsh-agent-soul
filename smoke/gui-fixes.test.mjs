@@ -159,7 +159,7 @@ function guiDeps(ws, options = {}) {
     },
     agents: { list: () => (withLead ? [lead] : []) },
     agentTeams,
-    connection: { requestRejection: () => undefined },
+    connection: options.connection ?? { requestRejection: () => undefined },
   }
   return {
     ctx,
@@ -476,6 +476,31 @@ test('D13: the real overview payload carries every block the client validates', 
   equal(payload.runtime !== null && typeof payload.runtime === 'object', true, 'partner contract: runtime is an object')
   equal(payload.catalogs !== null && typeof payload.catalogs === 'object', true, 'partner contract: catalogs is an object')
   equal(payload.catalogs.source, 'live-lead', 'the live-but-empty catalog reports its live source')
+})
+
+test('D13: the GUI trust fence uses the DSH 0.2.2 connection.admit contract', async t => {
+  const { pkg, ws } = fixture('overview-admit', t)
+  const gui = await loadGui(pkg)
+
+  const admitted = gui.createGuiRoutes(guiDeps(ws, {
+    withLead: true,
+    tools: emptyLiveCatalog(),
+    connection: { admit: () => ({ peer: {} }), requestRejection: () => 403 },
+  }))
+  const admittedRoute = routeOf(admitted, 'GET', ROUTE_PATHS.overview)
+  const admittedResponse = jsonResponse()
+  await admittedRoute.handler(request('GET', ROUTE_PATHS.overview), admittedResponse.res)
+  equal(admittedResponse.res.status, 200, 'a connection.admit peer is accepted')
+
+  const refused = gui.createGuiRoutes(guiDeps(ws, {
+    withLead: true,
+    tools: emptyLiveCatalog(),
+    connection: { admit: () => ({ rejection: 403 }), requestRejection: () => undefined },
+  }))
+  const refusedRoute = routeOf(refused, 'GET', ROUTE_PATHS.overview)
+  const refusedResponse = jsonResponse()
+  await refusedRoute.handler(request('GET', ROUTE_PATHS.overview), refusedResponse.res)
+  equal(refusedResponse.res.status, 403, 'a connection.admit rejection fails closed')
 })
 
 test('D12: a live Lead with no restrictable tools rejects an unknown tool in preview', async t => {

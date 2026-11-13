@@ -342,7 +342,7 @@ export async function apply(ctx, rawConfig) {
   // ACP) never activate this child, and every non-GUI capability keeps working.
   // The child injects the Host services its routes touch directly (the trust
   // fence and the team roster); its `get()` reads stay optional per call.
-  ctx.inject(['webServer', 'connection', 'agents', 'agentTeams', 'subagents'], (guiCtx) => {
+  ctx.inject(['webServer', 'connection', 'connection.authentication', 'agents', 'agentTeams', 'subagents'], (guiCtx) => {
     try {
       installGui(guiCtx, {
         ctx: guiCtx,

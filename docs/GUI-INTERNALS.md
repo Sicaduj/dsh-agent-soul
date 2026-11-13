@@ -152,12 +152,20 @@ preview, duplicate, and restore endpoints; P4 adds the orchestrator document end
 default-Soul release adds the preference endpoints; the packaged-defaults config toggle pair is
 part of 0.4.0 (see "Release status (2026-11-08 UTC)"). Each is registered on
 `ctx.webServer.register({ kind: 'exact', path, handler })` with the absolute paths below.
-Every handler first consults the composition's trust fence and answers 401/403 when it rejects:
+Every handler first consults the composition's trust fence and answers 401/403/503 when it rejects.
+DSH 0.2.2 exposes `connection.admit({ headers, method, url })`; the GUI child context must also
+inject the nested `connection.authentication` verifier that `admit` reads:
 
 ```js
-const rejection = ctx.connection.requestRejection(req) // 401 | 403 | undefined
-if (rejection !== undefined) { res.writeHead(rejection); res.end(); return }
+const admission = ctx.connection.admit({ headers: req.headers, method: req.method, url: req.url })
+if (admission !== undefined && !('peer' in admission)) {
+  const status = admission.rejection ?? 403 // 401 | 403 | 503
+  res.writeHead(status); res.end(); return
+}
 ```
+
+The legacy `requestRejection(req)` method is kept as a fallback for older profiles. A composition
+without either method fails closed with 403.
 
 `res` is a Node `ServerResponse`; `req` is an `IncomingMessage`. JSON responses set
 `content-type: application/json; charset=utf-8` and `cache-control: no-store`. Unknown methods get

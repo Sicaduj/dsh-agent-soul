@@ -7,6 +7,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 
 import { applyTeammateSoul, createPendingSpawns, SoulPlanUnavailableError } from '../lib/apply.js'
 import { nextTeammateName, spawnTeamMember } from '../lib/spawn.js'
@@ -293,6 +294,11 @@ test('applyTeammateSoul keeps the base Team tools in a strict matrix and can ski
   const skipped = await applyTeammateSoul(agent, membership, deps, { optional: true })
   assert.equal(skipped.skipped, true)
   await assert.rejects(applyTeammateSoul(agent, membership, deps), SoulPlanUnavailableError)
+})
+
+test('the GUI child injects connection.authentication for the 0.2.2 admit contract', async () => {
+  const source = await readFile(new URL('../index.js', import.meta.url), 'utf8')
+  assert.match(source, /ctx\.inject\(\[[^\]]*'connection\.authentication'/)
 })
 
 test('a detached cold-resumed child is a teammate, never a Lead', () => {

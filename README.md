@@ -172,7 +172,10 @@ subagent-based Team tools rather than a replacement for the shipped Team row.
   `sessionProjections` services. If `sessionProjections` registration fails, the failure is
   logged and the rest of the plugin still activates.
 - The **Web** profile for Settings → Agent Soul. The Host tools work in headless profiles; only
-  the page is absent.
+  the page is absent. The Web profile also provides `connection` and its nested
+  `connection.authentication` verifier; the GUI child injects both and uses
+  `connection.admit({ headers, method, url })` for the exact-route trust fence (the pre-0.2.2
+  `requestRejection` method is only a fallback).
 - Node.js **>= 24.9.0**. The plugin has no dependencies and imports only `node:` builtins and
   its own relative files.
 
@@ -1458,14 +1461,14 @@ node --check index.js
 for f in lib/*.js; do node --check "$f" || exit 1; done
 node --check client.js
 
-# focused module suites (keyless; temporary directories only), 107 tests
+# focused module suites (keyless; temporary directories only), 109 tests
 node --test smoke/
 
 # end-to-end harness (safe directly; 58 checks)
 node smoke/run-smoke.mjs
 ```
 
-On 2026-11-13, `node --test smoke/` passed **107/107** focused tests, including the 14 cases in
+On 2026-11-13, `node --test smoke/` passed **109/109** focused tests, including the 14 cases in
 `smoke/windows-shell-alias.test.mjs` and the 10 DSH 0.2.2 adapter/surface/spawn/team-row cases in
 `smoke/team-runtime.test.mjs`.
 End-to-end verification boots a real `dsh --profile headless` process from a DSH source checkout

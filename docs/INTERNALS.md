@@ -81,7 +81,7 @@ profile cordis.patch.yml
                                  + manage_agent_souls (lib/admin-tool.js)
                                  + orchestrator.reapplyIfActive
         teammate               → applyTeammateSoul (lib/apply.js)
-      optional ctx.inject(webServer, connection, agents, agentTeams):
+      optional ctx.inject(webServer, connection, connection.authentication, agents, agentTeams, subagents):
         installGui             → lib/gui-host.js routes
                                  → lib/admin.js document layer
                                  → lib/preferences.js default-Soul state
@@ -1072,8 +1072,9 @@ This plugin's patch only inserts `agent-soul-team`; it must not disable or repla
 1. `apply()` builds logger, config, catalog, binding store, pending map, deps, and the
    orchestrator runtime, then schedules one `inspectBaseTeamRow` after the Loader settles. A
    disabled/absent base row is logged with the manual fix; it is never auto-edited.
-2. It installs the optional GUI in a child `ctx.inject(['webServer', 'connection', 'agents',
-   'agentTeams', 'subagents'], …)`. The child is only created when those services exist (a Web
+2. It installs the optional GUI in a child `ctx.inject(['webServer', 'connection',
+   'connection.authentication', 'agents', 'agentTeams', 'subagents'], …)`. The nested verifier is
+   required for `connection.admit` to authenticate the exact routes. The child is only created when those services exist (a Web
    profile). A GUI install failure is logged and does not fail the plugin.
 3. It registers `agent/created` and `agent/disposed`, then prepares every already-live Agent with
    `await maybeInstall(agent)`. A pre-existing generic subagent under a Team-off root is skipped;
@@ -1310,9 +1311,9 @@ in `smoke/gui-fixes.test.mjs` (client artifact contracts and live route validati
 `smoke/orchestrator-fixes.test.mjs` (handler-seam rollback and doctrine/context contracts), and
 `smoke/smoke-fixes.test.mjs` (isolated probes, canaries, and remediation reporting). Per-module
 counts live in [`../smoke/README.md`](../smoke/README.md). On 2026-11-13 `node --test smoke/`
-passed **107/107** (15 remediation, 16 bundled-editable with 222 assertions, 8 config-toggle with 129,
-9 gui-fixes with 159, 18 storage-fixes, 8 orchestrator-fixes with 97, 7 smoke-fixes with 72, 14
-windows-shell-alias, and 12 team-runtime cases). The direct-tree smoke run passed 58/58, the optional
+passed **109/109** (15 remediation, 16 bundled-editable with 222 assertions, 8 config-toggle with 129,
+10 gui-fixes with 176, 18 storage-fixes, 8 orchestrator-fixes with 97, 7 smoke-fixes with 72, 14
+windows-shell-alias, and 13 team-runtime cases). The direct-tree smoke run passed 58/58, the optional
 inverted-composition probe `smoke/run-windows-parity.mjs` passed **14/14**, and the candidate
 remediation runtime passed **179/179** with 2/2 suites on a fresh disposable run root.
 

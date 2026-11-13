@@ -31,9 +31,16 @@ const evidenceDir = join(pluginDir, 'smoke', 'evidence', 'gui-022')
 
 /** Write one soul definition the scripted Lead can spawn. */
 async function writeSouls(root) {
-  const dir = join(root, '.dsh', 'agents')
-  await mkdir(dir, { recursive: true })
-  await writeFile(join(dir, 'probe.md'), `---
+  // The Web profile's default workspace lives under the disposable Documents
+  // directory; write the scripted souls into both it and the checkout root so
+  // the GUI and any direct CLI inspection see the same catalog.
+  const dirs = [
+    join(root, '.dsh', 'agents'),
+    join(root, 'Documents', 'deepseek-harness', 'default-workspace', '.dsh', 'agents'),
+  ]
+  for (const dir of dirs) await mkdir(dir, { recursive: true })
+  for (const dir of dirs) {
+    await writeFile(join(dir, 'probe.md'), `---
 name: probe
 description: Probes the Agent Soul runtime and reports its persona, tool permission matrix, and routed model. Use only for the smoke test.
 tools:
@@ -80,6 +87,7 @@ You are the command-line probe. COMMAND_SOUL_MARKER
 
 One short sentence.
 `, 'utf8')
+  }
 }
 
 /** Write the isolated web profile. */

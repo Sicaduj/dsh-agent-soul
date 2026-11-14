@@ -74,12 +74,12 @@ route-inheritance change from PR #5, still apply and are not reverted by leaving
 present in the current working tree, not in that release history. Behavior described in the sections
 below may therefore differ from a published 0.4.0 installation.
 
-**0.5.0 working tree (DSH 0.2.2 port).** The manifest is `0.5.0` and the GUI tool catalog
+**0.6.0 working tree (DSH 0.2.2 port).** The manifest is `0.6.0` and the GUI tool catalog
 advertises the missing `bash`/`pwsh` spelling as one
 marked portable-alias entry (`portableAliasOf`); the save validator and preview accept either
 spelling, and the spawn, apply, and orchestrator paths resolve it to the live one. This change and
-its suite are not in the 2026-11-08 UTC release history. See "Portable shell names (0.5.0, working
-tree)" at the end of this document.
+its suite are not in the 2026-11-08 UTC release history. See "Portable shell names (0.5.0)" at
+the end of this document.
 
 ### Handler terms
 
@@ -197,13 +197,13 @@ Route names and payloads (the browser half addresses them without the leading sl
 ### `GET /agent-soul/overview`
 
 200 body (example values are illustrative; `plugin.version` is read from the real manifest —
-`0.5.0` at this revision (the DSH 0.2.2 port). The no-`pluginMeta` fallback constant
-`PLUGIN_META_DEFAULTS` in `lib/gui-host.js` reports `0.5.0`; it is used only when the Host
+`0.6.0` at this revision (the DSH 0.2.2 port). The no-`pluginMeta` fallback constant
+`PLUGIN_META_DEFAULTS` in `lib/gui-host.js` reports `0.6.0`; it is used only when the Host
 passes no plugin metadata):
 
 ```jsonc
 {
-  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.5.0", "root": "/abs/workspace" },
+  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.6.0", "root": "/abs/workspace" },
   "settings": {
     "dirs": [".dsh/agents"],
     "resolvedDirs": ["/abs/workspace/.dsh/agents"],
@@ -1425,7 +1425,7 @@ packaged doctrine keep the 0.3.0 read-only authoring behavior (no in-place editi
   workspace in the profile while bindings and trash stay per workspace; the packaged doctrine
   becomes globally edited.
 
-## Portable shell names (0.5.0, working tree)
+## Portable shell names (0.5.0)
 
 The shell tool has one model-facing name per platform: DSH registers `bash` on POSIX and `pwsh` on
 Windows compositions (the one-shot and persistent variants share the name per family). A soul is

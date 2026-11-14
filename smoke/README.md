@@ -42,9 +42,9 @@ cd "$SMOKE_COPY/plugin"
 node smoke/run-smoke.mjs
 ```
 
-The harness runs **58 checks**. It passed **58/58** directly from this working tree on 2026-11-13
-(macOS arm64, Node 26.13.0) — a dated point-in-time result, not a platform matrix. It asserts,
-against the real Cordis runtime and real temporary directories rather than mocks:
+The harness runs **74 checks**. The post-change run passed **74/74** from this working tree on
+2026-11-14 (Windows x64, Node 24.22.1) — a dated point-in-time result, not a platform matrix. It
+asserts, against the real Cordis runtime and real temporary directories rather than mocks:
 
 - the plugin's bundled defaults are workspace-independent: a brand-new workspace with no plugin
   files at all still sees the shipped soul catalog and the shipped orchestrator doctrine as the
@@ -60,13 +60,17 @@ against the real Cordis runtime and real temporary directories rather than mocks
   `tool-agent-team` row enabled through this bundle's own patch, mounts `agent-soul-team`, and
   lists exactly one `tool-agent-team` row — the base row owns the task board and Team policy;
 - the plugin installs its soul surface for the Lead: the Team tools with an `agent_type` field,
-  `list_agent_souls`, and one slash command per user-invocable soul. `/orchestrate` registration is
-  an explicit pass assertion, so its absence now fails the run; the mode itself is not activated
-  end-to-end;
+  `list_agent_souls`, and one slash command per user-invocable soul. `/orchestrate` is activated
+  end-to-end with Team mode off; both stock delegation tools are denied, a raw activation bypass is
+  vetoed by child admission, Team mode is restored, and a real `spawn_teammate` call starts the
+  shipped verifier;
 - the Lead prompt carries the soul catalog, `spawn_teammate` exposes `agent_type`, and
   `list_agent_souls` is registered;
 - a `spawn_teammate({ agent_type })` teammate gets the soul persona (deployment persona shadowed)
   and the soul body in its system prompt;
+- the shipped `adversarial-red-team-verifier` keeps its own persona, exact declared tool matrix, and
+  pinned `kimi-code-bridge/k3.1-pro` route at reasoning effort `max`, rather than inheriting the
+  scripted Lead's model;
 - its inherited tool set is exactly the soul's `tools` list, with the Team tools still available;
 - its model is routed (`deepseek-v4-pro` recorded as the child Session's `model/selection`);
 - a `user-invocable` soul registers a slash command that executes and spawns a second
@@ -83,9 +87,9 @@ against the real Cordis runtime and real temporary directories rather than mocks
   `DEEPSEEK_API_KEY` is the empty override. This proves those variables are scrubbed; it is not a
   claim about every possible inherited secret.
 
-The fixture adapter is a test double: it scripts three roles — the Lead, the probe teammate, and
-the command-spawned teammate — emits the model chunks a real adapter would emit for them, and
-records observations to a JSON Lines file. The DSH checkout requirement comes from launching the
+The fixture adapter is a test double: it scripts four roles — the Lead, the probe teammate, the
+real verifier teammate, and the command-spawned teammate — emits the model chunks a real adapter
+would emit for them, and records observations to a JSON Lines file. The DSH checkout requirement comes from launching the
 CLI from TypeScript source with `tsx`.
 
 ## Focused module suites
@@ -94,11 +98,15 @@ The keyless `node:test` suites use temporary directories, real module imports, a
 objects; they never write the real package or workspace state. Run all of them with:
 
 ```sh
-node --test smoke/
+node --test smoke/*.test.mjs
 ```
 
-On 2026-11-13 that command ran **110/110 tests** across ten `node:test` modules (the remediation
-pair shares one table row):
+On 2026-11-14 the focused suites contained **113 tests** across ten `node:test` modules (the
+remediation pair shares one table row). On this Windows host 103 passed; ten untouched suites fail
+because ordinary test users cannot create symlinks (`EPERM`) or from existing Windows-sensitive
+concurrency/GUI assertions. The previously recorded Mac/Linux green baseline covers those untouched
+suites; no Mac/Linux run was performed for this change. The directly affected Team and orchestrator
+suites passed **25/25**:
 
 | Suite | Cases | Coverage |
 |---|---:|---|
@@ -107,10 +115,10 @@ pair shares one table row):
 | `smoke/config-toggle.test.mjs` | 8 (129 assertions) | the fifteen-endpoint/eleven-path route pair, the config GET/POST contract and refusal codes, config-editor persistence with every other row key preserved, the connection trust fence, and static client-artifact registration/locale/source assertions |
 | `smoke/gui-fixes.test.mjs` | 10 (176 assertions) | client contracts for search wording (all eight dictionaries), raw draft persistence/restore, shared toggle state and clean-view invalidation, poll terminal states (never false Applied), Session-root/dirty-Orchestrator guard, overview shape validation, and live-empty catalog tool rejection through the real Host routes |
 | `smoke/storage-fixes.test.mjs` | 18 | transactional refusal of corrupt/unsupported/malformed binding documents with bytes preserved; typed missing/unreadable/corrupt/unsupported/unsafe diagnostics; revalidation after an earlier healthy read (including `get` fail-closed on a partial malformed document); the unpersisted-pending-mutation exception; invalid-snapshot refusal (`E_BINDING_INVALID_RECORD`); repair visibility; trash-failure source preservation; packaged rename collision vs local shadowing; the relative/absolute `bindingsFile` rule including symlinked `.dsh`/`.dsh/agent-soul`, dangling/document symlinks, and trash/restore containment; and the live-catalog missing-default warning |
-| `smoke/orchestrator-fixes.test.mjs` | 9 (97 assertions) | handler-seam fault injection for first-enable and already-active queue rollback (exact/partial/fallback/inactive/unknown reports), the corrected bundled doctrine (conditional route, supported task states, strict/budget-scoped correction, quote fix), and the `spawn_teammate` context resolution contract |
+| `smoke/orchestrator-fixes.test.mjs` | 10 | handler-seam fault injection for first-enable and already-active queue rollback (exact/partial/fallback/inactive/unknown reports), the corrected bundled doctrine (conditional route, supported task states, strict/budget-scoped correction, quote fix), the shipped verifier's pinned independent-review route, and the `spawn_teammate` context resolution contract |
 | `smoke/smoke-fixes.test.mjs` | 7 (72 assertions) | isolated packaged-write probes and concurrent-edit preservation, seeded environment canaries and explicit `/orchestrate` command assertion, canonicalized symlink run roots, atomic/tolerant readiness barriers, and honest incomplete/unexecuted-suite reporting |
 | `smoke/windows-shell-alias.test.mjs` | 14 | the portable `bash` ↔ `pwsh` shell name through the real modules: exact-match preference and counterpart resolution in `lib/tool-names.js`, request order and dedupe in `resolveRestrictableNames`, spawn validation accepting a counterpart, the apply matrix restricting to the live spelling, the orchestrator enable path resolving instead of skipping, and the GUI catalog/validator advertising `portableAliasOf` and saving either spelling |
-| `smoke/team-runtime.test.mjs` | 13 | DSH 0.2.2 adapter contracts: root/teammate mapping and parent-chain fallback, descendant listing/counts/direct names, name collision and live fallback, soul-policy shadow, `installSoulSurface` gating and guard, reserved child-id activation/model routing/pending release, Team-off and activation-failure refusals, strict/optional soul application with always-kept Team tools, and base-row inspect/restore |
+| `smoke/team-runtime.test.mjs` | 15 | DSH 0.2.2 adapter contracts: root/teammate mapping and parent-chain fallback, descendant listing/counts/direct names, name collision and live fallback, soul-policy shadow, `installSoulSurface` gating and guard, live/durable orchestrator-state ownership and fail-closed probing, stock delegation denial with Team mode off while orchestrated, reserved child-id activation/model routing/pending release, Team-off and activation-failure refusals, strict/optional soul application with always-kept Team tools, and base-row inspect/restore |
 
 These suites are static/source-contract and route-level evidence where noted; none renders the
 browser or executes real UI interactions. Assertion tallies can be printed with
@@ -189,13 +197,13 @@ pre-0.2.2 checkout only with its matching DSH version, outside this port's verif
 
 ## Current aggregate results
 
-On 2026-11-13 the focused suites passed **110/110**:
+On 2026-11-14 the directly affected focused suites passed **25/25**:
 
 ```sh
-node --test smoke/
+node --test smoke/*.test.mjs
 ```
 
-The direct-tree smoke harness passed **58/58**, the optional
+The direct-tree smoke harness passed **74/74**, the optional
 `node smoke/run-windows-parity.mjs` probe passed **14/14**, and the candidate remediation runtime
 passed **179/179** with **2/2 suites** on a fresh disposable root. These are point-in-time results
 for the current macOS arm64 / Node 26.13.0 environment, not claims for other platforms or Node
@@ -231,8 +239,9 @@ not passed.
   the focused `node:test` suites remain source/route-contract tests.
 - **Real providers and model quality:** not exercised; scripted fixtures establish no paid-provider,
   credential, network-syscall, or model-quality evidence.
-- **Full orchestration lifecycle:** Orchestrator mode is not activated end to end; its command
-  registration is asserted, and rollback/doctrine behavior is covered at the handler seam with an
+- **Full orchestration command path:** Orchestrator mode is activated end to end against the
+  scripted LLM adapter, including its Team-off denial fence and real verifier route. This is not
+  paid-provider evidence; rollback/doctrine behavior is covered at the handler seam with an
   in-memory Agent double.
 - **Live Windows or PowerShell:** maintainer-run Windows 11 Pro sessions on 2026-11-09 exercised
   installation, the full-matrix `software-engineer` path, and the spawn/apply shell-alias path for

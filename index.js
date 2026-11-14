@@ -43,7 +43,7 @@ import { createOrchestratorRuntime, installOrchestratorCommand } from './lib/orc
 import { orchestratorModeDefinition } from './lib/orchestrator-mode.js'
 import { createPreferenceStore } from './lib/preferences.js'
 import { describeSouls, spawnSoulFromCommand, spawnTeamMember } from './lib/spawn.js'
-import { installSoulSurface } from './lib/tools.js'
+import { installSoulSurface, orchestratorActive } from './lib/tools.js'
 
 /** Cordis plugin name. */
 export const name = 'agent-soul-team'
@@ -495,12 +495,17 @@ export async function apply(ctx, rawConfig) {
         }
         if (stopIfGone()) return
       } else {
-        // A Team-enabled root and every soul teammate's descendants are strict:
-        // a child without a pending or durable Soul plan must not be published
-        // Soul-less. When Team mode is off, a plain subagent is ordinary DSH
-        // delegation; only a durable Soul binding opts it into this surface.
+        // A Team-enabled root, an active orchestrator, and every soul
+        // teammate's descendants are strict: a child without a pending or durable
+        // Soul plan must not be published Soul-less. This also fences a direct
+        // subagent-service call that bypassed the model-facing tool guard. When
+        // orchestrator and Team mode are both inactive, a plain subagent is
+        // ordinary DSH delegation; only a durable Soul binding opts it into this
+        // surface.
         const parent = parentAgentOf(ctx, agent)
-        strict = member.enabled === true || member.detached === true || deps.isSoulTeammate(parent)
+        const orchestratingParent = parent !== undefined && orchestratorActive(deps, parent)
+        strict = member.enabled === true || member.detached === true
+          || deps.isSoulTeammate(parent) || orchestratingParent
         const applied = await applyTeammateSoul(agent, member, deps, { optional: !strict })
         if (applied.skipped === true) return
         deps.markSoul(agent)

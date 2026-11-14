@@ -14,7 +14,7 @@ import { nextTeammateName, spawnTeamMember } from '../lib/spawn.js'
 import { countTeamMembers, directChildNames, listTeamMembers, teamMemberOf } from '../lib/team.js'
 import { inspectBaseTeamRow, restoreBaseTeamRow } from '../lib/team-row.js'
 import { ALWAYS_KEPT_TOOL_NAMES } from '../lib/team-tools.js'
-import { installSoulSurface, SOUL_ONLY_DENIAL, soulPolicyText } from '../lib/tools.js'
+import { installSoulSurface, orchestratorActive, SOUL_ONLY_DENIAL, soulPolicyText } from '../lib/tools.js'
 
 /** A root/child pair with the 0.2.2 services this plugin reads. */
 function teamContext({ enabled = true, brokenRootOf = false, brokenNames = false, brokenIsEnabled = false } = {}) {
@@ -178,6 +178,52 @@ test('installSoulSurface registers the shadow policy, Lead catalog, guard, and o
   assert.equal(disabledRegistrations[0].options.when({ agent: disabled.root }), false)
   assert.equal(disabledRegistrations[1].options.when({ agent: disabled.root }), false)
   disabledDispose()
+})
+
+test('orchestratorActive combines live and durable state and fails closed on probe errors', () => {
+  const agent = {}
+  assert.equal(orchestratorActive({}, agent), false, 'no orchestrator runtime means inactive')
+  assert.equal(orchestratorActive({ orchestrator: { isActive: () => true } }, agent), true, 'a live bundle is active')
+  assert.equal(orchestratorActive({ orchestrator: { isActive: () => false, modeOf: () => 'on' } }, agent), true, 'durable on closes activation and cold-resume gaps')
+  assert.equal(orchestratorActive({ orchestrator: { isActive: () => false, modeOf: () => 'off' } }, agent), false, 'inactive with durable off permits ordinary delegation')
+  assert.equal(orchestratorActive({ orchestrator: {} }, agent), true, 'a malformed runtime object fails closed')
+  assert.equal(orchestratorActive({ orchestrator: { isActive: () => { throw new Error('probe failed') } } }, agent), true, 'a live probe error fails closed')
+  assert.equal(orchestratorActive({ orchestrator: { isActive: () => false, modeOf: () => { throw new Error('log failed') } } }, agent), true, 'a durable probe error fails closed')
+})
+
+test('an active orchestrator denies both stock tools when Team mode is off', () => {
+  const { ctx, root } = teamContext({ enabled: false })
+  let guard
+  const scope = {
+    systemPrompt: { section: () => () => {}, getSectionOrder: () => 10 },
+    tools: { register: () => () => {}, guard(callback) { guard = callback; return () => {} } },
+  }
+  const state = { live: true, durable: 'off' }
+  const deps = {
+    ctx,
+    catalog: { promptText: () => '' },
+    logger: { warn() {} },
+    rootOf: () => '/ws',
+    isSoulTeammate: () => false,
+    orchestrator: { isActive: () => state.live, modeOf: () => state.durable },
+  }
+  const dispose = installSoulSurface(root, scope, {
+    ctx, config: {}, catalog: deps.catalog, deps,
+    member: { role: 'lead', name: 'lead', enabled: false, root },
+  })
+  assert.equal(guard({ name: 'subagent' }), SOUL_ONLY_DENIAL)
+  assert.equal(guard({ name: 'subagent_fork' }), SOUL_ONLY_DENIAL)
+  assert.equal(guard({ name: 'read' }), undefined)
+
+  state.live = false
+  state.durable = 'on'
+  assert.equal(guard({ name: 'subagent' }), SOUL_ONLY_DENIAL, 'durable on closes the pre-bundle gap')
+  assert.equal(guard({ name: 'subagent_fork' }), SOUL_ONLY_DENIAL)
+
+  state.durable = 'off'
+  assert.equal(guard({ name: 'subagent' }), undefined, 'inactive orchestrator with Team off preserves ordinary delegation')
+  assert.equal(guard({ name: 'subagent_fork' }), undefined)
+  dispose()
 })
 
 test('spawnTeamMember reserves a child id, routes the model, and records the pending plan by id', async () => {

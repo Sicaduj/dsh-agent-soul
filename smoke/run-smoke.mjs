@@ -199,15 +199,17 @@ async function writeProfile(home) {
   ].join('\n'), 'utf8')
 }
 
-/** Find the child Session log that recorded one exact model route. */
-async function findRoutedSession(sessionsDir) {
+/** Find a child Session log that recorded one exact provider/model route. */
+async function findRoutedSession(sessionsDir, { provider, model } = {}) {
   const files = (await readdir(sessionsDir, { recursive: true })).filter(file => file.endsWith('.jsonl'))
   for (const file of files) {
     const lines = (await readFile(join(sessionsDir, file), 'utf8')).split('\n').filter(Boolean)
     const selection = lines.map(line => {
       try { return JSON.parse(line) } catch { return undefined }
     }).find(record => record?.type === 'model/selection')
-    if (selection?.data?.model === 'deepseek-v4-pro') return { file, selection: selection.data }
+    if (selection?.data?.model !== model) continue
+    if (provider !== undefined && selection.data.provider !== provider) continue
+    return { file, selection: selection.data }
   }
   return undefined
 }
@@ -681,6 +683,20 @@ async function main() {
     )
     check('teammate model is routed', teammate?.modelOk === true, String(teammate?.model))
 
+    const orchestrator = observations.find(entry => entry.kind === 'orchestrator')
+    check('orchestrator activates successfully with Team mode off', orchestrator?.executed?.kind === 'success', JSON.stringify(orchestrator?.executed ?? orchestrator?.error))
+    check('Team mode was off before /orchestrate', orchestrator?.teamDisabledBeforeActivation === true)
+    check('/orchestrate does not enable Team mode implicitly', orchestrator?.teamStillDisabled === true)
+    check('both stock delegation tools are denied while orchestrating', orchestrator?.stockDenied === true, JSON.stringify(orchestrator?.stockResults))
+    check('denied stock tools leave the pre-existing probe child count unchanged', orchestrator?.childrenBeforeStock === 1 && orchestrator?.stockChildCount === 1, `${orchestrator?.childrenBeforeStock} -> ${orchestrator?.stockChildCount}`)
+    check('a raw subagent activation is vetoed by the Soul admission fence', orchestrator?.rawBypassRejected === true, String(orchestrator?.rawBypassError))
+    check('Team mode is restored for the positive verifier path', orchestrator?.teamRestored === true)
+
+    const orchestratorPrompt = observations.find(entry => entry.kind === 'orchestrator-prompt')
+    check('active orchestrator identity reaches the next Lead prompt', orchestratorPrompt?.activeIdentity === true)
+    check('orchestrator prompt requires the Soul spawn path when missing', orchestratorPrompt?.requiresSoulSpawn === true)
+    check('orchestrator prompt never permits the stock delegation fallback', orchestratorPrompt?.permitsStockFallback === false)
+
     const command = observations.find(entry => entry.kind === 'command')
     checkCommandSurface(command, check)
     const commandTeammate = observations.find(entry => entry.kind === 'teammate-command')
@@ -699,23 +715,44 @@ async function main() {
       JSON.stringify(commandTeammate?.tools),
     )
 
+    const verifier = observations.find(entry => entry.kind === 'verifier')
+    check('real verifier system prompt carries its shipped persona', verifier?.personaOk === true)
+    check('real verifier system prompt carries its shipped body marker', verifier?.markerOk === true)
+    const expectedVerifierTools = expectedSoulTools(
+      LIVE_SHELL_TOOL, 'read', 'grep', 'glob', 'read_image', 'working_directory', 'skill',
+    )
+    check(
+      'real verifier tool matrix is enforced',
+      JSON.stringify([...(verifier?.tools ?? [])].sort()) === JSON.stringify(expectedVerifierTools),
+      JSON.stringify(verifier?.tools),
+    )
+    check(
+      'real verifier uses its pinned provider/model/effort',
+      verifier?.modelOk === true,
+      `${verifier?.provider}/${verifier?.model}/${verifier?.reasoningEffort}`,
+    )
+
     const bindings = JSON.parse(await readFile(bindingsPath, 'utf8'))
-    const binding = Object.values(bindings.bindings ?? {})[0]
+    const bindingRows = Object.values(bindings.bindings ?? {})
+    const binding = bindingRows.find(entry => entry.name === 'probe')
     check('durable soul binding was written', binding !== undefined)
     check('binding records the soul name', binding?.name === 'probe', String(binding?.name))
     check('binding records the route', binding?.model?.model === 'deepseek-v4-pro')
     check('binding records the tool matrix', JSON.stringify(binding?.tools) === JSON.stringify(['read', 'grep', 'glob']))
-    const bindingNames = Object.values(bindings.bindings ?? {}).map(entry => entry.name).sort()
-    check('both soul bindings were recorded', bindingNames.includes('probe') && bindingNames.includes('probe-cli'), JSON.stringify(bindingNames))
-    const commandBinding = Object.values(bindings.bindings ?? {}).find(entry => entry.name === 'probe-cli')
+    const bindingNames = bindingRows.map(entry => entry.name).sort()
+    check('probe, command, and verifier soul bindings were recorded', ['probe', 'probe-cli', 'adversarial-red-team-verifier'].every(name => bindingNames.includes(name)), JSON.stringify(bindingNames))
+    const commandBinding = bindingRows.find(entry => entry.name === 'probe-cli')
     check(
       'command soul binding keeps the portable shell declaration',
       JSON.stringify(commandBinding?.tools) === JSON.stringify([DECLARED_SHELL_TOOL, 'read']),
       JSON.stringify(commandBinding?.tools),
     )
+    const verifierBinding = bindingRows.find(entry => entry.name === 'adversarial-red-team-verifier')
+    check('real verifier binding records its pinned route', verifierBinding?.model?.provider === 'kimi-code-bridge' && verifierBinding?.model?.model === 'k3.1-pro' && verifierBinding?.model?.reasoningEffort === 'max', JSON.stringify(verifierBinding?.model))
+    check('real verifier binding keeps its declared portable tool matrix', JSON.stringify(verifierBinding?.tools) === JSON.stringify(['bash', 'glob', 'grep', 'read', 'read_image', 'working_directory', 'skill']), JSON.stringify(verifierBinding?.tools))
 
-    const routed = await findRoutedSession(join(home, 'sessions'))
-    check('child Session log records the routed model selection', routed !== undefined, routed?.file ?? 'not found')
+    const routed = await findRoutedSession(join(home, 'sessions'), { provider: 'kimi-code-bridge', model: 'k3.1-pro' })
+    check('verifier child Session log records the pinned model selection', routed !== undefined, routed?.file ?? 'not found')
 
     console.log(`\nsmoke passed: ${checks.filter(entry => entry.ok).length}/${checks.length} checks`)
   } finally {

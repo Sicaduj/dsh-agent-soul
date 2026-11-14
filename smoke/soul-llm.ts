@@ -17,6 +17,12 @@ let nextCall = 0
 let runtime: any = null
 let commandAttempted = false
 let commandObservation: Record<string, unknown> = { kind: 'command' }
+let orchestratorAttempted = false
+let orchestratorPromptObserved = false
+let verifierSpawned = false
+let orchestratorObservation: Record<string, unknown> = { kind: 'orchestrator' }
+
+const LIVE_SHELL_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash'
 
 interface ToolChunkSpec {
   name: string
@@ -123,11 +129,41 @@ function teammateChunks(options: GenerateOptions): StreamChunk[] {
 }
 
 /** The Team Lead: spawn the soul teammate, wait, and surface its report. */
-function leadChunks(options: GenerateOptions): StreamChunk[] {
+function leadChunks(options: GenerateOptions, observeOrchestratorPrompt = true): StreamChunk[] {
   const messages = messagesOf(options)
   const peer = peerText(messages)
+  const systemText = systemTextOf(options, messages)
+  if (observeOrchestratorPrompt && orchestratorAttempted && !orchestratorPromptObserved) {
+    orchestratorPromptObserved = true
+    observe({
+      kind: 'orchestrator-prompt',
+      activeIdentity: systemText.includes('You are the ORCHESTRATOR of this session.'),
+      requiresSoulSpawn: (
+        systemText.includes('Delegate only to defined Agent Souls through spawn_teammate')
+          && systemText.includes('never use subagent or subagent_fork')
+      ) || (systemText.includes('Enable Use Agent Teams')
+        && systemText.includes('retry through spawn_teammate')),
+      permitsStockFallback: systemText.includes('ordinary Soul-less delegation')
+        || systemText.includes('Use those standard tools'),
+    })
+  }
+  if (peer.includes('VERIFIER_RESULT')) {
+    return textChunks(`SOUL_SMOKE_OK ${peer.trim()} COMMAND=${JSON.stringify(commandObservation)} ORCHESTRATOR=${JSON.stringify(orchestratorObservation)}`)
+  }
   if (peer.includes('SOUL_PROBE_RESULT')) {
-    return textChunks(`SOUL_SMOKE_OK ${peer.trim()} COMMAND=${JSON.stringify(commandObservation)}`)
+    if (!verifierSpawned) {
+      verifierSpawned = true
+      return toolChunks([{
+        name: 'spawn_teammate',
+        args: {
+          name: 'verifier-1',
+          description: 'Independently challenge the smoke candidate.',
+          prompt: 'Review the orchestrated smoke candidate and report your runtime facts.',
+          agent_type: 'adversarial-red-team-verifier',
+        },
+      }])
+    }
+    return toolChunks([{ name: 'wait_agent', args: { timeout_ms: 10000 } }])
   }
   const calls = toolCallNames(messages)
   const spawnTool = options.tools.find(tool => tool.name === 'spawn_teammate')
@@ -146,7 +182,6 @@ function leadChunks(options: GenerateOptions): StreamChunk[] {
       && process.env.DYLD_INSERT_LIBRARIES === undefined,
     providerKeyEmpty: process.env.DEEPSEEK_API_KEY === '',
   }
-  const systemText = systemTextOf(options, messages)
   observe({
     kind: 'lead',
     model: options.model,
@@ -189,6 +224,147 @@ function commandTeammateChunks(options: GenerateOptions): StreamChunk[] {
   return textChunks('Command soul teammate complete.')
 }
 
+/** The shipped adversarial verifier spawned through the real Soul path. */
+function verifierChunks(options: GenerateOptions): StreamChunk[] {
+  const messages = messagesOf(options)
+  const system = systemTextOf(options, messages)
+  const tools = options.tools.map(tool => tool.name)
+  const expected = expectedSoulTools(
+    LIVE_SHELL_TOOL, 'read', 'grep', 'glob', 'read_image', 'working_directory', 'skill',
+  )
+  const observation = {
+    kind: 'verifier',
+    identity: identityOf(messages),
+    model: options.model,
+    provider: options.provider,
+    reasoningEffort: options.reasoningEffort,
+    tools,
+    personaOk: system.includes('You are the delegated teammate "adversarial-red-team-verifier".'),
+    markerOk: system.includes('Be skeptical, precise, calm, and fair.'),
+    toolsOk: JSON.stringify([...tools].sort()) === JSON.stringify(expected),
+    modelOk: options.provider === 'kimi-code-bridge'
+      && options.model === 'k3.1-pro'
+      && options.reasoningEffort === 'max',
+  }
+  observe(observation)
+  const result = `VERIFIER_RESULT persona=${observation.personaOk} marker=${observation.markerOk} tools=${observation.toolsOk} model=${observation.modelOk} route=${options.provider}/${options.model} effort=${options.reasoningEffort}`
+  if (!toolCallNames(messages).includes('send_message')) {
+    return toolChunks([{ name: 'send_message', args: { agent: 'lead', message: result } }])
+  }
+  return textChunks('Verifier complete.')
+}
+
+/** Resolve and invoke one model-facing tool directly, without an LLM round trip. */
+async function invokeTool(name: string, args: Record<string, unknown>): Promise<string> {
+  const agent = runtime.agents.list().find((candidate: any) => candidate.session?.header?.parentSession === undefined)
+  if (agent === undefined) throw new Error('no live Lead Agent')
+  const signal = new AbortController().signal
+  let modelSelection
+  try { modelSelection = agent.model.current() } catch { modelSelection = undefined }
+  const toolSet = await runtime.tools.resolve({
+    agent,
+    modelSelection: modelSelection ?? { provider: 'deepseek-official', model: 'deepseek-flash' },
+    signal,
+  })
+  try {
+    const batch = await runtime.tools.execute({
+      agent,
+      toolSet,
+      signal,
+      calls: [{
+        type: 'tool-call',
+        id: ToolCallId(`orchestrator-${++nextCall}`),
+        name,
+        arguments: JSON.stringify(args),
+      }],
+    })
+    return JSON.stringify(batch.results?.[0]?.result ?? batch.results ?? null)
+  } finally {
+    toolSet.dispose()
+  }
+}
+
+/**
+ * Activate the real orchestrator command with Team mode off, then prove stock
+ * delegation is denied at the tool layer and a raw activation is denied at the
+ * admission fence. Team is restored before the real verifier is spawned.
+ */
+async function runOrchestratorProbe(): Promise<void> {
+  if (orchestratorAttempted) return
+  orchestratorAttempted = true
+  const observation: Record<string, unknown> = { kind: 'orchestrator' }
+  let lead
+  try {
+    const agents = runtime.agents.list()
+    lead = agents.find((agent: any) => agent.session?.header?.parentSession === undefined)
+    observation.leadFound = lead !== undefined
+    if (lead === undefined) throw new Error('no live Lead Agent')
+    await runtime.agentTeams.setEnabled(lead, false)
+    observation.teamDisabledBeforeActivation = runtime.agentTeams.isEnabled(lead) === false
+    const executed = await runtime.commands.execute(
+      lead,
+      '/orchestrate',
+      [],
+      new AbortController().signal,
+    )
+    observation.executed = {
+      kind: executed?.result?.kind ?? null,
+      text: executed?.result?.text ?? null,
+    }
+    observation.teamStillDisabled = runtime.agentTeams.isEnabled(lead) === false
+
+    observation.childrenBeforeStock = (await runtime.subagents.listDescendants(lead.id)).length
+    const stockResults: Record<string, string> = {}
+    for (const name of ['subagent', 'subagent_fork']) {
+      try {
+        stockResults[name] = await invokeTool(name, {
+          description: 'Orchestrator guard probe.',
+          prompt: 'This child must never be created while orchestrator mode is active.',
+        })
+      } catch (error) {
+        stockResults[name] = `THREW: ${error instanceof Error ? error.message : String(error)}`
+      }
+    }
+    observation.stockResults = stockResults
+    observation.stockDenied = Object.values(stockResults).every(value =>
+      value.includes('Generic subagent tools are disabled while orchestrator mode is active')
+      || value.includes('Generic subagent tools are disabled for Team members'))
+    observation.stockChildCount = (await runtime.subagents.listDescendants(lead.id)).length
+
+    let rawBypass
+    try {
+      rawBypass = await runtime.subagents.startActivation({
+        provider: 'spawn',
+        label: 'Raw activation bypass probe',
+        name: 'raw-bypass',
+        prompt: [{ type: 'text', text: 'This child must never be admitted without a Soul plan.' }],
+        parent: lead,
+        delivery: 'parent',
+        signal: new AbortController().signal,
+      })
+      observation.rawBypassRejected = false
+      observation.rawBypassChild = rawBypass?.childId ?? null
+    } catch (error) {
+      observation.rawBypassRejected = true
+      observation.rawBypassError = error instanceof Error ? error.message : String(error)
+    }
+
+  } catch (error) {
+    observation.error = error instanceof Error ? error.message : String(error)
+  } finally {
+    if (lead !== undefined) {
+      try {
+        if (runtime.agentTeams.isEnabled(lead) !== true) await runtime.agentTeams.setEnabled(lead, true)
+        observation.teamRestored = runtime.agentTeams.isEnabled(lead) === true
+      } catch (error) {
+        observation.teamRestoreError = error instanceof Error ? error.message : String(error)
+      }
+    }
+  }
+  orchestratorObservation = observation
+  observe(observation)
+}
+
 /** Ask the Lead's command registry for the user-invocable soul and execute it once. */
 async function runCommandProbe(peer: string): Promise<void> {
   if (commandAttempted) return
@@ -226,7 +402,18 @@ async function runCommandProbe(peer: string): Promise<void> {
 }
 
 class SoulSmokeAdapter extends LlmAdapter {
+  async resolveModel(provider: string, model: string): Promise<Record<string, unknown>> {
+    const base = { provider, id: model, name: model }
+    if (provider === 'kimi-code-bridge' && model === 'k3.1-pro') {
+      return { ...base, reasoning: { efforts: [{ id: 'max', name: 'Max' }] } }
+    }
+    return base
+  }
+
   async listModels(provider: string): Promise<{ provider: string, id: string, name: string }[]> {
+    if (provider === 'kimi-code-bridge') {
+      return [{ provider, id: 'k3.1-pro', name: 'K3.1 Pro' }]
+    }
     return [
       { provider, id: 'deepseek-flash', name: 'DeepSeek Flash' },
       { provider, id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro' },
@@ -235,18 +422,24 @@ class SoulSmokeAdapter extends LlmAdapter {
 
   async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const identity = identityOf(messagesOf(options))
+    const isRoot = identity.startsWith('You are the root agent.')
+    const peer = peerText(messagesOf(options))
+    let probeRanNow = false
+    if (isRoot && peer.includes('SOUL_PROBE_RESULT')) {
+      if (!orchestratorAttempted) {
+        await runOrchestratorProbe()
+        probeRanNow = true
+      }
+      await runCommandProbe(peer)
+    }
     let chunks: StreamChunk[]
-    if (identity.startsWith('You are the root agent.')) chunks = leadChunks(options)
+    if (isRoot) chunks = leadChunks(options, !probeRanNow)
     else if (identity.includes('Your name is "probe-1".')) chunks = teammateChunks(options)
     else if (identity.includes('Your name is "probe-cli".')) chunks = commandTeammateChunks(options)
+    else if (identity.includes('Your name is "verifier-1".')) chunks = verifierChunks(options)
     // Title generation and other non-Agent model calls carry no subagent
     // identity; answer them with harmless text instead of failing the run.
     else chunks = textChunks('Agent Soul smoke assistant.')
-    if (identity.startsWith('You are the root agent.')
-      && peerText(messagesOf(options)).includes('SOUL_PROBE_RESULT')) {
-      await runCommandProbe(peerText(messagesOf(options)))
-      chunks = leadChunks(options)
-    }
     for (const chunk of chunks) {
       options.signal?.throwIfAborted()
       yield chunk
@@ -257,10 +450,10 @@ class SoulSmokeAdapter extends LlmAdapter {
 /** Cordis plugin name. */
 export const name = 'soul-smoke-llm'
 /** Services the scripted adapter observes through its own context. */
-export const inject = ['llm', 'agents', 'commands']
+export const inject = ['llm', 'agents', 'commands', 'agentTeams', 'subagents', 'tools']
 
 /** Register the keyless adapter on the shipped default provider route. */
 export function apply(ctx: any): void {
   runtime = ctx
-  ctx.llm.registerAdapter(['deepseek-official'], new SoulSmokeAdapter())
+  ctx.llm.registerAdapter(['deepseek-official', 'kimi-code-bridge'], new SoulSmokeAdapter())
 }

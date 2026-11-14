@@ -40,6 +40,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { createOrchestratorRuntime, installOrchestratorCommand, orchestratorFixedIdentity } from '../lib/orchestrator.js'
+import { createCatalog } from '../lib/soul.js'
 import { installSoulSurface } from '../lib/tools.js'
 
 /** The real package root, used only to read the bundled defaults. */
@@ -506,19 +507,25 @@ test('bundled doctrine prompt carries the corrected route, status, gate, and quo
   ok(identity.includes("The shipped default declares no route, so the Lead's current model selection is inherited."),
     'the runtime contract states the conditional route inheritance')
   ok(identity.includes('does not expose the Agent Soul spawn_teammate tool'),
-    'a non-Team session gets the stock subagent delegation advice, not the plugin-only tool')
-  ok(identity.includes('subagent or subagent_fork'),
-    'the non-Team fallback names the DSH 0.2.2 stock tools')
+    'a non-Team session reports that the Soul spawn tool is missing')
+  ok(identity.includes('Enable Use Agent Teams'),
+    'the missing-surface branch gives the required human action')
+  ok(!identity.includes('ordinary Soul-less delegation'),
+    'the missing-surface branch never authorizes Soul-less delegation')
+  ok(!identity.includes('Use those standard tools'),
+    'the missing-surface branch names no stock-tool fallback')
   ok(!identity.includes('it selects the provider, model, and reasoning effort declared in this file\'s frontmatter'),
     'the old unconditional route claim is gone')
   ok(delegation.includes('`name: adversarial-red-team-verifier`'), 'the verifier name uses matched backticks')
   ok(!/adversarial-red-team-verifier['"]/u.test(delegation), 'the mismatched quote typo is gone')
   ok(delegation.includes('Use the delegation tool this session actually exposes'),
     'the bundled doctrine checks the live tool surface instead of assuming spawn_teammate')
-  ok(delegation.includes('the stock tools are `subagent`'),
-    'the bundled doctrine names the DSH 0.2.2 stock delegation tools')
-  ok(!delegation.includes('Generic `subagent` and `subagent_fork` children are disabled for Team members; do not call those tools.'),
-    'the obsolete absolute ban on stock subagent tools is gone')
+  ok(delegation.includes('`spawn_teammate` is absent'),
+    'the doctrine has an explicit missing-spawn-tool branch')
+  ok(delegation.includes('enable Use Agent Teams'),
+    'the missing-spawn-tool branch requires the human to enable Team mode')
+  ok(!delegation.includes('ordinary Soul-less delegation'),
+    'the bundled doctrine contains no Soul-less fallback')
 
   for (const status of ['`pending`', '`in_progress`', '`completed`', '`deleted`']) {
     ok(stateSection.includes(status), 'the state tracking section lists supported status ' + status)
@@ -546,9 +553,10 @@ test('the fixed identity follows the delegation tool actually visible in this se
 
   const stock = orchestratorFixedIdentity(false)
   assert.match(stock, /does not expose the Agent Soul spawn_teammate tool/)
-  assert.match(stock, /DSH 0\.2\.2 subagent or subagent_fork/)
-  assert.match(stock, /do not claim a Soul binding/)
-  assert.doesNotMatch(stock, /never use subagent or subagent_fork/)
+  assert.match(stock, /Enable Use Agent Teams/)
+  assert.match(stock, /never use subagent or subagent_fork/)
+  assert.doesNotMatch(stock, /ordinary Soul-less delegation/)
+  assert.doesNotMatch(stock, /Use those standard tools/)
 
   const run = harness({ root: workspace('identity', t) })
   run.state.teamEnabled = true
@@ -559,6 +567,20 @@ test('the fixed identity follows the delegation tool actually visible in this se
   assert.match(identity ?? '', /spawn_teammate/)
   assert.doesNotMatch(identity ?? '', /does not expose/)
   run.dispose()
+})
+
+test('the shipped verifier pins its independent review route', async t => {
+  const root = workspace('verifier-route', t)
+  const catalog = createCatalog({ dirs: CONFIG.dirs, bundled: true })
+  const snapshot = await catalog.refresh(root)
+  const verifier = snapshot.byName.get('adversarial-red-team-verifier')
+  ok(verifier !== undefined, 'the bundled verifier is discoverable')
+  equal(verifier.model, 'k3.1-pro', 'the verifier pins the independent review model')
+  equal(verifier.provider, 'kimi-code-bridge', 'the verifier pins the provider for that model')
+  equal(verifier.reasoningEffort, 'max', 'the verifier pins its review reasoning effort')
+  equal(verifier.context, 'fresh', 'independent review never inherits the Lead conversation')
+  ok(verifier.persona.includes('You are the delegated teammate "adversarial-red-team-verifier".'),
+    'the real verifier persona is composed from the shipped definition')
 })
 
 test('spawn_teammate context schema describes the real defaultContext resolution', async t => {

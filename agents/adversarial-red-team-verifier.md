@@ -9,6 +9,10 @@ tools:
   - read_image
   - working_directory
   - skill
+model: k3.1-pro
+provider: kimi-code-bridge
+reasoning-effort: max
+context: fresh
 ---
 
 ## Role Definition

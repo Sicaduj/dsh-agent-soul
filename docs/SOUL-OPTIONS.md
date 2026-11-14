@@ -26,9 +26,13 @@ instead and carry no badge. The orchestrator tab shows the bundled doctrine unti
 overrides it.
 
 What the package currently ships (0.5.0): the souls `adversarial-red-team-verifier`, `generalist`,
-`researcher`, `scribe`, and `software-engineer`. All five declare no `model`/`provider` override
-and **inherit the Lead's model** (their catalog line reads `model: inherit`). `generalist`, `researcher`, and `software-engineer` declare `context: fresh`;
-`scribe` and `adversarial-red-team-verifier` declare no context. None is `user-invocable`.
+`researcher`, `scribe`, and `software-engineer`. `generalist`, `researcher`, `scribe`, and
+`software-engineer` declare no `model`/`provider` override and **inherit the Lead's model** (their
+catalog line reads `model: inherit`). `adversarial-red-team-verifier` pins
+`kimi-code-bridge/k3.1-pro` with reasoning effort `max`, so independent review does not silently
+inherit the Lead's model. `generalist`, `researcher`, `software-engineer`, and
+`adversarial-red-team-verifier` declare `context: fresh`; `scribe` declares no context. None is
+`user-invocable`.
 `researcher`, `scribe`, and `adversarial-red-team-verifier` declare `bash` in `tools:`;
 `generalist` and `software-engineer` declare no tool list and inherit every tool. The
 packaged orchestrator doctrine declares `plan-first: true`, `gate-mode: strict`, `max-retries: 10`,

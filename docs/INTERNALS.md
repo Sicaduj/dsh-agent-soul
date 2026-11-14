@@ -112,7 +112,7 @@ tool share the document layer, while the command and runtime share the applicati
 | [`lib/preferences.js`](../lib/preferences.js) | Plugin-owned default-Soul preference document, default resolution, GUI-facing preference block | `PREFERENCES_FILE_NAME`, `BUILTIN_DEFAULT_SOUL`, `preferencesPathOf`, `readPreferences`, `savePreferences`, `resolveDefaultSoul`, `describePreferences`, `createPreferenceStore` |
 | [`lib/apply.js`](../lib/apply.js) | Apply one soul to a freshly created or cold-resumed teammate; fail-closed plan resolution (pending plan, then durable binding); pending-spawn handoff; bounded cold-resume admission diagnostics | `createPendingSpawns`, `createAdmissionDiagnostics`, `SoulPlanUnavailableError`, `applyTeammateSoul` |
 | [`lib/commands.js`](../lib/commands.js) | Register one Lead-scoped slash command per user-invocable soul; reconcile them by handler identity; report collisions | `installSoulCommands`, `createSoulCommandSync`, `soulCommandRegistrationState` |
-| [`lib/tools.js`](../lib/tools.js) | Soul surface: `team:policy` shadow, Lead catalog, generic-tool guard, `spawn_teammate`, `list_agent_souls` | `TEAM_TOOL_NAMES`, `SOUL_ONLY_DENIAL`, `soulPolicyText`, `installSoulSurface(agent, scope, args)` |
+| [`lib/tools.js`](../lib/tools.js) | Soul surface: `team:policy` shadow, Lead catalog, generic-tool guard, live/durable orchestrator-state ownership, `spawn_teammate`, `list_agent_souls` | `TEAM_TOOL_NAMES`, `SOUL_ONLY_DENIAL`, `orchestratorActive(deps, agent)`, `soulPolicyText`, `installSoulSurface(agent, scope, args)` |
 | [`lib/bindings.js`](../lib/bindings.js) | Durable per-teammate binding store for cold resume and GUI usage | `createBindingStore(options)` |
 | [`lib/admin.js`](../lib/admin.js) | Document layer: split/compose/validate, scan, read/save/create/duplicate/delete/restore, path safety, hashes | `documentHash`, `resolveSoulDirs`, `resolveGuiRoot`, `splitDocument`, `composeDocument`, `canonicalSkeleton`, `listDocuments`, `readDocument`, `saveDocument`, `saveDocumentSource`, `createDocument`, `duplicateDocument`, `deleteDocument`, `restoreDocument` |
 | [`lib/orchestrator.js`](../lib/orchestrator.js) | Orchestrator definition layer (with declaration-level route validation and an optional live-route validator), compact summary, `/orchestrate` command, session-scoped runtime | `ORCHESTRATE_COMMAND_NAME`, `splitOrchestrator`, `composeOrchestrator`, `canonicalOrchestratorSkeleton`, `orchestratorPathOf`, `readOrchestrator`, `saveOrchestrator`, `orchestratorRouteDiagnostics`, `orchestratorSummary`, `substituteTemplate`, `createOrchestratorRuntime`, `installOrchestratorCommand` |
@@ -317,8 +317,11 @@ Both `spawn_teammate` (Lead tool) and a user-invocable slash command enter throu
      cannot produce an unhandled rejection even for the explicit veto.
 
 **Creation fence.** `install()` is the serial `agent/created` listener. For a teammate it computes
-`teamMemberOf`, then `strict = Team mode enabled || the parent is a known soul teammate`. A strict
-child must resolve a pending (by name or reserved child id) or durable plan; otherwise
+`teamMemberOf`, then `strict = Team mode enabled || the parent is a known soul teammate ||
+the parent is an active orchestrator`. The orchestrator check uses `orchestratorActive` (live bundle
+or durable on, failing closed on probe errors), so it also covers the activation window, cold resume,
+and a retained rollback bundle. A strict child must resolve a pending (by name or reserved child id)
+or durable plan; otherwise
 `applyTeammateSoul` throws `SoulPlanUnavailableError` and the listener failure vetoes publication.
 A non-strict child with no durable binding is an ordinary subagent and is skipped. A seeded host fork is
 its own Team root and stays allowed. Because every child Agent creation passes through this event,
@@ -336,7 +339,8 @@ after its partial registrations (including the Team tools) are unwound. Those Ag
 published, so activation cannot veto them; it only declines to attach the plugin surface.
 
 There is no plain no-Soul spawn path. The three independent layers are: the scoped tool restriction,
-the scoped `tools.guard`, and this creation fence.
+the scoped `tools.guard` (which also denies stock delegation while orchestrator mode is active,
+regardless of Team mode), and this creation fence.
 
 **Teammate-name contract (DOC-01).** The direct `spawn_teammate` path passes the requested
 1-32 character lower-kebab name to `ctx.subagents.startActivation`; the subagent manager refuses a
@@ -530,9 +534,10 @@ outcome is qualified in step 10 under **Enable**).
    `orchestratorFixedIdentity(teamModeEnabled)` followed by the substituted editable identity (or
    the fixed text alone when the section is empty), so the document can add boundaries but never
    remove the runtime role. Because `spawn_teammate` is plugin-provided and hidden outside Team
-   mode, the fixed delegation sentence is a per-assembly function: it names `spawn_teammate` only
-   when Team mode is enabled and otherwise points at the stock `subagent`/`subagent_fork` path (or
-   reports the missing surface). The five non-identity sections become `orchestrator:plan`,
+   mode, the fixed delegation sentence is a per-assembly function: it names `spawn_teammate` when
+   Team mode is enabled and otherwise requires the human to enable Use Agent Teams; it never
+   authorizes stock `subagent`/`subagent_fork` delegation. The five non-identity sections become
+   `orchestrator:plan`,
    `:delegation`, `:state`, `:verification`, `:recovery`; extra markdown becomes
    `orchestrator:extra`. Empty sections are skipped.
 5. Compute orders from the live prompt service: `TEAM_POLICY - 100`, `+10`, `+20`, `+30`, `+40`,
@@ -1081,8 +1086,9 @@ This plugin's patch only inserts `agent-soul-team`; it must not disable or repla
    required for `connection.admit` to authenticate the exact routes. The child is only created when those services exist (a Web
    profile). A GUI install failure is logged and does not fail the plugin.
 3. It registers `agent/created` and `agent/disposed`, then prepares every already-live Agent with
-   `await maybeInstall(agent)`. A pre-existing generic subagent under a Team-off root is skipped;
-   a pre-existing teammate without a usable Soul plan is skipped with a warning. Neither fails
+   `await maybeInstall(agent)`. A pre-existing generic subagent under a non-orchestrated Team-off
+   root is skipped; a pre-existing teammate without a usable Soul plan is skipped with a warning.
+   Neither fails
    activation or keeps plugin registrations.
 4. `maybeInstall` deduplicates concurrent installation per Agent. `agent/created` listeners are
    awaited by the Team service before creation resolves, which is why the pending spawn plan is
@@ -1314,10 +1320,12 @@ in `smoke/gui-fixes.test.mjs` (client artifact contracts and live route validati
 `smoke/storage-fixes.test.mjs` (binding/delete/rename/path semantics),
 `smoke/orchestrator-fixes.test.mjs` (handler-seam rollback and doctrine/context contracts), and
 `smoke/smoke-fixes.test.mjs` (isolated probes, canaries, and remediation reporting). Per-module
-counts live in [`../smoke/README.md`](../smoke/README.md). On 2026-11-13 `node --test smoke/`
-passed **110/110** (15 remediation, 16 bundled-editable with 222 assertions, 8 config-toggle with 129,
-10 gui-fixes with 176, 18 storage-fixes, 9 orchestrator-fixes with 97, 7 smoke-fixes with 72, 14
-windows-shell-alias, and 13 team-runtime cases). The direct-tree smoke run passed 58/58, the optional
+counts live in [`../smoke/README.md`](../smoke/README.md). On 2026-11-14 the suites contained
+**113 tests** (15 remediation, 16 bundled-editable with 222 assertions, 8 config-toggle with 129,
+10 gui-fixes with 176, 18 storage-fixes, 10 orchestrator-fixes, 7 smoke-fixes with 72, 14
+windows-shell-alias, and 15 team-runtime cases). The directly affected orchestrator and Team suites
+passed **25/25**; on Windows 103/113 passed, with the untouched remainder hitting symlink-creation
+`EPERM` or existing Windows-sensitive assertions. The direct-tree smoke run passed **74/74**, the optional
 inverted-composition probe `smoke/run-windows-parity.mjs` passed **14/14**, and the candidate
 remediation runtime passed **179/179** with 2/2 suites on a fresh disposable run root.
 

@@ -16,6 +16,8 @@ import { expectedSoulTools } from './contract.mjs'
 let nextCall = 0
 let runtime: any = null
 let commandAttempted = false
+let orchestrateBootstrapAttempted = false
+let orchestrateBootstrapPromise: Promise<void> | undefined
 let commandObservation: Record<string, unknown> = { kind: 'command' }
 
 interface ToolChunkSpec {
@@ -92,6 +94,12 @@ function latestAssistantCalls(messages: MessageLike[]): string[] {
   return assistant?.content.filter(block => block.type === 'tool-call').map(block => block.name ?? '') ?? []
 }
 
+/** Whether the soul-only guard denied a stock subagent call in this conversation. */
+function soulOnlyDenialObserved(messages: MessageLike[]): boolean {
+  return messages.some(message => message.role === 'tool'
+    && message.content.some(block => (block.text ?? '').includes('Generic subagent tools are disabled')))
+}
+
 function peerText(messages: MessageLike[]): string {
   return messages.flatMap(message => message.role === 'user' && message.source?.kind === 'agent-message'
     ? message.content.flatMap(block => block.type === 'text' ? [block.text ?? ''] : [])
@@ -131,6 +139,24 @@ function leadChunks(options: GenerateOptions): StreamChunk[] {
   }
   const calls = toolCallNames(messages)
   const spawnTool = options.tools.find(tool => tool.name === 'spawn_teammate')
+  // /orchestrate can finish inside this first model step; the step's tool schema is
+  // still the pre-activation one. Take one harmless wait step so the next step sees
+  // the registered Soul tools instead of producing an unknown-tool error.
+  if (spawnTool === undefined) {
+    return toolChunks([{ name: 'wait_agent', args: { timeout_ms: 1 } }])
+  }
+  // Probe the exclusive-delegation guard once before the legal spawn. The tool is
+  // still visible on the Lead, so only the plugin guard can produce this denial.
+  if (!calls.includes('subagent')) {
+    return toolChunks([{
+      name: 'subagent',
+      args: {
+        name: 'forbidden-stock-child',
+        description: 'stock-delegation denial probe',
+        prompt: 'This child must never start while orchestrator mode is active.',
+      },
+    }])
+  }
   const spawnProperties = spawnTool?.parameters['properties'] as Record<string, unknown> | undefined
   const listTool = options.tools.find(tool => tool.name === 'list_agent_souls')
   // The runner seeds removable canaries into its own environment before this
@@ -156,6 +182,7 @@ function leadChunks(options: GenerateOptions): StreamChunk[] {
     catalogInPrompt: systemText.includes('Available teammate souls'),
     soulPolicyInPrompt: systemText.includes('Delegation is soul-only'),
     baseSubagentAdviceInPrompt: systemText.includes('Use the names returned by subagent, subagent_fork'),
+    soulOnlyDenialObserved: soulOnlyDenialObserved(messages),
     envScrub,
     environmentScrubbed: Object.values(envScrub).every(Boolean),
     latestCalls: latestAssistantCalls(messages),
@@ -187,6 +214,40 @@ function commandTeammateChunks(options: GenerateOptions): StreamChunk[] {
     markerOk: system.includes('COMMAND_SOUL_MARKER'),
   })
   return textChunks('Command soul teammate complete.')
+}
+
+/**
+ * Activate /orchestrate on the Lead during creation, before the first model step.
+ * The real command then enables Agent Teams, so the scripted Lead only sees the
+ * Soul-aware tool surface and the runner proves the automatic path end to end.
+ */
+async function bootstrapOrchestrate(ctx: any, agent: any, signal?: AbortSignal): Promise<void> {
+  if (orchestrateBootstrapAttempted) return
+  orchestrateBootstrapAttempted = true
+  const observation: Record<string, unknown> = { kind: 'orchestrate-bootstrap' }
+  try {
+    let found = false
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      found = ctx.commands.find(agent, 'orchestrate') !== undefined
+      if (found) break
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+    observation.commandFound = found
+    const execution = await ctx.commands.execute(
+      agent,
+      '/orchestrate',
+      [],
+      signal ?? new AbortController().signal,
+    )
+    observation.result = {
+      kind: execution?.result?.kind ?? null,
+      text: execution?.result?.text ?? null,
+    }
+    observation.teamEnabled = ctx.agentTeams.isEnabled(agent) === true
+  } catch (error) {
+    observation.error = error instanceof Error ? error.message : String(error)
+  }
+  observe(observation)
 }
 
 /** Ask the Lead's command registry for the user-invocable soul and execute it once. */
@@ -235,14 +296,22 @@ class SoulSmokeAdapter extends LlmAdapter {
 
   async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const identity = identityOf(messagesOf(options))
+    // Start the real command only after agent creation has completed. Waiting
+    // here, on the first Lead model step, prevents the activation from changing
+    // the tool set underneath the step that is already being assembled.
+    if (identity.startsWith('You are the root agent.') && orchestrateBootstrapPromise !== undefined) {
+      await orchestrateBootstrapPromise
+    }
+    const currentIdentity = identityOf(messagesOf(options))
+    const effectiveIdentity = currentIdentity === '' ? identity : currentIdentity
     let chunks: StreamChunk[]
-    if (identity.startsWith('You are the root agent.')) chunks = leadChunks(options)
-    else if (identity.includes('Your name is "probe-1".')) chunks = teammateChunks(options)
-    else if (identity.includes('Your name is "probe-cli".')) chunks = commandTeammateChunks(options)
+    if (effectiveIdentity.startsWith('You are the root agent.')) chunks = leadChunks(options)
+    else if (effectiveIdentity.includes('Your name is "probe-1".')) chunks = teammateChunks(options)
+    else if (effectiveIdentity.includes('Your name is "probe-cli".')) chunks = commandTeammateChunks(options)
     // Title generation and other non-Agent model calls carry no subagent
     // identity; answer them with harmless text instead of failing the run.
     else chunks = textChunks('Agent Soul smoke assistant.')
-    if (identity.startsWith('You are the root agent.')
+    if (effectiveIdentity.startsWith('You are the root agent.')
       && peerText(messagesOf(options)).includes('SOUL_PROBE_RESULT')) {
       await runCommandProbe(peerText(messagesOf(options)))
       chunks = leadChunks(options)
@@ -257,10 +326,17 @@ class SoulSmokeAdapter extends LlmAdapter {
 /** Cordis plugin name. */
 export const name = 'soul-smoke-llm'
 /** Services the scripted adapter observes through its own context. */
-export const inject = ['llm', 'agents', 'commands']
+export const inject = ['llm', 'agents', 'commands', 'agentTeams']
 
 /** Register the keyless adapter on the shipped default provider route. */
 export function apply(ctx: any): void {
   runtime = ctx
   ctx.llm.registerAdapter(['deepseek-official'], new SoulSmokeAdapter())
+  ctx.on('agent/created', ({ agent, signal }: any) => {
+    const header = agent?.session?.header
+    if (header?.parentSession !== undefined || header?.origin === 'subagent') return
+    // Do not block the agent/created event: the orchestrator command is installed
+    // by another creation listener. The first Lead model step awaits this promise.
+    orchestrateBootstrapPromise = bootstrapOrchestrate(ctx, agent, signal)
+  })
 }

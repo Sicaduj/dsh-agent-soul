@@ -143,6 +143,9 @@ function fakeAgent(options = {}) {
     queued: [],
     queueError: null,
     teamEnabled: false,
+    teamSetCalls: [],
+    teamEnableFault: null,
+    teamDisableFault: null,
   }
   const agent = {
     id: 'fake-lead',
@@ -234,13 +237,30 @@ function harness(options) {
     rootOf: () => options.root,
     logger: { warn(message) { warnings.push(String(message)) } },
     handlerTails: new WeakMap(),
+    teamModeOf: () => state.teamEnabled,
+    async setTeamMode(_agent, enabled) {
+      state.teamSetCalls.push(enabled)
+      if (enabled === true && state.teamEnableFault !== null) throw state.teamEnableFault
+      if (enabled === false && state.teamDisableFault !== null) throw state.teamDisableFault
+      state.teamEnabled = enabled === true
+    },
     // The real runtime resolves Team mode through the plugin context; the fake
     // Agent owns the same tool service here.
     ctx: {
       tools: agent.ctx.tools,
       get(name) {
         if (name === 'subagents') return { rootOf: value => value, namesOf: () => ({ self: 'lead' }) }
-        if (name === 'agentTeams') return { isEnabled: () => state.teamEnabled }
+        if (name === 'agentTeams') {
+          return {
+            isEnabled: () => state.teamEnabled,
+            async setEnabled(_agent, enabled) {
+              state.teamSetCalls.push(enabled)
+              if (enabled === true && state.teamEnableFault !== null) throw state.teamEnableFault
+              if (enabled === false && state.teamDisableFault !== null) throw state.teamDisableFault
+              state.teamEnabled = enabled === true
+            },
+          }
+        }
         return undefined
       },
     },
@@ -289,6 +309,7 @@ test('first-enable task queue failure reverts a cleanly restorable mode', async 
   ok(!String(result.text).includes('active=true'), 'a reverted mode is not reported as active')
   equal(run.runtime.isActive(run.agent), false, 'disable disposed the bundle')
   equal(run.state.current.model, 'base-model', 'the captured model was restored')
+  equal(run.state.teamEnabled, false, 'the first-enable rollback also disables Team mode')
 
   pushDone(run.state.events, 'cmd-1', 'error')
   equal(run.runtime.modeOf(run.agent), 'off', 'the error settlement leaves the durable mode off')
@@ -354,6 +375,7 @@ test('already-active task queue failure keeps the exact prior doctrine and route
   ok(!text.includes('could not be restored'), 'no restore failure is reported when both restored')
   equal(run.runtime.isActive(run.agent), true, 'the already-active mode remains live')
   equal(run.state.current.model, 'test-route-a', 'the snapshot model selection was restored')
+  equal(run.state.teamEnabled, true, 'the kept active mode remains Team-enabled')
   const texts = activeTexts(run.state)
   ok(texts.some(value => value.includes('OLD-DOCTRINE-A')), 'the pre-invocation doctrine is installed again')
   ok(!texts.some(value => value.includes('NEW-DOCTRINE-B')), 'the replacement doctrine is not left behind')
@@ -481,6 +503,160 @@ test('already-active double recreation failure reports an inactive mode accurate
   run.dispose()
 })
 
+test('orchestrate enables Agent Teams before reporting success', async t => {
+  const root = workspace('team-enable', t)
+  writeDoctrine(root, { route: 'test-route-a', marker: 'TEAM-ENABLE-DOCTRINE' })
+  const run = harness({ root, resolveModel: resolveTestModel })
+  pushRun(run.state.events, 'cmd-team-1', '')
+  const result = await run.invoke('', 'cmd-team-1')
+  equal(result.kind, 'success', 'the activation succeeds')
+  equal(run.state.teamEnabled, true, 'Team mode is persisted on')
+  deepEqual(run.state.teamSetCalls, [true], 'the runtime requests Team mode exactly once')
+  ok(String(result.text).includes('team: enabled'), 'the announcement reports Team activation')
+  ok(String(result.text).includes('Soul-only'), 'the announcement states Soul-only delegation')
+  pushDone(run.state.events, 'cmd-team-1', 'success')
+  equal(run.runtime.modeOf(run.agent), 'on', 'the durable mode is on')
+  run.dispose()
+})
+
+test('orchestrate does not duplicate an already-enabled Team selection', async t => {
+  const root = workspace('team-already-on', t)
+  writeDoctrine(root, { marker: 'TEAM-ALREADY-ON' })
+  const run = harness({ root })
+  run.state.teamEnabled = true
+  pushRun(run.state.events, 'cmd-team-already', '')
+  const result = await run.invoke('', 'cmd-team-already')
+  equal(result.kind, 'success', 'activation succeeds')
+  equal(run.state.teamSetCalls.length, 0, 'an already-enabled Team selection is not rewritten')
+  run.dispose()
+})
+
+test('Team enable failure aborts activation without applying doctrine or queueing work', async t => {
+  const root = workspace('team-enable-fail', t)
+  writeDoctrine(root, { route: 'test-route-a', marker: 'TEAM-ENABLE-FAIL' })
+  const run = harness({ root, resolveModel: resolveTestModel })
+  run.state.teamEnableFault = new Error('injected Team enable failure')
+  pushRun(run.state.events, 'cmd-team-2', 'do the task')
+  const result = await run.invoke('do the task', 'cmd-team-2')
+  equal(result.kind, 'error', 'the activation is an error')
+  ok(String(result.text).includes('cannot enable Agent Teams for orchestrator mode'), 'the error names the Team failure')
+  equal(run.runtime.isActive(run.agent), false, 'no live orchestrator bundle starts')
+  equal(run.state.teamEnabled, false, 'Team mode remains off')
+  equal(run.state.selectCalls.length, 0, 'the model route is never applied')
+  equal(activeTexts(run.state).length, 0, 'no prompt section is applied')
+  equal(run.state.queued.length, 0, 'the task is not queued')
+  run.dispose()
+})
+
+test('apply failure after Team activation restores Team off on a first enable', async t => {
+  const root = workspace('team-apply-fail', t)
+  writeDoctrine(root, { marker: 'TEAM-APPLY-FAIL' })
+  const run = harness({ root })
+  run.state.sectionFault = () => true
+  pushRun(run.state.events, 'cmd-team-3', '')
+  const result = await run.invoke('', 'cmd-team-3')
+  equal(result.kind, 'error', 'the apply failure is an error')
+  equal(run.runtime.isActive(run.agent), false, 'no bundle remains')
+  equal(run.state.teamEnabled, false, 'Team mode is restored off')
+  deepEqual(run.state.teamSetCalls, [true, false], 'the runtime enables then restores Team mode')
+  run.dispose()
+})
+
+test('off disables Team mode and reports it', async t => {
+  const root = workspace('team-off', t)
+  writeDoctrine(root, { route: 'test-route-a', marker: 'TEAM-OFF' })
+  const run = harness({ root, resolveModel: resolveTestModel })
+  pushRun(run.state.events, 'cmd-team-4', '')
+  equal((await run.invoke('', 'cmd-team-4')).kind, 'success', 'activation succeeds')
+  pushDone(run.state.events, 'cmd-team-4', 'success')
+  const off = await run.invoke('off', 'cmd-team-5')
+  equal(off.kind, 'success', 'off succeeds')
+  equal(run.state.teamEnabled, false, 'Team mode is disabled')
+  ok(String(off.text).includes('Agent Teams was disabled'), 'the off result reports Team shutdown')
+  equal(run.runtime.isActive(run.agent), false, 'the bundle is disposed')
+  run.dispose()
+})
+
+test('Team disable failure keeps the mode active for an off retry', async t => {
+  const root = workspace('team-off-fail', t)
+  writeDoctrine(root, { route: 'test-route-a', marker: 'TEAM-OFF-FAIL' })
+  const run = harness({ root, resolveModel: resolveTestModel })
+  pushRun(run.state.events, 'cmd-team-6', '')
+  equal((await run.invoke('', 'cmd-team-6')).kind, 'success', 'activation succeeds')
+  pushDone(run.state.events, 'cmd-team-6', 'success')
+  run.state.teamDisableFault = new Error('injected Team disable failure')
+  const off = await run.invoke('off', 'cmd-team-7')
+  equal(off.kind, 'error', 'off reports the failure')
+  ok(String(off.text).includes('cannot disable Agent Teams'), 'the failure is actionable')
+  equal(run.runtime.isActive(run.agent), true, 'the live bundle remains for a retry')
+  equal(run.state.teamEnabled, true, 'Team mode remains on')
+  run.state.teamDisableFault = null
+  const retry = await run.invoke('off', 'cmd-team-8')
+  equal(retry.kind, 'success', 'the off retry succeeds')
+  equal(run.state.teamEnabled, false, 'the retry disables Team mode')
+  run.dispose()
+})
+
+test('off while inactive leaves an unrelated Team selection untouched', async t => {
+  const root = workspace('team-off-inactive', t)
+  const run = harness({ root })
+  run.state.teamEnabled = true
+  const off = await run.invoke('off', 'cmd-team-9')
+  equal(off.kind, 'success', 'inactive off succeeds')
+  equal(run.state.teamEnabled, true, 'the unrelated Team selection is unchanged')
+  equal(run.state.teamSetCalls.length, 0, 'no Team write is attempted')
+  run.dispose()
+})
+
+test('off disables Team even when a durable-on mode has no live bundle', async t => {
+  const root = workspace('team-off-no-bundle', t)
+  writeDoctrine(root, { marker: 'TEAM-OFF-NO-BUNDLE' })
+  const run = harness({ root })
+  pushRun(run.state.events, 'cmd-team-20', '')
+  equal((await run.invoke('', 'cmd-team-20')).kind, 'success', 'activation succeeds')
+  pushDone(run.state.events, 'cmd-team-20', 'success')
+  equal(run.state.teamEnabled, true, 'Team is on before the reload-like disposal')
+  run.runtime.disposeAgent(run.agent)
+  const off = await run.invoke('off', 'cmd-team-21')
+  equal(off.kind, 'success', 'off succeeds without a live bundle')
+  equal(run.state.teamEnabled, false, 'the durable active mode still disables Team')
+  ok(String(off.text).includes('Agent Teams was disabled'), 'the result reports Team shutdown')
+  run.dispose()
+})
+
+test('reapplyIfActive enables Team for a durable on mode', async t => {
+  const root = workspace('team-reapply', t)
+  writeDoctrine(root, { marker: 'TEAM-REAPPLY' })
+  const run = harness({ root })
+  pushRun(run.state.events, 'cmd-team-10', '')
+  equal((await run.invoke('', 'cmd-team-10')).kind, 'success', 'the initial activation succeeds')
+  pushDone(run.state.events, 'cmd-team-10', 'success')
+  run.runtime.disposeAgent(run.agent)
+  run.state.teamEnabled = false
+  const reapplied = await run.runtime.reapplyIfActive(run.agent)
+  equal(reapplied.ok, true, 'the reapply succeeds')
+  equal(run.state.teamEnabled, true, 'the durable mode re-enables Team')
+  equal(run.runtime.isActive(run.agent), true, 'the doctrine bundle is restored')
+  run.dispose()
+})
+
+test('reapply reports a Team re-enable failure without claiming the mode resumed', async t => {
+  const root = workspace('team-reapply-fail', t)
+  writeDoctrine(root, { marker: 'TEAM-REAPPLY-FAIL' })
+  const run = harness({ root })
+  pushRun(run.state.events, 'cmd-team-11', '')
+  equal((await run.invoke('', 'cmd-team-11')).kind, 'success', 'the initial activation succeeds')
+  pushDone(run.state.events, 'cmd-team-11', 'success')
+  run.runtime.disposeAgent(run.agent)
+  run.state.teamEnabled = false
+  run.state.teamEnableFault = new Error('injected reapply Team failure')
+  const reapplied = await run.runtime.reapplyIfActive(run.agent)
+  equal(reapplied.ok, false, 'the reapply reports failure')
+  ok(String(reapplied.error).includes('cannot re-enable Agent Teams'), 'the error names the Team failure')
+  equal(run.runtime.isActive(run.agent), false, 'no doctrine bundle is claimed active')
+  run.dispose()
+})
+
 test('bundled doctrine prompt carries the corrected route, status, gate, and quote text', async t => {
   const root = workspace('doctrine', t)
   const run = harness({ root })
@@ -505,20 +681,22 @@ test('bundled doctrine prompt carries the corrected route, status, gate, and quo
   const delegation = texts.find(value => value.includes('Consult the live soul catalog and inspect relevant definitions before routing work.')) ?? ''
   ok(identity.includes("The shipped default declares no route, so the Lead's current model selection is inherited."),
     'the runtime contract states the conditional route inheritance')
-  ok(identity.includes('does not expose the Agent Soul spawn_teammate tool'),
-    'a non-Team session gets the stock subagent delegation advice, not the plugin-only tool')
-  ok(identity.includes('subagent or subagent_fork'),
-    'the non-Team fallback names the DSH 0.2.2 stock tools')
+  ok(text.includes('team: enabled (delegation is Soul-only through spawn_teammate)'),
+    'activation announces that Team mode is enabled and delegation is Soul-only')
+  ok(identity.includes('never use subagent or subagent_fork'),
+    'the fixed identity states the unconditional Soul-only rule')
+  ok(!identity.includes('does not expose the Agent Soul spawn_teammate tool'),
+    'the non-Team fallback is gone from the fixed identity')
   ok(!identity.includes('it selects the provider, model, and reasoning effort declared in this file\'s frontmatter'),
     'the old unconditional route claim is gone')
   ok(delegation.includes('`name: adversarial-red-team-verifier`'), 'the verifier name uses matched backticks')
   ok(!/adversarial-red-team-verifier['"]/u.test(delegation), 'the mismatched quote typo is gone')
-  ok(delegation.includes('Use the delegation tool this session actually exposes'),
-    'the bundled doctrine checks the live tool surface instead of assuming spawn_teammate')
-  ok(delegation.includes('the stock tools are `subagent`'),
-    'the bundled doctrine names the DSH 0.2.2 stock delegation tools')
-  ok(!delegation.includes('Generic `subagent` and `subagent_fork` children are disabled for Team members; do not call those tools.'),
-    'the obsolete absolute ban on stock subagent tools is gone')
+  ok(delegation.includes('Delegate only through `spawn_teammate`'),
+    'the bundled doctrine makes spawn_teammate the only delegation path')
+  ok(delegation.includes('Never use `subagent` or `subagent_fork`'),
+    'the bundled doctrine keeps the unconditional Soul-only rule')
+  ok(!delegation.includes('ordinary Soul-less delegation'),
+    'the bundled doctrine never advertises a Soul-less fallback')
 
   for (const status of ['`pending`', '`in_progress`', '`completed`', '`deleted`']) {
     ok(stateSection.includes(status), 'the state tracking section lists supported status ' + status)
@@ -538,25 +716,21 @@ test('bundled doctrine prompt carries the corrected route, status, gate, and quo
   run.dispose()
 })
 
-test('the fixed identity follows the delegation tool actually visible in this session', async t => {
-  const soulOnly = orchestratorFixedIdentity(true)
+test('the fixed identity always states Soul-only delegation', async t => {
+  const soulOnly = orchestratorFixedIdentity()
   assert.match(soulOnly, /spawn_teammate/)
   assert.match(soulOnly, /never use subagent or subagent_fork/)
   assert.doesNotMatch(soulOnly, /does not expose/)
 
-  const stock = orchestratorFixedIdentity(false)
-  assert.match(stock, /does not expose the Agent Soul spawn_teammate tool/)
-  assert.match(stock, /DSH 0\.2\.2 subagent or subagent_fork/)
-  assert.match(stock, /do not claim a Soul binding/)
-  assert.doesNotMatch(stock, /never use subagent or subagent_fork/)
 
   const run = harness({ root: workspace('identity', t) })
-  run.state.teamEnabled = true
   const result = await run.invoke('', 'identity-spawn-visible')
   assert.equal(result.kind, 'success')
+  assert.equal(run.state.teamEnabled, true)
   const identity = activeTexts(run.state, { agent: run.agent, scope: {}, toolSet: undefined })
     .find(value => value.includes('You are the ORCHESTRATOR of this session.'))
   assert.match(identity ?? '', /spawn_teammate/)
+  assert.match(identity ?? '', /never use subagent or subagent_fork/)
   assert.doesNotMatch(identity ?? '', /does not expose/)
   run.dispose()
 })

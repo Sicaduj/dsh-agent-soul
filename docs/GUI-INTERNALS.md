@@ -1249,7 +1249,8 @@ soul catalog text; unknown variables stay literal).
   without a plan is skipped with a warning and its partial registrations (including the Team tools)
   are unwound.
 - `lib/tools.js` installs a `tools.guard()` in every Team member scope that denies
-  `subagent` / `subagent_fork` when the caller is Team-enabled or a Soul teammate. The guard is
+  `subagent` / `subagent_fork` when the caller is Team-enabled, a Soul teammate, or in an active
+  orchestrator mode. The guard is
   evaluated per call, so a tool provider that mounts either name after the member was prepared is
   denied too; it does not remove the names from the visible set. A strict soul `tools:` list hides
   them for that teammate through the ordinary tool matrix. Scoped Team tools are unaffected.

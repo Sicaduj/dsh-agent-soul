@@ -27,7 +27,9 @@ document describes the resulting architecture.
 ## What the plugin does
 
 Agent Teams runs on the standard subagent tree: stock DSH 0.2.2 delegates with `subagent` and
-`subagent_fork`, and `spawn_teammate` is a tool this plugin adds only for a Team-enabled Lead.
+`subagent_fork`, and `spawn_teammate` is a tool this plugin adds for a Team-enabled Lead or an active
+orchestrator. `/orchestrate` enables Team mode itself; while orchestrator mode is on, stock
+delegation is denied and only `spawn_teammate` is a legal child path.
 This bundle's profile patch inserts `agent-soul-team` and leaves the shipped `tool-agent-team`
 row enabled; the base row keeps `team_task_*` and the shared `team:policy`. The plugin adds:
 
@@ -106,13 +108,13 @@ tool share the document layer, while the command and runtime share the applicati
 | [`lib/model.js`](../lib/model.js) | Resolve a frontmatter `model`/`provider`/`reasoning-effort` into one route | `resolveModelRoute(raw, services)` |
 | [`lib/tool-names.js`](../lib/tool-names.js) | Frozen portable shell-name resolver: `bash` ↔ `pwsh` are two spellings of one model-facing shell tool; only that pair aliases | `SHELL_TOOL_ALIAS_PAIRS`, `shellCounterpart`, `resolveToolName`, `toolNameKnown`, `resolveRestrictableNames` |
 | [`lib/spawn.js`](../lib/spawn.js) | Spawn/command orchestration; default-Soul resolution; model routing; reserved child id; binding write | `commandNameFor`, `nextTeammateName`, `spawnTeamMember`, `describeSouls`, `spawnSoulFromCommand` |
-| [`lib/team.js`](../lib/team.js) | DSH 0.2.2 subagent-tree adapter: role/name/root, descendant listing, direct-child names, Team size | `teamMemberOf`, `isTeamEnabled`, `isTeamLead`, `parentAgentOf`, `listTeamMembers`, `directChildNames`, `countTeamMembers` |
+| [`lib/team.js`](../lib/team.js) | DSH 0.2.2 subagent-tree adapter and Team-mode persistence: role/name/root, descendant listing, direct-child names, Team size, automatic selection writes | `teamMemberOf`, `isTeamEnabled`, `teamModeEnabled`, `setTeamModeEnabled`, `isTeamLead`, `parentAgentOf`, `listTeamMembers`, `directChildNames`, `countTeamMembers` |
 | [`lib/team-tools.js`](../lib/team-tools.js) | Base/plugin tool-name sets and the always-kept Team tools | `BASE_TEAM_TOOL_NAMES`, `PLUGIN_TEAM_TOOL_NAMES`, `ALWAYS_KEPT_TOOL_NAMES`, `LEAD_ONLY_TOOL_NAMES`, `GENERIC_SUBAGENT_TOOLS`, `TEAM_TOOL_NAMES` |
 | [`lib/team-row.js`](../lib/team-row.js) | Base `tool-agent-team` row inspection and explicit re-enable through the Plugin Manager | `inspectBaseTeamRow`, `restoreBaseTeamRow` |
 | [`lib/preferences.js`](../lib/preferences.js) | Plugin-owned default-Soul preference document, default resolution, GUI-facing preference block | `PREFERENCES_FILE_NAME`, `BUILTIN_DEFAULT_SOUL`, `preferencesPathOf`, `readPreferences`, `savePreferences`, `resolveDefaultSoul`, `describePreferences`, `createPreferenceStore` |
 | [`lib/apply.js`](../lib/apply.js) | Apply one soul to a freshly created or cold-resumed teammate; fail-closed plan resolution (pending plan, then durable binding); pending-spawn handoff; bounded cold-resume admission diagnostics | `createPendingSpawns`, `createAdmissionDiagnostics`, `SoulPlanUnavailableError`, `applyTeammateSoul` |
 | [`lib/commands.js`](../lib/commands.js) | Register one Lead-scoped slash command per user-invocable soul; reconcile them by handler identity; report collisions | `installSoulCommands`, `createSoulCommandSync`, `soulCommandRegistrationState` |
-| [`lib/tools.js`](../lib/tools.js) | Soul surface: `team:policy` shadow, Lead catalog, generic-tool guard, `spawn_teammate`, `list_agent_souls` | `TEAM_TOOL_NAMES`, `SOUL_ONLY_DENIAL`, `soulPolicyText`, `installSoulSurface(agent, scope, args)` |
+| [`lib/tools.js`](../lib/tools.js) | Soul surface: `team:policy` shadow, Lead catalog, generic-tool guard, `spawn_teammate`, `list_agent_souls`; orchestrator-active enforcement | `TEAM_TOOL_NAMES`, `SOUL_ONLY_DENIAL`, `soulPolicyText`, `soulDelegationRequired`, `installSoulSurface(agent, scope, args)` |
 | [`lib/bindings.js`](../lib/bindings.js) | Durable per-teammate binding store for cold resume and GUI usage | `createBindingStore(options)` |
 | [`lib/admin.js`](../lib/admin.js) | Document layer: split/compose/validate, scan, read/save/create/duplicate/delete/restore, path safety, hashes | `documentHash`, `resolveSoulDirs`, `resolveGuiRoot`, `splitDocument`, `composeDocument`, `canonicalSkeleton`, `listDocuments`, `readDocument`, `saveDocument`, `saveDocumentSource`, `createDocument`, `duplicateDocument`, `deleteDocument`, `restoreDocument` |
 | [`lib/orchestrator.js`](../lib/orchestrator.js) | Orchestrator definition layer (with declaration-level route validation and an optional live-route validator), compact summary, `/orchestrate` command, session-scoped runtime | `ORCHESTRATE_COMMAND_NAME`, `splitOrchestrator`, `composeOrchestrator`, `canonicalOrchestratorSkeleton`, `orchestratorPathOf`, `readOrchestrator`, `saveOrchestrator`, `orchestratorRouteDiagnostics`, `orchestratorSummary`, `substituteTemplate`, `createOrchestratorRuntime`, `installOrchestratorCommand` |
@@ -317,7 +319,8 @@ Both `spawn_teammate` (Lead tool) and a user-invocable slash command enter throu
      cannot produce an unhandled rejection even for the explicit veto.
 
 **Creation fence.** `install()` is the serial `agent/created` listener. For a teammate it computes
-`teamMemberOf`, then `strict = Team mode enabled || the parent is a known soul teammate`. A strict
+`teamMemberOf`, then `strict = Team mode enabled || the parent is a known soul teammate || the
+root has active orchestrator mode`. A strict
 child must resolve a pending (by name or reserved child id) or durable plan; otherwise
 `applyTeammateSoul` throws `SoulPlanUnavailableError` and the listener failure vetoes publication.
 A non-strict child with no durable binding is an ordinary subagent and is skipped. A seeded host fork is
@@ -507,8 +510,11 @@ reports an invalid document as `valid: false` with `modelResolved: null` (never 
 while activation keeps its own fail-closed conflict error and rollback attempt (the rollback
 outcome is qualified in step 10 under **Enable**).
 
-**Enable.** `runtime.enable(agent)` calls
-`applyTo(agent, { capturePrevious: true, renameTitle: true })`:
+**Enable.** `runtime.enable(agent)` first reads the current Team selection and calls
+`agentTeams.setEnabled(lead, true, signal)` when it is off. A Team-write failure returns an error
+before any doctrine or queue work. It then calls
+`applyTo(agent, { capturePrevious: true, renameTitle: true })`. If the first activation fails after
+Team was changed on, the wrapper restores the prior Team boolean unless the mode was already active.
 
 1. Read the definition (`<dirname(bindingsFile)>/orchestrator.md`). When that workspace file is
    absent and `bundled` is enabled (the default), the packaged
@@ -526,13 +532,12 @@ outcome is qualified in step 10 under **Enable**).
    pair aliases); only genuinely unresolved names are skipped with a warning. A missing tool
    restriction service here aborts with no partial state; one name that cannot be restricted does
    not.
-4. Build prompt texts: substitute variables in each section. The persona text is
-   `orchestratorFixedIdentity(teamModeEnabled)` followed by the substituted editable identity (or
-   the fixed text alone when the section is empty), so the document can add boundaries but never
-   remove the runtime role. Because `spawn_teammate` is plugin-provided and hidden outside Team
-   mode, the fixed delegation sentence is a per-assembly function: it names `spawn_teammate` only
-   when Team mode is enabled and otherwise points at the stock `subagent`/`subagent_fork` path (or
-   reports the missing surface). The five non-identity sections become `orchestrator:plan`,
+4. Build prompt texts: substitute variables in each section. The persona text is the unconditional
+   `orchestratorFixedIdentity()` followed by the substituted editable identity (or the fixed text
+   alone when the section is empty), so the document can add boundaries but never remove the runtime
+   role. The fixed delegation sentence always names `spawn_teammate` and forbids
+   `subagent`/`subagent_fork`; there is no stock fallback in an active orchestrator. The five
+   non-identity sections become `orchestrator:plan`,
    `:delegation`, `:state`, `:verification`, `:recovery`; extra markdown becomes
    `orchestrator:extra`. Empty sections are skipped.
 5. Compute orders from the live prompt service: `TEAM_POLICY - 100`, `+10`, `+20`, `+30`, `+40`,
@@ -562,12 +567,16 @@ outcome is qualified in step 10 under **Enable**).
    model route and a previous capture exists, restore the previous model after the replacement is
    in place.
 11. Return `{ ok, path, name, model, tools, gateMode, maxRetries, planFirst, pauseOnFatal, title,
-   titleSkipped, titleSkippedReason }`.
+   titleSkipped, titleSkippedReason, teamEnabled, teamWasEnabled }`.
 
 **Disable.** Restore the captured previous model selection first, when one exists;
 `restoredModel` reports whether a selection was applied, and a model-restore failure answers with
-the error while the active bundle and its capture remain in place for an off retry. Then, when a
-prior title was captured and the current title is still exactly `orchestrator`, rename it back; a
+the error while the active bundle and its capture remain in place for an off retry. Then disable
+Agent Teams through `setEnabled(lead, false)`; a Team-write failure likewise keeps the live bundle
+and mode active for an off retry (`restoredTeam` reports the result). Team mode belongs to the
+orchestrator mode, so a pre-existing Team selection is not restored. A durable-on mode with no live
+bundle after a reload still sends this Team-off write. Then, when a prior title was captured and the
+current title is still exactly `orchestrator`, rename it back; a
 title the human changed is preserved and a restore failure is only a warning (`restoredTitle` is
 `true | false | null`). With no captured title — no prior title at enable, a reapply after a reload,
 or a profile without the `sessionTitle` service — there is nothing to restore, `restoredTitle` is
@@ -584,12 +593,15 @@ off retry can restore. The queue-failure handler maps those reports to the error
 must not treat a truthy return as an exact restore.
 
 **Reapply.** On plugin activation and on Lead creation, `reapplyIfActive(agent)` checks the session
-log; if on, it runs the same application path with `capturePrevious: false` and no title rename. It
-must never capture the route or title it just applied.
+log; if on, it enables Agent Teams (a failure is reported and logged), runs the same application path
+with `capturePrevious: false`, and performs no title rename. It must never capture the route or title
+it just applied.
 
 **Runtime state predicates.** `isActive(agent)` reports whether a bundle currently owns the scope;
-`lib/tools.js` uses it to add the orchestrator wording to the scoped soul policy. The base
-`subagent:identity` context names the Lead; the plugin does not modify the roster projection.
+`deps.isOrchestratorActive(agent)` combines it with durable mode-on, and `lib/tools.js` uses that
+predicate to keep the scoped soul policy, catalog, `spawn_teammate`/`list_agent_souls` gates, and
+stock-tool guard active while orchestrator mode owns delegation. The base `subagent:identity`
+context names the Lead; the plugin does not modify the roster projection.
 
 **Disposal.** `agent/disposed` drops that Agent's bundle without restoring a model (the Agent is
 gone). Plugin unload disposes every bundle and restores every captured model.
@@ -603,7 +615,7 @@ but its tail stays chained to the in-flight holder until that work settles: late
 queue behind the holder, and the map entry is removed only after the settled tail is still current.
 Unrelated commands never enter this lock.
 
-- trimmed `off|exit|stop|disable` → `runtime.disable`; `rawInput` empty → `runtime.enable`;
+- trimmed `off|exit|stop|disable` → `await runtime.disable` (restores model, disables Agent Teams, restores an eligible title, and disposes the bundle); `rawInput` empty → `runtime.enable` (enables Agent Teams first);
 - any other input → `runtime.enable`, then `agent.followup({ id, role: 'user', content:
   [{ type: 'text', text }], source: { kind: 'user' } })` queues the task as the next ordinary user
   turn. The message mirrors the `createUserMessage` shape because this package imports only Node
@@ -717,7 +729,7 @@ orchestrator mode is on, the Lead also gets the orchestrator sections.
 |---|---|---|---|---|
 | Deployment persona | system-prompt section | `deployment:persona-prefix` | deployment persona order | All agents |
 | Team policy | system-prompt section | `team:policy` (plugin scoped shadow) | `TEAM_POLICY` = 600 | Every Team member; base text preserved + soul-only rule |
-| Soul catalog | system-prompt section | `team:agent-souls` | `TEAM_POLICY + 20` = 620 | Team-enabled Lead only; text function, empty when no definitions |
+| Soul catalog | system-prompt section | `team:agent-souls` | `TEAM_POLICY + 20` = 620 | Lead only, available in Team or active orchestrator mode; text function, empty when no definitions |
 | Team identity | system-prompt context (base) | `subagent:identity` | `SUBAGENT_DELEGATION` | Every member; required by `tool-subagent-control` |
 | Orchestrator identity | persona-position system-prompt section | `deployment:persona-prefix` | deployment persona order | Lead, only while mode is on |
 | Orchestrator plan | system-prompt section | `orchestrator:plan` | `TEAM_POLICY - 100` = 500 | Lead, only while mode is on |
@@ -1095,8 +1107,8 @@ This plugin's patch only inserts `agent-soul-team`; it must not disable or repla
      `list_agent_souls`), then the built-in `/orchestrate` **first**, soul commands,
      `manage_agent_souls`, then `orchestrator.reapplyIfActive(agent)` (the built-in-first order is
      what prevents a soul named `orchestrate` from shadowing it on a fresh Lead);
-   - teammate: `applyTeammateSoul` (strict for Team-enabled roots/soul parents, optional for an
-     ordinary Team-off subagent), mark the Agent as a soul teammate, then `installSoulSurface`
+   - teammate: `applyTeammateSoul` (strict for Team-enabled roots, active-orchestrator roots, and
+     soul parents; optional for an ordinary Team-off subagent), mark the Agent as a soul teammate, then `installSoulSurface`
      with the policy/guard and no Lead tools.
    Each step is individually wrapped: a failure is logged and the remaining steps still run where
    possible. The disposer list is stored in the `installed` map only after installation.
@@ -1128,7 +1140,7 @@ the runtime is a process-wide object disposed by the plugin's member effect.
 |---|---|---|
 | Per-Agent `installSoulSurface` | scoped `team:policy` shadow, Lead catalog section, generic-tool guard, Lead-only `spawn_teammate`/`list_agent_souls` | One disposer unregisters everything in reverse order |
 | Per-Agent Soul apply | persona section at the deployment-persona order (via `agent.ctx.effect`), tool restriction, model selection | Both the Agent scope and the root installation record own disposers; plugin unload removes persona/restriction, while model selection has no automatic undo (the session survives) |
-| Per-Agent orchestrator bundle | persona section at the deployment-persona order, five doctrine sections, extra section, tool restriction, model selection | Bundle disposal removes sections/restriction. `/orchestrate off` restores the captured model and eligible Session title when present; runtime disposal restores only the captured model, not the title. Agent disposal drops the bundle without restoration |
+| Per-Agent orchestrator bundle | persona section at the deployment-persona order, five doctrine sections, extra section, tool restriction, model selection, Team-mode ownership | Bundle disposal removes sections/restriction. `/orchestrate off` restores the captured model, disables Agent Teams, restores an eligible Session title when present, then disposes the bundle; runtime disposal restores only the captured model, not the title. Agent disposal drops the bundle without restoration |
 | Per-command injection | the Lead's scoped command registrations | Disposes the injected child |
 | GUI route registration | eleven exact paths | Each route's `ctx.effect` disposes with the plugin |
 
@@ -1272,7 +1284,7 @@ reported. A disposable copy remains optional.
 node --check index.js
 for f in lib/*.js; do node --check "$f" || exit 1; done
 node --check client.js
-node --test smoke/
+node --test smoke/*.test.mjs
 node smoke/run-smoke.mjs
 ```
 
@@ -1314,10 +1326,12 @@ in `smoke/gui-fixes.test.mjs` (client artifact contracts and live route validati
 `smoke/storage-fixes.test.mjs` (binding/delete/rename/path semantics),
 `smoke/orchestrator-fixes.test.mjs` (handler-seam rollback and doctrine/context contracts), and
 `smoke/smoke-fixes.test.mjs` (isolated probes, canaries, and remediation reporting). Per-module
-counts live in [`../smoke/README.md`](../smoke/README.md). On 2026-11-13 `node --test smoke/`
-passed **110/110** (15 remediation, 16 bundled-editable with 222 assertions, 8 config-toggle with 129,
-10 gui-fixes with 176, 18 storage-fixes, 9 orchestrator-fixes with 97, 7 smoke-fixes with 72, 14
-windows-shell-alias, and 13 team-runtime cases). The direct-tree smoke run passed 58/58, the optional
+counts live in [`../smoke/README.md`](../smoke/README.md). On 2026-11-14 `node --test smoke/*.test.mjs`
+ran **124 tests**: the changed orchestrator-fixes and team-runtime modules passed **36/36**, while
+this Windows host reported only pre-existing symlink-privilege/GUI-poll environment failures in
+unrelated modules (9–10 depending on the run; 15 remediation, 16 bundled-editable, 8 config-toggle,
+10 gui-fixes, 18 storage-fixes, 19 orchestrator-fixes, 7 smoke-fixes, 14 windows-shell-alias, and 17
+team-runtime cases). The direct-tree smoke run passed 62/62, the optional
 inverted-composition probe `smoke/run-windows-parity.mjs` passed **14/14**, and the candidate
 remediation runtime passed **179/179** with 2/2 suites on a fresh disposable run root.
 

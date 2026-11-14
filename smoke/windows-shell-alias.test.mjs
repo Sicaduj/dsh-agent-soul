@@ -391,7 +391,7 @@ function writeDoctrine(root, { tools, marker }) {
 function orchestratorHarness({ root, live }) {
   const { warnings, logger } = warningSink()
   const known = new Set(live)
-  const state = { restrictions: [], sections: [], model: { provider: 'test-provider', model: 'base-model' }, events: [], queued: [] }
+  const state = { restrictions: [], sections: [], model: { provider: 'test-provider', model: 'base-model' }, events: [], queued: [], teamEnabled: false }
   const agent = {
     id: 'fake-lead',
     session: {
@@ -438,6 +438,8 @@ function orchestratorHarness({ root, live }) {
     rootOf: () => root,
     logger,
     handlerTails: new WeakMap(),
+    teamModeOf: () => state.teamEnabled,
+    async setTeamMode(_agent, enabled) { state.teamEnabled = enabled === true },
   }
   const runtime = createOrchestratorRuntime(deps)
   let definition

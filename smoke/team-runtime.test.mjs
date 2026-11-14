@@ -11,7 +11,7 @@ import { readFile } from 'node:fs/promises'
 
 import { applyTeammateSoul, createPendingSpawns, SoulPlanUnavailableError } from '../lib/apply.js'
 import { nextTeammateName, spawnTeamMember } from '../lib/spawn.js'
-import { countTeamMembers, directChildNames, listTeamMembers, teamMemberOf } from '../lib/team.js'
+import { countTeamMembers, directChildNames, listTeamMembers, setTeamModeEnabled, teamMemberOf, teamModeEnabled } from '../lib/team.js'
 import { inspectBaseTeamRow, restoreBaseTeamRow } from '../lib/team-row.js'
 import { ALWAYS_KEPT_TOOL_NAMES } from '../lib/team-tools.js'
 import { installSoulSurface, SOUL_ONLY_DENIAL, soulPolicyText } from '../lib/tools.js'
@@ -122,7 +122,36 @@ test('the soul policy shadows the base policy and keeps the task guidance', () =
   assert.match(enabled, /shared task board|Shared-task workflow/i)
   assert.doesNotMatch(enabled, /Use the names returned by subagent/)
   assert.equal(soulPolicyText({ role: 'lead' }, false), '')
+  assert.equal(soulPolicyText({ role: 'lead' }, false, false), '')
+  assert.match(soulPolicyText({ role: 'lead' }, false, true), /Delegation is soul-only/)
   assert.match(soulPolicyText({ role: 'teammate' }, false), /defined Agent Soul teammate/)
+})
+
+test('Team mode helpers read and persist the selection and fail loudly without the service', async () => {
+  let enabled = false
+  const calls = []
+  const root = { id: 'root-1', session: { header: {} } }
+  const ctx = {
+    get(name) {
+      if (name === 'subagents') return { rootOf: () => root, namesOf: () => ({ self: 'lead' }) }
+      if (name === 'agentTeams') {
+        return {
+          isEnabled: () => enabled,
+          async setEnabled(agent, value) { calls.push([agent, value]); enabled = value },
+        }
+      }
+      return undefined
+    },
+  }
+  assert.equal(teamModeEnabled(ctx, root), false)
+  await setTeamModeEnabled(ctx, root, true, undefined)
+  assert.deepEqual(calls, [[root, true]])
+  assert.equal(teamModeEnabled(ctx, root), true)
+
+  await assert.rejects(
+    setTeamModeEnabled({ get: () => undefined }, root, true),
+    /Agent Teams service is unavailable/,
+  )
 })
 
 test('installSoulSurface registers the shadow policy, Lead catalog, guard, and only the two plugin tools', () => {
@@ -178,6 +207,41 @@ test('installSoulSurface registers the shadow policy, Lead catalog, guard, and o
   assert.equal(disabledRegistrations[0].options.when({ agent: disabled.root }), false)
   assert.equal(disabledRegistrations[1].options.when({ agent: disabled.root }), false)
   disabledDispose()
+})
+
+test('an active orchestrator keeps the Soul surface and stock guard when Team is off', () => {
+  const { ctx, root } = teamContext({ enabled: false })
+  const sections = []
+  const registrations = []
+  const guards = []
+  const scope = {
+    systemPrompt: {
+      section(registration) { sections.push(registration); return () => {} },
+      getSectionOrder() { return 10 },
+    },
+    tools: {
+      register(definition, options) { registrations.push({ definition, options }); return () => {} },
+      guard(callback) { guards.push(callback); return () => {} },
+    },
+  }
+  const deps = {
+    ctx,
+    logger: { warn() {} },
+    rootOf: () => '/ws',
+    isSoulTeammate: () => false,
+    isOrchestratorActive: agent => agent === root,
+    catalog: { promptText: () => 'CATALOG' },
+  }
+  const member = { role: 'lead', name: 'lead', enabled: false, root }
+  const dispose = installSoulSurface(root, scope, { ctx, config: {}, catalog: deps.catalog, deps, member })
+  assert.match(sections[0].text(), /Delegation is soul-only/)
+  assert.equal(sections[1].text(), 'CATALOG')
+  assert.deepEqual(registrations.map(entry => entry.definition.name).sort(), ['list_agent_souls', 'spawn_teammate'])
+  assert.equal(registrations[0].options.when({ agent: root }), true)
+  assert.equal(registrations[1].options.when({ agent: root }), true)
+  assert.equal(guards[0]({ name: 'subagent' }), SOUL_ONLY_DENIAL)
+  assert.equal(guards[0]({ name: 'subagent_fork' }), SOUL_ONLY_DENIAL)
+  dispose()
 })
 
 test('spawnTeamMember reserves a child id, routes the model, and records the pending plan by id', async () => {
@@ -256,6 +320,29 @@ test('spawnTeamMember rejects Team-off, non-Lead, and activation failures withou
   assert.equal(failingDeps.pending.size, 0)
 })
 
+test('spawnTeamMember allows a Lead spawn when orchestrator mode is active and Team is off', async () => {
+  const { ctx, root, calls } = teamContext({ enabled: false })
+  const pending = createPendingSpawns()
+  const soul = { name: 'probe', description: 'probe', persona: 'PERSONA', tools: null, context: 'fresh', sourceLabel: 'workspace' }
+  const catalog = { refresh: async () => ({ definitions: [soul], byName: new Map([[soul.name, soul]]), diagnostics: [], dirs: [] }) }
+  const deps = {
+    ctx,
+    config: { freshProvider: 'spawn', forkProvider: 'fork', defaultContext: 'fresh' },
+    rootOf: () => '/ws',
+    logger: { warn() {} },
+    catalog,
+    pending,
+    pendingKey: (member, name) => `${member?.id ?? member}\u0000${name}`,
+    bindings: { set: async () => {}, get: async () => undefined },
+    resolveModel: async () => undefined,
+    isOrchestratorActive: agent => agent === root,
+  }
+  const result = await spawnTeamMember(deps, root, { name: 'probe-1', description: 'probe', prompt: 'do it', agentType: 'probe' })
+  assert.equal(calls.length, 1)
+  assert.equal(result.soul.name, 'probe')
+  assert.equal(pending.size, 0)
+})
+
 test('applyTeammateSoul keeps the base Team tools in a strict matrix and can skip an ordinary subagent', async () => {
   const state = { restrictions: [], sections: [], warnings: [] }
   const live = ['read', 'send_message', 'list_agents', 'subagent', 'team_task_create']
@@ -294,6 +381,11 @@ test('applyTeammateSoul keeps the base Team tools in a strict matrix and can ski
   const skipped = await applyTeammateSoul(agent, membership, deps, { optional: true })
   assert.equal(skipped.skipped, true)
   await assert.rejects(applyTeammateSoul(agent, membership, deps), SoulPlanUnavailableError)
+})
+
+test('the child creation fence treats active orchestrator mode as strict', async () => {
+  const source = await readFile(new URL('../index.js', import.meta.url), 'utf8')
+  assert.match(source, /deps\.isOrchestratorActive\?\.\(member\.root\) === true/)
 })
 
 test('the GUI child injects connection.authentication for the 0.2.2 admit contract', async () => {

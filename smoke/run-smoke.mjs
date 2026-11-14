@@ -187,11 +187,11 @@ async function writeProfile(home) {
     '  config:',
     `    root: '${join(home, 'sessions')}'`,
     '    compression: none',
-    '# The scripted smoke run needs Team mode on before the first Lead step.',
+    '# Leave Team mode off: the scripted bootstrap must prove /orchestrate enables it.',
     '- id: agent-team',
     '  config:',
     '    maxTasks: 256',
-    '    defaultEnabled: true',
+    '    defaultEnabled: false',
     '- insert:',
     '    - id: soul-smoke-llm',
     `      name: '${fixtureUrl}'`,
@@ -602,8 +602,8 @@ async function main() {
       baseRowWindow,
     )
     check(
-      'the scripted profile enables Team mode by default',
-      /- id: agent-team[\s\S]{0,200}?defaultEnabled: true/.test(dump.stdout),
+      'the scripted profile starts with Team mode off',
+      /- id: agent-team[\s\S]{0,200}?defaultEnabled: false/.test(dump.stdout),
       dump.stdout.slice(0, 400),
     )
     check('fresh profile mounts the soul-aware Team row', /^- id: agent-soul-team$/m.test(dump.stdout))
@@ -644,11 +644,16 @@ async function main() {
     check('Lead final output contains SOUL_SMOKE_OK', stdout.includes('SOUL_SMOKE_OK'), output.slice(0, 300))
 
     const observations = await readObservations(observationsPath)
-    const lead = observations.find(entry => entry.kind === 'lead')
+    const bootstrap = observations.find(entry => entry.kind === 'orchestrate-bootstrap')
+    check('the scripted bootstrap found /orchestrate', bootstrap?.commandFound === true)
+    check('the scripted bootstrap activated /orchestrate', bootstrap?.result?.kind === 'success', JSON.stringify(bootstrap ?? null))
+    check('the scripted bootstrap enabled Agent Teams', bootstrap?.teamEnabled === true)
+    const lead = observations.findLast(entry => entry.kind === 'lead')
     const teammate = observations.find(entry => entry.kind === 'teammate')
     check('Lead prompt carries the soul catalog', lead?.catalogInPrompt === true)
     check('Lead prompt carries the soul-only policy', lead?.soulPolicyInPrompt === true)
     check('base Team policy generic-subagent advice is shadowed', lead?.baseSubagentAdviceInPrompt === false)
+    check('the active orchestrator guard denies stock subagent delegation', lead?.soulOnlyDenialObserved === true)
     check('spawn_teammate schema exposes agent_type', lead?.spawnHasAgentType === true)
     check('list_agent_souls is registered', lead?.hasListSouls === true)
     const leadTools = Array.isArray(lead?.toolNames) ? lead.toolNames : []

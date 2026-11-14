@@ -34,7 +34,7 @@ import { resolveGuiRoot } from './lib/admin.js'
 import { createCatalog } from './lib/soul.js'
 import { applyTeammateSoul, createAdmissionDiagnostics, createPendingSpawns, SoulPlanUnavailableError } from './lib/apply.js'
 import { assertBindingFileSpec, createBindingStore } from './lib/bindings.js'
-import { parentAgentOf, teamMemberOf } from './lib/team.js'
+import { parentAgentOf, setTeamModeEnabled, teamMemberOf, teamModeEnabled } from './lib/team.js'
 import { inspectBaseTeamRow } from './lib/team-row.js'
 import { createSoulCommandSync } from './lib/commands.js'
 import { installGui } from './lib/gui-host.js'
@@ -250,6 +250,10 @@ export function createDeps(ctx, config, catalog, bindings, pending, logger) {
     markSoul: agent => soulAgents.add(agent),
     unmarkSoul: agent => soulAgents.delete(agent),
     isSoulTeammate: agent => soulAgents.has(agent),
+    teamModeOf: agent => teamModeEnabled(ctx, agent),
+    setTeamMode(agent, enabled, signal) {
+      return setTeamModeEnabled(ctx, agent, enabled, signal)
+    },
     async resolveModel(raw, options = {}) {
       // Providers and their catalogs are live registration surfaces. Resolve
       // for every request instead of retaining a route across topology changes.
@@ -301,6 +305,16 @@ export async function apply(ctx, rawConfig) {
   // The soul policy and GUI read this to describe the orchestrator role while
   // the mode is active.
   deps.orchestrator = orchestrator
+  // Delegation gates and the creation fence need one durable-or-live answer.
+  // The durable read survives an incomplete reapply; the live bundle covers the
+  // step that follows a successful enable before any command settles.
+  deps.isOrchestratorActive = (agent) => {
+    try {
+      return orchestrator.isActive(agent) === true || orchestrator.modeOf(agent) === 'on'
+    } catch {
+      return false
+    }
+  }
   // Soul files change while the Host runs (GUI, agent tool, editor). The
   // reconciler keeps each Live Lead's slash commands in step with the catalog;
   // mutations call `deps.syncSouls()` after their scan.
@@ -501,6 +515,7 @@ export async function apply(ctx, rawConfig) {
         // delegation; only a durable Soul binding opts it into this surface.
         const parent = parentAgentOf(ctx, agent)
         strict = member.enabled === true || member.detached === true || deps.isSoulTeammate(parent)
+          || deps.isOrchestratorActive?.(member.root) === true
         const applied = await applyTeammateSoul(agent, member, deps, { optional: !strict })
         if (applied.skipped === true) return
         deps.markSoul(agent)

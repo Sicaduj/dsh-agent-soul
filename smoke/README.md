@@ -42,7 +42,7 @@ cd "$SMOKE_COPY/plugin"
 node smoke/run-smoke.mjs
 ```
 
-The harness runs **58 checks**. It passed **58/58** directly from this working tree on 2026-11-13
+The harness runs **62 checks**. It passed **62/62** directly from this working tree on 2026-11-14
 (macOS arm64, Node 26.13.0) — a dated point-in-time result, not a platform matrix. It asserts,
 against the real Cordis runtime and real temporary directories rather than mocks:
 
@@ -57,12 +57,15 @@ against the real Cordis runtime and real temporary directories rather than mocks
   `<workspace>/.dsh/agents`. The real packaged file is only snapshotted around the probes: an
   unchanged digest and a preserved concurrent external edit are both honest outcomes;
 - the composed fresh profile (`--dump-config`) exits cleanly, keeps the shipped
-  `tool-agent-team` row enabled through this bundle's own patch, mounts `agent-soul-team`, and
-  lists exactly one `tool-agent-team` row — the base row owns the task board and Team policy;
+  `tool-agent-team` row enabled through this bundle's own patch, mounts `agent-soul-team`, starts with
+  `defaultEnabled: false`, and lists exactly one `tool-agent-team` row — the base row owns the task
+  board and Team policy;
 - the plugin installs its soul surface for the Lead: the Team tools with an `agent_type` field,
-  `list_agent_souls`, and one slash command per user-invocable soul. `/orchestrate` registration is
-  an explicit pass assertion, so its absence now fails the run; the mode itself is not activated
-  end-to-end;
+  `list_agent_souls`, and one slash command per user-invocable soul. A test-only bootstrap invokes
+  the real `/orchestrate` command during Lead creation; the runner asserts the command succeeded,
+  the Team selection became true, the first model step may need one wait step for the tool set to settle,
+  and the Lead prompt/catalog then carry the Soul-only surface. A stock `subagent` call is attempted
+  and must be denied, proving the guard end to end;
 - the Lead prompt carries the soul catalog, `spawn_teammate` exposes `agent_type`, and
   `list_agent_souls` is registered;
 - a `spawn_teammate({ agent_type })` teammate gets the soul persona (deployment persona shadowed)
@@ -70,7 +73,7 @@ against the real Cordis runtime and real temporary directories rather than mocks
 - its inherited tool set is exactly the soul's `tools` list, with the Team tools still available;
 - its model is routed (`deepseek-v4-pro` recorded as the child Session's `model/selection`);
 - a `user-invocable` soul registers a slash command that executes and spawns a second
-  correctly-configured teammate. That soul declares the shell spelling this POSIX host does not
+  correctly-configured teammate. That soul declares the shell spelling this host does not
   register (`tools: ["pwsh", "read"]`): the child inherits the live `bash` tool, never advertises
   `pwsh`, and its durable binding keeps the declared `["pwsh", "read"]` list;
 - the durable binding document is written at the portable
@@ -94,11 +97,13 @@ The keyless `node:test` suites use temporary directories, real module imports, a
 objects; they never write the real package or workspace state. Run all of them with:
 
 ```sh
-node --test smoke/
+node --test smoke/*.test.mjs
 ```
 
-On 2026-11-13 that command ran **110/110 tests** across ten `node:test` modules (the remediation
-pair shares one table row):
+On 2026-11-14 that command ran **124 tests** across ten `node:test` modules (the remediation pair
+shares one table row). The changed Team/orchestrator modules are **36/36 green**; this Windows host
+reported only pre-existing symlink-privilege/GUI-poll environment failures in unrelated modules
+(9–10 depending on the run), none in the changed suites:
 
 | Suite | Cases | Coverage |
 |---|---:|---|
@@ -107,10 +112,10 @@ pair shares one table row):
 | `smoke/config-toggle.test.mjs` | 8 (129 assertions) | the fifteen-endpoint/eleven-path route pair, the config GET/POST contract and refusal codes, config-editor persistence with every other row key preserved, the connection trust fence, and static client-artifact registration/locale/source assertions |
 | `smoke/gui-fixes.test.mjs` | 10 (176 assertions) | client contracts for search wording (all eight dictionaries), raw draft persistence/restore, shared toggle state and clean-view invalidation, poll terminal states (never false Applied), Session-root/dirty-Orchestrator guard, overview shape validation, and live-empty catalog tool rejection through the real Host routes |
 | `smoke/storage-fixes.test.mjs` | 18 | transactional refusal of corrupt/unsupported/malformed binding documents with bytes preserved; typed missing/unreadable/corrupt/unsupported/unsafe diagnostics; revalidation after an earlier healthy read (including `get` fail-closed on a partial malformed document); the unpersisted-pending-mutation exception; invalid-snapshot refusal (`E_BINDING_INVALID_RECORD`); repair visibility; trash-failure source preservation; packaged rename collision vs local shadowing; the relative/absolute `bindingsFile` rule including symlinked `.dsh`/`.dsh/agent-soul`, dangling/document symlinks, and trash/restore containment; and the live-catalog missing-default warning |
-| `smoke/orchestrator-fixes.test.mjs` | 9 (97 assertions) | handler-seam fault injection for first-enable and already-active queue rollback (exact/partial/fallback/inactive/unknown reports), the corrected bundled doctrine (conditional route, supported task states, strict/budget-scoped correction, quote fix), and the `spawn_teammate` context resolution contract |
+| `smoke/orchestrator-fixes.test.mjs` | 19 | handler-seam fault injection for first-enable and already-active queue rollback (exact/partial/fallback/inactive/unknown reports), automatic Agent Teams enable/disable with rollback and reapply, unconditional Soul-only doctrine, Team-enable failure aborting activation, and the `spawn_teammate` context resolution contract |
 | `smoke/smoke-fixes.test.mjs` | 7 (72 assertions) | isolated packaged-write probes and concurrent-edit preservation, seeded environment canaries and explicit `/orchestrate` command assertion, canonicalized symlink run roots, atomic/tolerant readiness barriers, and honest incomplete/unexecuted-suite reporting |
 | `smoke/windows-shell-alias.test.mjs` | 14 | the portable `bash` ↔ `pwsh` shell name through the real modules: exact-match preference and counterpart resolution in `lib/tool-names.js`, request order and dedupe in `resolveRestrictableNames`, spawn validation accepting a counterpart, the apply matrix restricting to the live spelling, the orchestrator enable path resolving instead of skipping, and the GUI catalog/validator advertising `portableAliasOf` and saving either spelling |
-| `smoke/team-runtime.test.mjs` | 13 | DSH 0.2.2 adapter contracts: root/teammate mapping and parent-chain fallback, descendant listing/counts/direct names, name collision and live fallback, soul-policy shadow, `installSoulSurface` gating and guard, reserved child-id activation/model routing/pending release, Team-off and activation-failure refusals, strict/optional soul application with always-kept Team tools, and base-row inspect/restore |
+| `smoke/team-runtime.test.mjs` | 17 | DSH 0.2.2 adapter contracts: root/teammate mapping and parent-chain fallback, descendant listing/counts/direct names, name collision and live fallback, Team-mode persistence helpers, soul-policy shadow, `installSoulSurface` gating and guard in Team and orchestrator modes, reserved child-id activation/model routing/pending release, Team-off and activation-failure refusals, active-orchestrator spawn with Team off, strict/optional soul application with always-kept Team tools, the creation fence, and base-row inspect/restore |
 
 These suites are static/source-contract and route-level evidence where noted; none renders the
 browser or executes real UI interactions. Assertion tallies can be printed with
@@ -189,13 +194,16 @@ pre-0.2.2 checkout only with its matching DSH version, outside this port's verif
 
 ## Current aggregate results
 
-On 2026-11-13 the focused suites passed **110/110**:
+On 2026-11-14 the focused suites ran **124 tests**: the changed Team/orchestrator modules passed
+**36/36**, while this Windows host reported only pre-existing symlink-privilege/GUI-poll environment
+failures in unrelated suites (9–10 depending on the run):
 
 ```sh
-node --test smoke/
+node --test smoke/*.test.mjs
 ```
 
-The direct-tree smoke harness passed **58/58**, the optional
+The direct-tree smoke harness passed **62/62** from Team mode off, with the real `/orchestrate`
+command enabling Team mode before the first Lead step. The optional
 `node smoke/run-windows-parity.mjs` probe passed **14/14**, and the candidate remediation runtime
 passed **179/179** with **2/2 suites** on a fresh disposable root. These are point-in-time results
 for the current macOS arm64 / Node 26.13.0 environment, not claims for other platforms or Node

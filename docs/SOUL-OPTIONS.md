@@ -170,8 +170,8 @@ While the mode is on, the **Identity & Boundaries** section is registered at the
 deployment-persona position (after a configured prefix line), the other five sections become prompt
 sections around the Team policy, the declared model is selected
 (restored on `/orchestrate off` when it was captured in the same process), and the tools list
-becomes the Lead's inherited-tool matrix. The built-in team policy and soul catalog stay in
-place.
+becomes the Lead's inherited-tool matrix. Activation enables Agent Teams for the mode lifetime;
+the built-in team policy, Soul-only delegation guard, and soul catalog stay in place.
 
 **Route values are validated before any save.** The editor (form and raw) and the Lead's
 `save_orchestrator` action refuse a route that contradicts itself — a full `provider/model` plus a
@@ -341,7 +341,7 @@ These summarize a file; they are not editable.
 | Command prefix / dirs / bindings config changed | After a Host/bundle reload (the page shows the active values read-only). `bundled` follows the same rule; changing it changes whether the packaged catalog and doctrine apply in every workspace. |
 | Orchestrator definition saved | Next `/orchestrate` enable or re-apply; not an already-running mode. A refused save writes nothing and leaves the previous definition in effect. |
 | `/orchestrate` | A successful enable answers with the **ORCHESTRATOR MODE ACTIVE** block. A failed enable answers with the error. A failure before any state is touched leaves the mode unchanged; ordinary replacement failures attempt rollback and report `previousStateRestored`. Queue-failure recovery is best-effort and reports the observed live state (see the queue-failure row below). A pending enable counts as on in the normal durable fold, while `settledOnly` ignores it; if that first run later errors, the durable read is off. A successful enable renames the Session to `orchestrator` only when the profile provides a session-title service and the Session has a prior title to restore. Otherwise the block reports the title as unchanged, with the reason (`session-title service unavailable` or `no prior Session title to restore`). |
-| `/orchestrate off` | The captured Lead model is restored first when it was captured in the same process (a restore failure leaves the mode active for an off retry), then the captured Session title is restored only while it is still exactly `orchestrator`, and then the doctrine sections and tool restriction are removed. After a Host reload, with no prior title, or when the profile has no session-title service, there is no captured title to restore. |
+| `/orchestrate off` | The captured Lead model is restored first when it was captured in the same process (a restore failure leaves the mode active for an off retry), then Agent Teams is disabled (a failure also keeps the mode active for an off retry), then the captured Session title is restored only while it is still exactly `orchestrator`, and finally the doctrine sections and tool restriction are removed. After a Host reload, with no prior title, or when the profile has no session-title service, there is no captured title to restore; Team mode is still disabled by an active off. A Team selection that existed before the mode started is not restored; orchestrator mode owns that setting. |
 | `/orchestrate <task>` queue failure | A first enable is reverted when possible; a failed model restore stays live and reports `active=true, modelRestored=false` with the durable log folding off and `/orchestrate off` as the retry. An already-active mode reports an exact restore, a previous doctrine on the new route, an explicit fallback, an inactive result, or an unconfirmed result. These paths are best-effort and exercised with an in-memory Agent double, not full real-runtime integration. Retry `/orchestrate off`, inspect the Host log, and verify the effective state before continuing. |
 
 For validation codes and their fixes see

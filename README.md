@@ -165,7 +165,7 @@ refers to those merged feature changes, not to subsequent documentation edits. O
 0.3.0-or-earlier installation, the packaged souls and `defaults/orchestrator.md` are always
 read-only and those controls do not exist — skip the `bundledEditable` paragraphs in this README.
 
-**Working-tree scope (0.5.0).** This README documents the working tree whose manifest is `0.5.0`:
+**Working-tree scope (0.6.0).** This README documents the working tree whose manifest is `0.6.0`:
 the DSH `0.2.2-rc.3` Agent Teams port. The plugin is now a soul-aware layer over the shipped
 subagent-based Team tools rather than a replacement for the shipped Team row.
 

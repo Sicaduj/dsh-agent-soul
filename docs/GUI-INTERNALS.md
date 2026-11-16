@@ -1104,7 +1104,10 @@ canonical heading, content after an explicit `<!-- orchestrator:extra -->` marke
 `#`/`##` heading (with the lines that follow it, until a canonical heading resumes the sections)
 are preserved as extra markdown. The composer writes extras after the canonical sections, so such
 content is never lost but its placement can change on the next read; use `###` or deeper for
-sub-headings that must stay inside a canonical section. Template variables substituted at apply time:
+sub-headings that must stay inside a canonical section. The packaged doctrine uses this for
+`### Run work log` in **State Tracking**, so the GUI stores those lines in that section's body and
+shows them in the State Tracking field, not as a seventh section. Template variables substituted at
+apply time:
 `{{maxRetries}}`, `{{gateMode}}`, `{{planFirst}}`, `{{pauseOnFatal}}`, `{{catalog}}` (the Lead's
 soul catalog text; unknown variables stay literal).
 

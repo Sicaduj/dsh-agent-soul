@@ -91,6 +91,12 @@ until you opt it into a slash command.
 | **Adversarial red-team verifier** | Independent adversarial review and verification | [`adversarial-red-team-verifier.md`](agents/adversarial-red-team-verifier.md) |
 | **Scribe** | Documentation, summaries, and clear written handoffs | [`scribe.md`](agents/scribe.md) |
 
+Four of the five souls (`generalist`, `researcher`, `software-engineer`, `scribe`) carry a shared
+work-log paragraph: when the Lead supplies a `worklog.md` path, read it before starting, after
+context loss or handoff, and on a material update — read-only, with discrepancies reported to the
+Lead. `adversarial-red-team-verifier` deliberately omits it, because independent review must not
+read the producer's log. See [Run work log](#run-work-log).
+
 <details>
 <summary><strong>Upgrading from an earlier release?</strong> Expand for 0.1–0.6 migration and compatibility notes.</summary>
 
@@ -287,6 +293,8 @@ dsh-agent-soul/                  ← the package (can live anywhere; no fixed wo
    ├─ bindings.json              ← durable soul bindings for cold resume (plugin-owned)
    ├─ orchestrator.md            ← optional local Lead doctrine (overrides defaults/orchestrator.md)
    ├─ preferences.json           ← default-Soul selection (created on first change; plugin-owned)
+   ├─ worklogs/<run-id>/         ← optional Lead-authored run log named by the bundled doctrine
+   │  └─ worklog.md              · written by the model when a delegated run needs it; not plugin-created
    └─ trash/                     ← deleted files moved by a successful trash move; a failed move leaves the source in place
 ```
 
@@ -978,10 +986,10 @@ error or exhausted retries, stop and ask the human.
 
 The bundled doctrine is a valid starting point: it states that a declared `model`/`provider` route
 is applied and that the shipped default (which declares none) inherits the Lead's selection; its
-State Tracking section lists only the task board's `pending`, `in_progress`, `completed`, and
-`deleted` statuses; and its strict-gate correction loop is scoped to `strict` gating and the
-configured retry budget, with `advisory` and `off` reporting rather than blocking. These are prompt
-instructions, not mechanical enforcement.
+State Tracking section introduces no board status beyond `pending`, `in_progress`, `completed`, and
+`deleted`, and it defines the run work log described below; its strict-gate correction loop is scoped
+to `strict` gating and the configured retry budget, with `advisory` and `off` reporting rather than
+blocking. These are prompt instructions, not mechanical enforcement.
 
 ### Orchestrator frontmatter
 
@@ -1033,9 +1041,59 @@ the Lead; the variables are substituted at apply time.
 | **Identity & Boundaries** | The Lead's role, authority, and what it must not do itself. It is applied at the deployment-persona position, after a configured prefix line, so be explicit about delegation and final ownership. |
 | **Plan Generation** | How to decompose a goal, what a complete plan contains, when to publish it, and when to revise it. Use `{{planFirst}}` in the prose if the flag should alter the instruction. |
 | **Delegation & Context Minimization** | How to match work to souls/tools, what context to pass, what to withhold, and how to use `{{catalog}}`. Prefer self-contained task messages. |
-| **State Tracking** | How to use the shared task board: statuses, revisions, blockers, write scopes, and the compact result buffer. |
+| **State Tracking** | How to use the shared task board: statuses, revisions, blockers, write scopes, and the compact result buffer. For work spanning turns or a handoff, also the Lead's per-run `worklog.md`: where it lives, what one snapshot records, and how workers read it. |
 | **Quality Verification** | The gates a sub-task must pass before advancing; what evidence counts; what to do when a gate fails. Reference `{{gateMode}}`. |
 | **Exception & Recovery** | Retry policy, fatal-error handling, when to stop and ask the human. Reference `{{maxRetries}}` and `{{pauseOnFatal}}`. |
+
+### Run work log
+
+Bundled doctrine only: the plugin has no work-log feature, and these are instructions to the Lead. The
+section appears as a `###` sub-heading inside **State Tracking**; the generated skeleton and the
+example definition above do not include it.
+
+- **When.** The Lead creates a log before dispatching delegated implementation, or when a handoff or
+  work across turns is expected. It keeps one current snapshot short enough to reread in a single
+  pass, refreshes it when the run's state changes, replaces the file atomically when supported, and
+  verifies the saved checkpoint before relying on it.
+- **Where.** `<workspace>/.dsh/agent-soul/worklogs/<run-id>/worklog.md`, used when the resolved
+  directory stays inside the authorized workspace, is writable, and is **excluded from project
+  changes**. The doctrine allows the same filename in another authorized, persistent location that
+  is recoverable from a Lead checkpoint, or the board's text fields when no suitable file location
+  exists. This repository ignores `.dsh/agent-soul/`; check the target workspace's own ignore rules
+  before writing, or the log becomes an untracked change. The path is a fixed convention, not derived
+  from `bindingsFile`, so a custom state anchor does not move it.
+- **What it holds.** One snapshot, refreshed in place rather than appended to:
+
+  ```text
+  Run: <run ID and Lead plan item>
+  Objective: <original goal>
+  Current acceptance: <authorized scope, constraints, and acceptance criteria>
+  Latest user direction: <instruction or reference, affected items, and practical effect>
+  Decisions: <choices still in force, with board or evidence references>
+  Resume from: <next action, owner, and prerequisite or candidate reference>
+  ```
+
+- **Who reads it.** Every assignment, including reassignment and handoff, carries the verified
+  absolute path and the relevant item IDs. Workers read it before starting, after context loss or
+  handoff, and when the Lead reports a material update. The Lead is the sole writer; workers treat it
+  as read-only and report discrepancies through their Team task or the Lead.
+- **Steering.** When user direction changes the work, the Lead records its effect in the log or board
+  checkpoint, updates affected board items at their current revisions, and messages each affected
+  owner with the item ID, change, and next action. A board update alone does not notify a teammate.
+- **Recovery.** After context loss, handoff, or restart, the Lead finds the active run through the
+  board, confirms the log belongs to it, reconciles both against the live roster and candidate
+  artifacts, and resolves uncertain dispatches before repeating them. If the log is missing or
+  unreadable, it reconstructs from the board, user direction, and verified artifacts.
+- **Who never sees it.** Independent review excludes the log, its path, and any copy. The reviewer
+  gets the neutral packet (requirements, evidence, known limitations), so the producer's notes cannot
+  steer the verdict.
+- **Close-out.** On final acceptance or confirmed cancellation the Lead persists the disposition,
+  candidate identity, evidence, and unresolved items to the board or durable deliverables, then
+  deletes only that run's file. Failed cleanup is reported and retried only after the file is
+  confirmed to belong to the closed run.
+
+The plugin does not create, read, watch, serve, or delete this file, and the GUI has no work-log
+view. Access depends on each teammate's declared tools and the live runtime's permissions.
 
 ### Template variables
 
@@ -1157,7 +1215,10 @@ list also hides them from that teammate's inherited tool set. The guard follows 
 registry, so a provider that mounts either tool after the teammate was prepared is denied too.
 There is no intentional no-Soul spawn path: a new or
 cold-resumed roster teammate must resolve a pending spawn plan or a durable binding, and admission
-is rejected (creation vetoed) when neither exists or the binding cannot be read.
+is rejected (creation vetoed) when neither exists or the binding cannot be read. Four bundled souls
+also tell the teammate to read the Lead's `worklog.md` when an assignment names it (see
+[Run work log](#run-work-log)); the plugin registers only the soul body, so whether the file can be
+read still depends on that soul's tools and the runtime's permissions.
 
 The plugin's `agent/created` fence backs those layers: any child created beneath a Team member that
 does not resolve as a roster teammate (and is not a seeded host fork) is vetoed before it can run.
@@ -1305,6 +1366,7 @@ against each workspace root.
 | **Plugin activation** | A pre-existing live teammate with no pending or durable Soul plan is skipped with a warning and gets no soul surface; its creation already happened, so it cannot be vetoed. The warning carries the Soul-specific reason, and the refusal is also recorded for `list_agent_souls` diagnostics. New teammates and cold resumes are vetoed in `agent/created` instead. |
 | **Member installation failure / host safety** | Only plan resolution (`SoulPlanUnavailableError`) vetoes creation. Agent disposal, creation cancellation, plugin teardown, and unexpected post-plan apply failures are logged skips after every partial registration (soul surface included) is unwound. The shared installation task is internally observed, so an abandoned caller cannot turn a failure into a process-fatal unhandled rejection. A skipped teammate can be re-spawned to repair it. |
 | **Default Soul** | Persisted in `<dirname(bindingsFile)>/preferences.json`. A missing document means no explicit selection (the live catalog's `generalist`, normally bundled, applies when present); a stale selection, or a corrupt/malformed/unsupported document, invalidates the default and fails the next default spawn with the reason. A document (or state directory) that cannot be read at all also fails the spawn with its path. Explicit `agent_type` bypasses the preference document. |
+| **Run work log** | Doctrine-level and Lead-owned; the plugin does not create, read, watch, serve, or delete it. The default path is `<workspace>/.dsh/agent-soul/worklogs/<run-id>/worklog.md`. It survives a reload only because it is an ordinary file, and it closes with the run: final acceptance or confirmed cancellation persists the disposition and removes that run's file. A workspace that does not ignore `.dsh/agent-soul/` shows it as an untracked change, which is why the doctrine conditions that path on the directory being excluded from project changes. |
 | **Orchestrator title** | The Session title is durable in the Session log (`session/title`). Enable renames it to `orchestrator` only when the session-title service is available and a prior title exists to restore; off restores the captured title only while it is still exactly `orchestrator`. With no prior title nothing is renamed and nothing is restored. |
 | **Host reload / bundle toggle** | The plugin is re-created; the catalog and preferences are read from disk again; active orchestrator mode re-enables Agent Teams and is re-applied from the session log without re-capturing the previous model or Session title. |
 | **Page refresh** | The browser artifact reloads. A Soul draft persists its form fields/sections, Form/Raw mode, raw source, and base file hash; dialog size also persists. Orchestrator edits, New/Paste inputs, and Undo state are not restored, so save those before reloading. A later Session-root association no longer replaces a dirty Orchestrator draft. |
@@ -1388,6 +1450,11 @@ They are not shared with other browsers.
   every soul allow-list so a teammate can still report and use the task board. The GUI and spawn
   reject a Team-tool name in a soul `tools` list. The Lead-only `manage_agent_souls` tool is not
   delegable.
+- **The run work log is guidance, not plugin state.** Nothing creates, validates, watches, or cleans
+  up `worklog.md`, and no GUI surface shows it. Workers can read it only with their declared tools
+  and the runtime's permissions; an independent reviewer never receives it. If `.dsh/agent-soul/` is
+  not excluded from project changes in a workspace, the Lead must choose another authorized location
+  or keep the objective record in board text fields.
 - **Soul directories are per workspace.** Workspace-relative paths resolve against the workspace
   root; a Team in another workspace sees its own resolution until `dirs` is made absolute.
 - **Cold resume fails closed without its binding.** Admission requires a pending spawn plan or a
@@ -1668,6 +1735,7 @@ refresh is always safe and reloads the dictionaries and client module.
 | `<workspace>/.dsh/agents/` | Optional local soul overrides (default `dirs`); created on demand by the GUI. |
 | `<workspace>/.dsh/agent-soul/bindings.json` | Durable teammate bindings (plugin-owned runtime state, created on first spawn; gitignored in this repository). |
 | `<workspace>/.dsh/agent-soul/preferences.json` | Plugin-owned default-Soul selection (created on first change). |
+| `<workspace>/.dsh/agent-soul/worklogs/<run-id>/worklog.md` | Optional Lead-authored run log named by the bundled doctrine. Not plugin state: the plugin never creates, reads, or deletes it. The doctrine has the Lead remove it when the run closes. |
 | `<workspace>/.dsh/agent-soul/orchestrator.md` | Optional workspace Lead doctrine; overrides the bundled default. |
 | `<workspace>/.dsh/agent-soul/trash/` | Deleted files moved by a successful trash move (created on first delete); a failed move leaves the source in place and reports the error, with no Undo. |
 | [`locale/en.json`](locale/en.json) | Package locale metadata for the Settings entry (English). |

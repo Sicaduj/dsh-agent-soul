@@ -939,6 +939,10 @@ shared path. The fence resolves the path before the operation but does not make 
 following I/O one atomic step; a racing symlink replacement retains the same TOCTOU class as the
 preferences and orchestrator documents.
 
+The work log the doctrine names (`worklogs/<run-id>/worklog.md`) sits outside that fence: it is not
+plugin state, no module creates or validates it, and the Lead chooses its location under the
+doctrine's authorization rules.
+
 ### Preferences document
 
 ```json
@@ -1017,6 +1021,22 @@ Extra markdown rules: content before the first canonical heading; content after
 canonical heading resumes, all become extras. The composer emits extras after the canonical
 sections. This round-trips after one composition but can move content on the next read; use `###` or
 deeper for sub-headings inside a section.
+
+### Run work log (bundled doctrine only)
+
+`defaults/orchestrator.md` carries a `### Run work log` sub-heading inside **State Tracking**. The
+generated skeleton and the example document above do not include it.
+`HEADING_PATTERN` only opens a section at one or two `#` characters, so the sub-heading stays in
+`sections.state` through `splitOrchestrator`/`composeOrchestrator`, and the GUI shows it in the
+State Tracking body editor rather than as a section of its own. Nothing in `lib/` parses, creates,
+watches, serves, or deletes the log. The path it names,
+`<workspace>/.dsh/agent-soul/worklogs/<run-id>/worklog.md`, is a doctrine convention rather than a
+`bindingsFile`-derived sibling, and the plugin does not create it — the Lead's file tools do when
+the doctrine runs.
+The doctrine conditions that path on the directory staying inside the authorized workspace, being
+writable, and being excluded from project changes, and it directs the Lead to keep the log out of
+independent review handoffs — the neutral packet carries requirements, evidence, and limitations
+instead.
 
 ### Trash
 
@@ -1460,8 +1480,10 @@ the historical 2026-11-07 symlink observation and full limits.
   remove the extra file.
 - **The bundled doctrine is prompt guidance, not enforcement.** `defaults/orchestrator.md` states
   that a declared `model`/`provider` route is applied while its shipped default (which declares
-  none) inherits the Lead; its State Tracking section lists only `pending`, `in_progress`,
-  `completed`, and `deleted`; and its correction loop applies under `strict` within the configured
+  none) inherits the Lead; its State Tracking section introduces no board status beyond `pending`,
+  `in_progress`, `completed`, and `deleted`, and it also carries the `### Run work log` guidance,
+  which must keep the log inside the authorized, ignore-excluded workspace and out of independent
+  review handoffs; and its correction loop applies under `strict` within the configured
   `max-retries` allowance while `advisory`/`off` report and continue. Future edits must keep those
   statements aligned with activation and the task-board contract.
 - **The spawn-context contract is explicit.** The registered model-facing description, the runtime,

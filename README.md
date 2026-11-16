@@ -1,91 +1,98 @@
 ---
-description: "Give every Agent Teams teammate a Markdown-defined soul — persona, tool permission matrix, routed model, and an optional user-invocable slash command — with soul-only delegation and a selectable default Soul, plus an optional session-scoped orchestrator doctrine. Both are editable in Settings → Agent Soul."
+description: "Markdown-defined personas, enforced tool permissions, model routes, slash commands, and optional orchestration for DSH Agent Teams."
 kind: "package-bundle"
 ---
 
-# @local/dsh-agent-soul
+<a id="top"></a>
+<div align="center">
+  <img src="icon.svg" width="88" height="88" alt="Agent Soul logo" />
 
-An **Agent Soul** is one Markdown file with YAML frontmatter that tells DSH everything about a
-delegated teammate: its identity, what it is for, what tools it may use, which model runs it, and
-whether a human may invoke it directly. The body is the operating contract the teammate runs under.
+  <h1>Agent Soul</h1>
+  <p><strong>Reusable identities, permissions, and model routes for DSH Agent Teams.</strong></p>
+  <p>Define each teammate in Markdown. Delegate with a Soul, not a blank prompt.</p>
 
-This bundle is a soul-aware layer on top of the DSH 0.2.2 Agent Teams rows: the shipped
-`tool-agent-team` row stays enabled and owns the task board/policy, while this package adds a
-Team-only `spawn_teammate` plus the Lead's soul catalog. **Every** teammate it spawns runs a
-defined Agent Soul:
-`spawn_teammate({ ..., agent_type: "researcher" })` picks one explicitly, and omitting
-`agent_type` uses the configured default Soul (the live catalog's `generalist`—normally the bundled
-definition—unless another Soul is selected in **Settings → Agent Soul**). There is no plain
-no-Soul `spawn_teammate` path: generic `subagent` / `subagent_fork` calls are denied for Team
-members and their children are rejected at creation (a strict soul `tools:` list also hides them). A
-**Settings → Agent Soul** page edits the Markdown definitions section by section, and an optional
-**orchestrator definition** can give the Lead a stricter planning/delegation doctrine — but only in
-a session where a human turns it on with `/orchestrate` (optionally as `/orchestrate <task>`, which
-enables the mode and submits that task as the next message).
+  <p>
+    <a href="https://github.com/Sicaduj/dsh-agent-soul/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/Sicaduj/dsh-agent-soul?display_name=tag&amp;sort=semver&amp;color=2563eb" /></a>
+    <img alt="DSH 0.2.2-rc.3 or newer" src="https://img.shields.io/badge/DSH-0.2.2--rc.3%2B-145af3" />
+    <img alt="Node.js 24.9 or newer" src="https://img.shields.io/badge/Node.js-%3E%3D24.9.0-339933?logo=nodedotjs&amp;logoColor=white" />
+  </p>
 
-> **Tool surface in DSH 0.2.2-rc.3.** The base harness delegates with `subagent` (fresh context)
-> and `subagent_fork` (inherited context); stock DSH has no `spawn_teammate`. This package adds
-> `spawn_teammate` and `list_agent_souls` for a Team-enabled Lead. **`/orchestrate` enables
-> Agent Teams automatically for the mode's lifetime**, so an active orchestrator always delegates
-> exclusively through `spawn_teammate`; stock `subagent`/`subagent_fork` are denied while the
-> mode is active. Outside orchestrator and Team mode they remain ordinary DSH delegation, and
-> their children carry no Soul.
+  <p>
+    <a href="#quick-start">Quick start</a> ·
+    <a href="#bundled-specialists">Bundled specialists</a> ·
+    <a href="#writing-souls">Write a Soul</a> ·
+    <a href="#orchestrator-mode">Orchestrator</a> ·
+    <a href="#configuration">Configuration</a> ·
+    <a href="#troubleshooting">Troubleshooting</a>
+  </p>
 
+  <sub><code>@local/dsh-agent-soul</code> · package version 0.6.1</sub>
+</div>
+
+## Overview
+
+An **Agent Soul** is one Markdown file with YAML frontmatter that defines a delegated teammate's
+identity, purpose, tool permissions, model route, context preference, and optional slash command.
+Its Markdown body is the operating contract that teammate receives.
+
+This bundle adds soul-aware delegation to DSH 0.2.2 Agent Teams. The shipped `tool-agent-team`
+row keeps the task board and Team policy; Agent Soul adds `spawn_teammate`, the Lead's Soul catalog,
+a visual editor in **Settings → Agent Soul**, durable cold-resume bindings, and an optional
+session-scoped orchestrator doctrine.
+
+> [!IMPORTANT]
+> **Compatibility:** DSH `0.2.2-rc.3+`, Node.js `>=24.9.0`, and the base
+> `@deepseek-ai/dsh-base` composition. Keep the shipped `tool-agent-team` row enabled.
+
+### How it works
+
+```mermaid
+flowchart TD
+    Command["/orchestrate · optional Lead doctrine"] -.-> Lead["Agent Team Lead"]
+    Lead -->|"explicit agent_type"| Catalog["Select a Soul from the catalog"]
+    Lead -->|"agent_type omitted"| Default["Resolve the configured default Soul"]
+    Catalog --> Apply["Apply the Markdown definition"]
+    Default --> Apply
+    Apply --> Teammate["Soul-bound teammate<br/>persona · tool matrix · model · fresh/fork context"]
 ```
-Agent Team (Lead, optionally the orchestrator)
-├─ spawn_teammate({ ..., agent_type: "<name>" })                  ← explicit Soul teammate (plugin, Team/orchestrator mode)
-├─ spawn_teammate({ name, description, prompt })                  ← default-Soul teammate (plugin, Team/orchestrator mode)
-│    ├─ persona      body is added at the deployment-persona position (after a configured prefix line)
-│    ├─ tools        `tools:` becomes a hard permission matrix for inherited tools
-│    ├─ model        `model:` becomes the child's routed LLM model
-│    ├─ context      `context:` picks fresh or fork as the default
-│    └─ binding      persisted so a cold-resumed teammate keeps its soul
-├─ subagent / subagent_fork                                       ← stock DSH 0.2.2 delegation; Soul-less
-│                                                                    (denied + creation-fenced under Team/orchestrator mode)
-└─ /orchestrate [<task>]                                           ← enables Team + Lead doctrine, model, tool matrix, title
-```
 
-## Why use it
+Stock DSH delegates with `subagent` (fresh context) and `subagent_fork` (inherited context) and
+has no `spawn_teammate`. This package adds `spawn_teammate` and `list_agent_souls` for a
+Team-enabled Lead. **`/orchestrate` enables Agent Teams automatically for the mode's lifetime.**
 
-- **Consistent specialists.** A reviewer, researcher, or writer behaves the same way every time
-  instead of becoming a vague copy of the Lead.
-- **Real permissions.** `tools:` is enforced through DSH's scoped tool restriction, not just
-  suggested in a prompt.
-- **Platform-neutral tools.** A soul may name its shell tool as `bash` or `pwsh`. DSH registers one
-  spelling per platform and the plugin resolves the declaration to the registered counterpart, so
-  the same `tools:` list can be reused on a POSIX and a Windows session.
-- **Right model per job.** Run cheap/fast models for routine work and a larger model for the work
-  that needs it.
-- **Optional human shortcuts.** A soul with `user-invocable: true` also becomes a slash command
-  such as `/researcher`. The bundled souls are AI-only unless you opt in, so the default surface
-  is the model alone.
-- **Durable and inspectable.** Files are plain Markdown; the same page previews exactly what the
-  teammate will receive, and bindings let a resumed teammate recover its soul.
-- **Lead-level orchestration.** One optional orchestrator definition adds plan-first, gating, state
-  tracking, verification, and recovery doctrine to the Lead — opt-in per session.
-- **Works from any workspace.** The package ships its own soul catalog (`agents/`) and orchestrator
-  doctrine (`defaults/orchestrator.md`). With the default `bundled: true`, a fresh installation
-  already lists the bundled souls and `/orchestrate` works in every Lead session, in whichever
-  workspace that session was opened; a local soul or workspace `orchestrator.md` shadows the
-  bundled copy without extra configuration.
-- **No soul-less delegation in Team or orchestrator mode.** The default Soul makes an unmatched
-  task still run under a reviewable persona and tool matrix; every new or cold-resumed Team child
-  must resolve a Soul plan or be refused, and generic `subagent` and `subagent_fork` calls are
-  denied to Team members and to an active orchestrator. Outside both modes those stock tools remain
-  ordinary DSH delegation and carry no Soul.
-- **Visible activation.** A successful enable answers with an **ORCHESTRATOR MODE ACTIVE** block;
-  a failed enable answers with the error. A failure before any state is touched leaves the mode
-  unchanged (a failed first enable leaves it off). Ordinary replacement failures attempt to restore
-  the previous doctrine and report `previousStateRestored`; queue-failure recovery reports the
-  observed live state (reverted, kept, explicit fallback, inactive, or unconfirmed) and the
-  `/orchestrate off` retry that restores a captured model. It is best-effort, not a guarantee of
-  live/durable agreement; see [Turn it on and off](#turn-it-on-and-off) and
-  [Known limitations](#known-limitations). A successful enable also
-  renames the Session to `orchestrator` when the profile provides a session-title service and
-  the Session has a prior title to restore; `/orchestrate off` restores the title you had before
-  orchestration (unless you renamed the Session yourself). While the mode is on, the Session header
-  carries an **Orchestrator mode on** badge whose title names `/orchestrate off`, so the active mode
-  is visible outside the command transcript.
+> [!NOTE]
+> **Soul-only delegation in Team and orchestrator mode.** Generic `subagent` / `subagent_fork`
+> calls are denied, and children without a Soul plan are rejected at creation. Outside those modes,
+> stock DSH delegation remains unchanged and carries no Soul.
+
+## Why Agent Soul?
+
+| Capability | What it gives you |
+|---|---|
+| 🎭 **Consistent specialists** | A reviewer, researcher, or writer follows the same reusable operating contract instead of becoming a vague copy of the Lead. |
+| 🛡️ **Enforced permissions** | `tools:` applies a real DSH tool restriction, not just a prompt suggestion. Team collaboration tools remain available. |
+| 🧠 **The right model per job** | Route routine work to a fast model and complex work to a stronger one, or inherit the Lead's route. |
+| 🧩 **Portable definitions** | Reuse the same Markdown catalog across workspaces and platforms, including the `bash` / `pwsh` shell-name alias. |
+| ⚡ **Optional slash commands** | Opt a Soul into `user-invocable: true` to invoke it directly; bundled Souls remain AI-only by default. |
+| 🖥️ **Visual authoring** | Edit, duplicate, preview, import, and validate Souls in **Settings → Agent Soul**, with drafts and conflict protection. |
+| 🧭 **Optional orchestration** | Add plan-first, gating, verification, and recovery doctrine to the Lead with `/orchestrate`; activation is visible in chat and the Session header. |
+| 🔒 **Durable, fail-closed delegation** | New and cold-resumed Team children must resolve a Soul plan. Bindings preserve identity across resume; generic children are refused. |
+
+## Bundled specialists
+
+Ready to use in any workspace. Every bundled Soul **inherits the Lead's model** and is **AI-only**
+until you opt it into a slash command.
+
+| Soul | Best for | Source |
+|---|---|---|
+| **Generalist** *(default)* | General-purpose delegation when no specialist is selected | [`generalist.md`](agents/generalist.md) |
+| **Researcher** | Source-grounded research and cited briefings | [`researcher.md`](agents/researcher.md) |
+| **Software engineer** | Implementation, debugging, and focused verification | [`software-engineer.md`](agents/software-engineer.md) |
+| **Adversarial red-team verifier** | Independent adversarial review and verification | [`adversarial-red-team-verifier.md`](agents/adversarial-red-team-verifier.md) |
+| **Scribe** | Documentation, summaries, and clear written handoffs | [`scribe.md`](agents/scribe.md) |
+
+<details>
+<summary><strong>Upgrading from an earlier release?</strong> Expand for 0.1–0.6 migration and compatibility notes.</summary>
 
 > **Upgrading from 0.1.** This release makes delegation soul-only, adds a selectable default Soul,
 > and makes orchestrator activation explicit:
@@ -169,6 +176,8 @@ read-only and those controls do not exist — skip the `bundledEditable` paragra
 the DSH `0.2.2-rc.3` Agent Teams port. The plugin is now a soul-aware layer over the shipped
 subagent-based Team tools rather than a replacement for the shipped Team row.
 
+</details>
+
 ## Requirements and install
 
 ### Requirements
@@ -192,16 +201,8 @@ subagent-based Team tools rather than a replacement for the shipped Team row.
 - Node.js **>= 24.9.0**. The plugin has no dependencies and imports only `node:` builtins and
   its own relative files.
 
-All five bundled souls currently inherit the Lead's route, so the bundled catalog needs no
-additional provider:
-
-| Soul | Route |
-|---|---|
-| `generalist` | No explicit route; inherits the Lead (bundled default Soul) |
-| `researcher` | No explicit route; inherits the Lead |
-| `adversarial-red-team-verifier` | No explicit route; inherits the Lead |
-| `software-engineer` | No explicit route; inherits the Lead |
-| `scribe` | No explicit route; inherits the Lead |
+All five bundled Souls currently inherit the Lead's route, so the bundled catalog needs no
+additional provider. See [Bundled specialists](#bundled-specialists) for the roster.
 
 An unavailable explicitly configured provider/model makes only the affected spawn fail. Configure
 the route in the destination profile or remove its `model`/`provider`/`reasoning-effort` fields
@@ -253,6 +254,9 @@ normal rebuild and page refresh.
 
 ### Project layout
 
+<details>
+<summary>Package files, workspace overrides, and runtime state</summary>
+
 Every folder this project owns sits inside the package directory. Nothing below `agents/` or
 `defaults/` is required to live in a Session workspace: those two are the **bundled defaults** and
 apply in every workspace. User content and plugin-owned runtime state live in the workspace instead.
@@ -293,6 +297,8 @@ state anchor with `bindingsFile` — absolute or workspace-relative, with no `~`
 absolute path or a path under each workspace). A workspace-relative state path and its `trash/` are
 real-path fenced to the workspace, so a symlinked `.dsh` or `.dsh/agent-soul` cannot move state
 outside it. See [Configuration](#configuration).
+
+</details>
 
 ## Quick start
 
@@ -366,6 +372,9 @@ outside it. See [Configuration](#configuration).
 
 ## Core concepts
 
+<details>
+<summary>Terminology reference: Lead, Soul, catalog, bindings, routes, and more</summary>
+
 | Term | Meaning |
 |---|---|
 | **Lead** | The top-level Team agent that plans, delegates, and reports back. It is the only member that can start teammates. |
@@ -381,6 +390,8 @@ outside it. See [Configuration](#configuration).
 | **Orchestrator mode** | A session-scoped mode turned on with `/orchestrate` (or `/orchestrate <task>`, which enables the mode and queues that task as the next message); it applies the effective orchestrator doctrine — the workspace definition when present, else the packaged `defaults/orchestrator.md` — and its optional model/tool overrides to that session's Lead. |
 | **Diagnostic** | A validation or scan message. Invalid soul files stay visible in the GUI with diagnostics; they are skipped by the catalog. |
 
+</details>
+
 ## The Settings page
 
 The plugin registers one Settings section, **Agent Soul** (`agent-soul`, order 30, after
@@ -390,6 +401,9 @@ ships eight locale dictionaries (`en`, `zh`, `ja`, `de`, `fr`, `es`, `ru`, `pt`)
 plugin's UI chrome; Host diagnostics/messages and file content can remain untranslated.
 
 ### Souls tab
+
+<details>
+<summary>Catalog, editor, drafts, health, and runtime controls</summary>
 
 **Toolbar and list.** The toolbar has **New soul**, **Refresh**, **Paste Markdown**, and a scan line
 (last scan, valid count, invalid count). The **Default Soul** selector sits above the list, with its
@@ -516,7 +530,12 @@ that ends without one reports **Saved, but the reload was not confirmed** (Unver
 is always an observation, not a promise. The normal Host write path validates and reconciles the
 configuration; refresh or reopen a stale view after an unverified result.
 
+</details>
+
 ### Orchestrator tab
+
+<details>
+<summary>Definition, activation, editing, and bundled fallback</summary>
 
 The **Orchestrator** tab shows the single orchestrator definition:
 
@@ -572,7 +591,12 @@ default. With **Use default agent souls** on (`bundledEditable: true`) the tab i
 packaged file as the editable definition (no **Bundled** badge) and **Save** rewrites
 `defaults/orchestrator.md` in place; a workspace `orchestrator.md` of your own always wins.
 
+</details>
+
 ### Which workspace does the page edit?
+
+<details>
+<summary>How the Settings page selects its workspace</summary>
 
 The page edits one workspace at a time. The Web GUI pins one Session's workspace — the Session
 currently in view, or the sole listed one in a single-workspace installation: the browser sends its
@@ -589,6 +613,8 @@ The chosen root is shown in the settings card. This is
 why a Harness process launched from an unrelated folder does not hide the files in the workspace you
 are actually editing. Soul directories are resolved per workspace: a Team in another workspace
 sees its own catalog until you make `dirs` absolute.
+
+</details>
 
 ## Writing souls
 
@@ -1490,6 +1516,15 @@ They are not shared with other browsers.
   remediation needs an archived `QAS_BASELINE_DIR`, and the full DSH suite is outside this package.
   See [`smoke/README.md`](smoke/README.md).
 
+## Documentation map
+
+| Guide | Use it for |
+|---|---|
+| [Soul options reference](docs/SOUL-OPTIONS.md) | Every editable Settings control, its effect, and when changes take effect |
+| [Architecture internals](docs/INTERNALS.md) | Runtime composition, document layers, lifecycle, and module responsibilities |
+| [GUI and API internals](docs/GUI-INTERNALS.md) | Settings implementation, authenticated routes, payloads, and browser artifacts |
+| [Smoke harness guide](smoke/README.md) | Keyless end-to-end verification, prerequisites, safety, and test commands |
+
 ## Development and testing
 
 The plugin is plain ESM JavaScript with **zero dependencies**, no bare imports, and one classic
@@ -1669,3 +1704,9 @@ The control-by-control user reference is
 Teams/runtime modules is [`docs/INTERNALS.md`](docs/INTERNALS.md); the GUI/API contract is
 [`docs/GUI-INTERNALS.md`](docs/GUI-INTERNALS.md); the end-to-end harness is
 [`smoke/README.md`](smoke/README.md).
+
+---
+
+<div align="center">
+  <sub>Agent Soul · Markdown-defined teammates for DSH Agent Teams · <a href="#top">Back to top ↑</a></sub>
+</div>

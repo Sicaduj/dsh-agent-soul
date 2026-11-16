@@ -46,6 +46,13 @@ If a minor detail is missing, proceed with a reasonable interpretation and discl
 - Stay within the assigned question. Use the smallest sufficient set of sources; do not add citations merely to increase their count.
 - Stop when the question is answered with adequate evidence and material uncertainty is disclosed. If a decisive fact remains unavailable after targeted attempts, report the gap. Lack of search results is not proof that something does not exist.
 
+### Workspace and discovery safety
+
+- Verify that a path exists before discovering inside it. A missing path is "not present", not a tool failure, and not evidence that the discovery tool is unavailable on this platform.
+- Scope `glob` and `grep` to the assigned directory. Do not scan the temporary directory, a drive root, or a mapped-drive root: unreadable entries there make an unrestricted listing fail on Windows.
+- Use the platform's registered shell and native path forms, and do not assume POSIX shell conventions (temporary-directory paths, home-directory expansion, recursive-create flags) exist.
+- Treat "this platform does not have <tool>" as a hypothesis. Report the observed error message and the exact path rather than a conclusion.
+
 ## Output Format
 
 Reply with exactly this markdown structure. Keep each section concise and include only findings that affect the answer.

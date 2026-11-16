@@ -89,6 +89,22 @@ function toolCallNames(messages: MessageLike[]): string[] {
     : [])
 }
 
+/** The text of the most recent tool result, joined across text blocks. */
+function lastToolText(messages: MessageLike[]): string {
+  const tool = messages.findLast(message => message.role === 'tool')
+  return tool?.content.flatMap(block => block.type === 'text' ? [block.text ?? ''] : []).join('\n') ?? ''
+}
+
+/**
+ * The existing directory the probe teammate lists with the real `glob` tool.
+ * The runner creates it and passes `SOUL_PROBE_GLOB_DIR`; the CLI working
+ * directory is the fallback so the adapter also works without the runner.
+ */
+function globProbeDir(): string {
+  const configured = process.env.SOUL_PROBE_GLOB_DIR
+  return configured === undefined || configured === '' ? process.cwd() : configured
+}
+
 function latestAssistantCalls(messages: MessageLike[]): string[] {
   const assistant = messages.findLast(message => message.role === 'assistant')
   return assistant?.content.filter(block => block.type === 'tool-call').map(block => block.name ?? '') ?? []
@@ -124,7 +140,17 @@ function teammateChunks(options: GenerateOptions): StreamChunk[] {
   }
   observe(observation)
   const result = `SOUL_PROBE_RESULT persona=${observation.personaOk} marker=${observation.markerOk} tools=${observation.toolsOk} model=${observation.modelOk} model_id=${options.model} tool_names=${tools.join(',')}`
-  if (!toolCallNames(messages).includes('send_message')) {
+  const calls = toolCallNames(messages)
+  // Exercise the real discovery tool once on the host running this suite. The
+  // Windows failure this guards against was reported as "glob is unavailable",
+  // while the tool was present and only the target path was wrong.
+  if (!calls.includes('glob')) {
+    return toolChunks([{ name: 'glob', args: { pattern: '*', path: globProbeDir() } }])
+  }
+  if (!calls.includes('send_message')) {
+    const output = lastToolText(messages)
+    const failed = output.length === 0 || /ToolCallError|search failed|^Error:/mu.test(output)
+    observe({ kind: 'teammate-glob', path: globProbeDir(), ok: !failed, sample: output.slice(0, 240) })
     return toolChunks([{ name: 'send_message', args: { agent: 'lead', message: result } }])
   }
   return textChunks('Probe complete.')
@@ -181,6 +207,8 @@ function leadChunks(options: GenerateOptions): StreamChunk[] {
     hasListSouls: listTool !== undefined,
     catalogInPrompt: systemText.includes('Available teammate souls'),
     soulPolicyInPrompt: systemText.includes('Delegation is soul-only'),
+    discoveryRuleInPrompt: systemText.includes('### Workspace preparation')
+      && systemText.includes('### Expected absence'),
     baseSubagentAdviceInPrompt: systemText.includes('Use the names returned by subagent, subagent_fork'),
     soulOnlyDenialObserved: soulOnlyDenialObserved(messages),
     envScrub,

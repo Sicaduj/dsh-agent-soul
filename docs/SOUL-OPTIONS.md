@@ -25,7 +25,7 @@ on (config key `bundledEditable`, with `bundled: true`), the packaged souls open
 instead and carry no badge. The orchestrator tab shows the bundled doctrine until a workspace file
 overrides it.
 
-What the package currently ships (0.6.0): the souls `adversarial-red-team-verifier`, `generalist`,
+What the package currently ships (0.6.1): the souls `adversarial-red-team-verifier`, `generalist`,
 `researcher`, `scribe`, and `software-engineer`. All five declare no `model`/`provider` override
 and **inherit the Lead's model** (their catalog line reads `model: inherit`). `generalist`, `researcher`, and `software-engineer` declare `context: fresh`;
 `scribe` and `adversarial-red-team-verifier` declare no context. None is `user-invocable`.
@@ -190,10 +190,10 @@ An existing invalid file shows **Invalid** and no resolved model, and cannot ena
 |---|---|---|
 | **Identity & Boundaries** | section | The Lead's role, authority, and what it must not do itself. Applied at the deployment-persona position while the mode is on. |
 | **Plan Generation** | section | How to decompose the goal, what a plan contains, when to publish/revise it. |
-| **Delegation & Context Minimization** | section | How to match steps to souls/tools and what context to pass. |
+| **Delegation & Context Minimization** | section | How to match steps to souls/tools, what context to pass, and how the Lead prepares and verifies the workspace paths an assignment names. |
 | **State Tracking** | section | How to use the Team task board as the durable ledger. |
 | **Quality Verification** | section | The gates a completed sub-task must pass before advancing. |
-| **Exception & Recovery** | section | Retry policy, fatal-error handling, human escalation. |
+| **Exception & Recovery** | section | Retry policy, fatal-error handling, human escalation, and expected absence: a missing path or unreadable directory is a state fact, not a tool failure. |
 | **Extra markdown** | extras | Content before the first canonical heading, after an explicit `<!-- orchestrator:extra -->` marker, or under any other `#`/`##` heading. It is preserved but appended after the canonical sections on save, so use `###` for sub-headings that must stay inside a section. |
 
 Template variables available in every section and in extras: `{{maxRetries}}`, `{{gateMode}}`,

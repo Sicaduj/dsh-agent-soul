@@ -250,8 +250,14 @@ export function seedEnvironmentCanaries() {
   }
 }
 
-/** Build a credential-free child environment without inherited loaders or proxies. */
-export function childEnvironment(home, observationsPath) {
+/**
+ * Build a credential-free child environment without inherited loaders or proxies.
+ * @param {string} home - temporary DSH_HOME.
+ * @param {string} observationsPath - JSON Lines observation sink for the adapter.
+ * @param {string} [globProbeDir] - existing directory the probe teammate lists with `glob`.
+ * @returns {Record<string, string>}
+ */
+export function childEnvironment(home, observationsPath, globProbeDir) {
   const allowed = [
     'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'TEMP', 'TMP',
     'USERPROFILE', 'SystemRoot', 'WINDIR', 'ComSpec', 'PATHEXT', 'LANG', 'LC_ALL',
@@ -265,6 +271,7 @@ export function childEnvironment(home, observationsPath) {
     DSH_TELEMETRY_DISABLED: '1',
     DEEPSEEK_API_KEY: '',
     SOUL_PROBE_OUT: observationsPath,
+    ...globProbeDir === undefined ? {} : { SOUL_PROBE_GLOB_DIR: globProbeDir },
     NODE_OPTIONS: '--disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON',
   })
   return env
@@ -553,6 +560,11 @@ async function main() {
     await writeSoul(root)
     await writeCommandSoul(root)
     await writeProfile(home)
+    // The probe teammate lists this existing directory with the real `glob`
+    // tool, so the run proves discovery works on the host running the suite.
+    const globProbeDir = join(root, 'glob-probe')
+    await mkdir(globProbeDir, { recursive: true })
+    await writeFile(join(globProbeDir, 'probe.txt'), 'glob probe target\n', 'utf8')
 
     // Bundled defaults are workspace-independent: a brand-new workspace with no
     // plugin files at all must already see the shipped catalog and doctrine.
@@ -621,7 +633,7 @@ async function main() {
       'SOUL_SMOKE: spawn the probe soul teammate and wait for its report.',
     ], {
       cwd: root,
-      env: childEnvironment(home, observationsPath),
+      env: childEnvironment(home, observationsPath, globProbeDir),
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let stdout = ''
@@ -653,6 +665,10 @@ async function main() {
     check('Lead prompt carries the soul catalog', lead?.catalogInPrompt === true)
     check('Lead prompt carries the soul-only policy', lead?.soulPolicyInPrompt === true)
     check('base Team policy generic-subagent advice is shadowed', lead?.baseSubagentAdviceInPrompt === false)
+    check(
+      'the Lead prompt carries the workspace-preparation and expected-absence rules',
+      lead?.discoveryRuleInPrompt === true,
+    )
     check('the active orchestrator guard denies stock subagent delegation', lead?.soulOnlyDenialObserved === true)
     check('spawn_teammate schema exposes agent_type', lead?.spawnHasAgentType === true)
     check('list_agent_souls is registered', lead?.hasListSouls === true)
@@ -685,6 +701,17 @@ async function main() {
       JSON.stringify(teammate?.tools),
     )
     check('teammate model is routed', teammate?.modelOk === true, String(teammate?.model))
+    const globProbe = observations.find(entry => entry.kind === 'teammate-glob')
+    check(
+      'soul teammate invokes the real glob tool on this host',
+      globProbe?.ok === true,
+      String(globProbe?.sample ?? globProbe?.error ?? 'no glob observation'),
+    )
+    check(
+      'the glob probe listed the seeded file',
+      String(globProbe?.sample ?? '').includes('probe.txt'),
+      String(globProbe?.sample ?? ''),
+    )
 
     const command = observations.find(entry => entry.kind === 'command')
     checkCommandSurface(command, check)

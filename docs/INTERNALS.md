@@ -1326,12 +1326,16 @@ in `smoke/gui-fixes.test.mjs` (client artifact contracts and live route validati
 `smoke/storage-fixes.test.mjs` (binding/delete/rename/path semantics),
 `smoke/orchestrator-fixes.test.mjs` (handler-seam rollback and doctrine/context contracts), and
 `smoke/smoke-fixes.test.mjs` (isolated probes, canaries, and remediation reporting). Per-module
-counts live in [`../smoke/README.md`](../smoke/README.md). On 2026-11-14 `node --test smoke/*.test.mjs`
-ran **124 tests**: the changed orchestrator-fixes and team-runtime modules passed **36/36**, while
-this Windows host reported only pre-existing symlink-privilege/GUI-poll environment failures in
-unrelated modules (9–10 depending on the run; 15 remediation, 16 bundled-editable, 8 config-toggle,
-10 gui-fixes, 18 storage-fixes, 19 orchestrator-fixes, 7 smoke-fixes, 14 windows-shell-alias, and 17
-team-runtime cases). The direct-tree smoke run passed 62/62, the optional
+counts live in [`../smoke/README.md`](../smoke/README.md). On 2026-11-16 `node --test smoke/*.test.mjs`
+ran **129 tests** and **120 passed**: this Windows host again reported only the pre-existing
+symlink-privilege/GUI-poll environment failures in unrelated modules (9 on that run), none in a
+changed or new suite. `smoke/windows-discovery-discipline.test.mjs` (5 cases) pins the Windows
+discovery guidance: the workspace-preparation rules stay inside the doctrine's Delegation section,
+the expected-absence rules inside Exception & Recovery (so a save round-trip cannot demote them to
+extra markdown), every discovery-capable soul carries the same safety block in `Hard Rules`, and no
+shipped guidance teaches a POSIX-only shell idiom as portable. The direct-tree smoke run passed
+65/65; it has the probe teammate list a seeded directory with the real `glob` tool and asserts that
+the Lead prompt carries the active doctrine's new rules. The optional
 inverted-composition probe `smoke/run-windows-parity.mjs` passed **14/14**, and the candidate
 remediation runtime passed **179/179** with 2/2 suites on a fresh disposable run root.
 

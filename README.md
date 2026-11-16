@@ -716,6 +716,25 @@ in-program bindings carried `pwsh` with no `bash` key — see
 [Development and testing](#development-and-testing) for the evidence and for what the Windows run
 did not cover.
 
+#### Discovery on Windows
+
+`glob` and `grep` are available on Windows: DSH ships its own ripgrep binary, so no Soul needs a
+platform-specific substitute. They fail when the path handed to them is unusable, and the error text
+says which case applies:
+
+- `… The system cannot find the file specified. (os error 2)` — the requested `path` does not
+  exist (yet, or under that spelling). Confirm it with `Test-Path -LiteralPath '<path>'` before
+  searching, or search the parent directory.
+- `… Access is denied. (os error 5)` — the tree contains an entry this process cannot read.
+  `%TEMP%`, a drive root, a mapped-drive root, and some project trees contain such entries; scope
+  `path` to the subdirectory you own instead of the whole tree.
+
+An absent scratch directory is a normal state, not a missing tool: the bundled doctrine now has the
+Lead create and verify a directory before it is named in an assignment, and has every Soul confirm a
+path and scope discovery instead of treating a missing path or an unreadable entry as a failed tool.
+When an orchestration run reports `glob search failed (exit 2)`, read the two error shapes above and
+check the path before concluding that discovery is unsupported on the platform.
+
 ### Body sections
 
 The body is the teammate's operating contract. The four conventional sections are:
@@ -1311,6 +1330,8 @@ They are not shared with other browsers.
 | **`spawn_teammate` and `list_agent_souls` are missing** | Whether Team mode is on in the Session model menu; whether `/orchestrate` is active; whether this package is mounted; `manage_agent_souls({ action: "diagnose" })`. Stock DSH 0.2.2 has no `spawn_teammate` at all; the plugin adds it to a Team-enabled Lead or active orchestrator. | Run `/orchestrate` (it enables Team mode automatically) and retry, or turn on **Use Agent Teams** for non-orchestrator Team work. If you only need ordinary delegation outside both modes, use the stock `subagent` (fresh) or `subagent_fork` (inherited) tool; its child will not run a defined Agent Soul. |
 | **The health card warns that the base Team row is disabled** | `manage_agent_souls({ action: "diagnose" })` and any legacy `- id: tool-agent-team` `disabled: true` override. The base row owns `team_task_*` and the shared Team policy, not the plugin's spawn tool. | Run `manage_agent_souls({ action: "repair_team_tools" })` or remove the override from the profile patch and reload. Do not disable the base row to "make room" for this plugin. |
 | **Config change has no effect** | The profile still has the old row; the page shows read-only active values. The two `bundledEditable` switches share one state record, and a settled write refreshes the overview and clean editor views. Polling reports **Applied.** only after a read shows the written value; otherwise it reports an unverified result. | Edit the bundle/profile row and reload the bundle; restart if the profile manager keeps the old row. If the switch reports an unverified result, reload the page or reopen the view and inspect the effective flag; that status is not success. |
+| **A teammate or the Lead reports `glob search failed (exit 2) … (os error 2)` on Windows** | The error names an absolute path that does not exist. This is a path problem, not a missing or unsupported tool: `glob` and `grep` run on Windows. | Verify the path first (`Test-Path -LiteralPath '<path>'`), create the scratch directory before searching it, and do not retry the same absent path. A directory a teammate was told to create is unknown until the teammate reports it exists. |
+| **A teammate or the Lead reports `glob search failed (exit 2) … (os error 5)` on Windows** | The searched tree contains an entry the process cannot read (`Access is denied`). Whole-tree listings of `%TEMP%`, a drive root, or a mapped-drive root commonly hit this. | Re-run the search with `path` scoped to the specific subdirectory instead of the whole tree. Do not conclude that discovery is unsupported on Windows. |
 
 ## Known limitations
 
@@ -1496,17 +1517,18 @@ node --check index.js
 for f in lib/*.js; do node --check "$f" || exit 1; done
 node --check client.js
 
-# focused module suites (keyless; temporary directories only), 124 tests
+# focused module suites (keyless; temporary directories only), 129 tests
 node --test smoke/*.test.mjs
 
-# end-to-end harness (safe directly; 62 checks)
+# end-to-end harness (safe directly; 65 checks)
 node smoke/run-smoke.mjs
 ```
 
-On 2026-11-14, `node --test smoke/*.test.mjs` ran **124 tests**. The changed Team/orchestrator modules are
-**36/36 green** (19 and 17 cases); this Windows host reported only pre-existing symlink-privilege/
-GUI-poll environment failures in unrelated suites (9–10 depending on the run), including the 14 cases in
-`smoke/windows-shell-alias.test.mjs`, which remained green.
+On 2026-11-16, `node --test smoke/*.test.mjs` ran **129 tests**: **120 passed**, and this Windows host
+again reported only the pre-existing symlink-privilege/GUI-poll environment failures in unrelated
+suites (9 on this run), none in a changed or new suite. The new
+`smoke/windows-discovery-discipline.test.mjs` (5 cases) pins the Windows discovery guidance, and
+`smoke/windows-shell-alias.test.mjs` (14 cases) stayed green.
 End-to-end verification boots a real `dsh --profile headless` process from a DSH source checkout
 with a temporary `DSH_HOME`, a scripted LLM adapter, and this bundle selected through its real
 manifest and `cordis.patch.yml`. It asserts the workspace-independent bundled defaults (an empty
@@ -1517,7 +1539,11 @@ symlinked-workspace and isolated packaged-catalog write-fence refusals, seeded c
 loader canaries removed from the child environment, an explicit `/orchestrate` registration
 assertion, and automatic Team activation from a Team-off profile. The scripted bootstrap invokes the
 real `/orchestrate` command, then the Lead proves `spawn_teammate` is visible, a stock `subagent`
-call is denied, and the Soul child carries its persona, tool matrix, and route. The child environment
+call is denied, and the Soul child carries its persona, tool matrix, and route. The probe teammate
+also invokes the real `glob` tool once against a directory the runner created and lists the seeded
+file, so a missing or broken discovery tool fails the harness instead of being misreported later.
+The Lead prompt observation also asserts that the active doctrine carries the workspace-preparation
+and expected-absence rules, so an edit that fails to reach the model fails the harness. The child environment
 is allowlisted by construction, so the seeded canaries are a real
 removal proof for those variables (not proof about every possible inherited secret).
 
@@ -1527,8 +1553,9 @@ node smoke/run-smoke.mjs
 DSH_CHECKOUT=/path/to/deepseek-harness node smoke/run-smoke.mjs
 ```
 
-The harness runs **62 checks** and passed **62/62** on 2026-11-14 — a dated point-in-time result from
-this Windows host, re-runnable directly with `node smoke/run-smoke.mjs` — starting with
+The harness runs **65 checks** and passed **65/65** on 2026-11-16 on this Windows host (it passed
+62/62 on 2026-11-14, before the three discovery checks were added) — dated point-in-time results,
+re-runnable directly with `node smoke/run-smoke.mjs` — starting with
 a composed fresh profile whose `--dump-config` proves the shipped `tool-agent-team` row stays
 enabled and the plugin adds only `agent-soul-team`. The command-spawned probe soul declares the
 shell spelling this host does not register (`bash` here; `pwsh` is live); the harness asserts the

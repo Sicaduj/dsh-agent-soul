@@ -42,8 +42,9 @@ cd "$SMOKE_COPY/plugin"
 node smoke/run-smoke.mjs
 ```
 
-The harness runs **62 checks**. It passed **62/62** directly from this working tree on 2026-11-14
-(macOS arm64, Node 26.13.0) — a dated point-in-time result, not a platform matrix. It asserts,
+The harness runs **65 checks**. It passed **65/65** directly from this working tree on 2026-11-16
+(Windows 11 Pro, Node 24.22.1) and **62/62** on 2026-11-14 (macOS arm64, Node 26.13.0) before the three
+discovery checks were added — dated point-in-time results, not a platform matrix. It asserts,
 against the real Cordis runtime and real temporary directories rather than mocks:
 
 - the plugin's bundled defaults are workspace-independent: a brand-new workspace with no plugin
@@ -72,6 +73,12 @@ against the real Cordis runtime and real temporary directories rather than mocks
   and the soul body in its system prompt;
 - its inherited tool set is exactly the soul's `tools` list, with the Team tools still available;
 - its model is routed (`deepseek-v4-pro` recorded as the child Session's `model/selection`);
+- the probe teammate invokes the real `glob` tool once against a directory the runner created and
+  lists the seeded file. This is the runtime proof that Soul discovery works on the host running the
+  suite; a missing or broken discovery tool fails the run instead of being misreported as a platform
+  gap later;
+- the live Lead prompt carries the active doctrine's `### Workspace preparation` and
+  `### Expected absence` rules, so guidance that is written but never applied fails the harness;
 - a `user-invocable` soul registers a slash command that executes and spawns a second
   correctly-configured teammate. That soul declares the shell spelling this host does not
   register (`tools: ["pwsh", "read"]`): the child inherits the live `bash` tool, never advertises
@@ -100,10 +107,10 @@ objects; they never write the real package or workspace state. Run all of them w
 node --test smoke/*.test.mjs
 ```
 
-On 2026-11-14 that command ran **124 tests** across ten `node:test` modules (the remediation pair
-shares one table row). The changed Team/orchestrator modules are **36/36 green**; this Windows host
-reported only pre-existing symlink-privilege/GUI-poll environment failures in unrelated modules
-(9–10 depending on the run), none in the changed suites:
+On 2026-11-16 that command ran **129 tests** across eleven `node:test` modules (the remediation pair
+shares one table row). **120 passed**; this Windows host again reported only the pre-existing
+symlink-privilege/GUI-poll environment failures in unrelated modules (9 on this run: the `EPERM`
+`symlink` fixtures and the three GUI-poll contracts), none in the changed or new suites:
 
 | Suite | Cases | Coverage |
 |---|---:|---|
@@ -114,6 +121,7 @@ reported only pre-existing symlink-privilege/GUI-poll environment failures in un
 | `smoke/storage-fixes.test.mjs` | 18 | transactional refusal of corrupt/unsupported/malformed binding documents with bytes preserved; typed missing/unreadable/corrupt/unsupported/unsafe diagnostics; revalidation after an earlier healthy read (including `get` fail-closed on a partial malformed document); the unpersisted-pending-mutation exception; invalid-snapshot refusal (`E_BINDING_INVALID_RECORD`); repair visibility; trash-failure source preservation; packaged rename collision vs local shadowing; the relative/absolute `bindingsFile` rule including symlinked `.dsh`/`.dsh/agent-soul`, dangling/document symlinks, and trash/restore containment; and the live-catalog missing-default warning |
 | `smoke/orchestrator-fixes.test.mjs` | 19 | handler-seam fault injection for first-enable and already-active queue rollback (exact/partial/fallback/inactive/unknown reports), automatic Agent Teams enable/disable with rollback and reapply, unconditional Soul-only doctrine, Team-enable failure aborting activation, and the `spawn_teammate` context resolution contract |
 | `smoke/smoke-fixes.test.mjs` | 7 (72 assertions) | isolated packaged-write probes and concurrent-edit preservation, seeded environment canaries and explicit `/orchestrate` command assertion, canonicalized symlink run roots, atomic/tolerant readiness barriers, and honest incomplete/unexecuted-suite reporting |
+| `smoke/windows-discovery-discipline.test.mjs` | 5 | the bundled doctrine keeps the new workspace-preparation and expected-absence rules inside their canonical sections with no diagnostics, a fields/sections save round-trip keeps them there instead of demoting them to extra markdown, every discovery-capable soul carries the same safety block in Hard Rules, and no shipped guidance teaches a POSIX-only shell idiom as portable |
 | `smoke/windows-shell-alias.test.mjs` | 14 | the portable `bash` ↔ `pwsh` shell name through the real modules: exact-match preference and counterpart resolution in `lib/tool-names.js`, request order and dedupe in `resolveRestrictableNames`, spawn validation accepting a counterpart, the apply matrix restricting to the live spelling, the orchestrator enable path resolving instead of skipping, and the GUI catalog/validator advertising `portableAliasOf` and saving either spelling |
 | `smoke/team-runtime.test.mjs` | 17 | DSH 0.2.2 adapter contracts: root/teammate mapping and parent-chain fallback, descendant listing/counts/direct names, name collision and live fallback, Team-mode persistence helpers, soul-policy shadow, `installSoulSurface` gating and guard in Team and orchestrator modes, reserved child-id activation/model routing/pending release, Team-off and activation-failure refusals, active-orchestrator spawn with Team off, strict/optional soul application with always-kept Team tools, the creation fence, and base-row inspect/restore |
 
@@ -147,6 +155,20 @@ shell registration, and it is a development verification harness rather than shi
 in the real environment; see [`../README.md`](../README.md#development-and-testing).) Prerequisites are the same as the
 main harness (a DSH checkout with `tsx`; no credentials), and it must not run while another headless
 DSH boot is active.
+
+## Windows discovery coverage
+
+The Windows failure that motivated the discovery guidance was reported as "`glob` is unavailable on
+Windows", while the tool was present the whole time. Two path conditions produce the same
+`glob search failed (exit 2)` text on a healthy tool: `os error 2` (the target path does not exist)
+and `os error 5` (an entry inside the target is unreadable). Coverage is split deliberately:
+
+- `smoke/windows-discovery-discipline.test.mjs` is the keyless contract check for the shipped
+  guidance and its placement inside the doctrine's canonical sections.
+- `node smoke/run-smoke.mjs` proves at runtime that a spawned Soul teammate can invoke the real
+  `glob` tool on the host running the suite, including Windows.
+- The DSH-side classification of ripgrep's I/O exit codes is outside this package and is tracked in
+  the harness repository; this package does not patch it.
 
 ## Remediation runtime
 
@@ -194,20 +216,22 @@ pre-0.2.2 checkout only with its matching DSH version, outside this port's verif
 
 ## Current aggregate results
 
-On 2026-11-14 the focused suites ran **124 tests**: the changed Team/orchestrator modules passed
-**36/36**, while this Windows host reported only pre-existing symlink-privilege/GUI-poll environment
-failures in unrelated suites (9–10 depending on the run):
+On 2026-11-16 the focused suites ran **129 tests**: **120 passed**, and this Windows host again
+reported only the pre-existing symlink-privilege/GUI-poll environment failures in unrelated suites
+(9 on this run). The new `smoke/windows-discovery-discipline.test.mjs` (5 cases) and the existing
+`smoke/windows-shell-alias.test.mjs` (14 cases) are green:
 
 ```sh
 node --test smoke/*.test.mjs
 ```
 
-The direct-tree smoke harness passed **62/62** from Team mode off, with the real `/orchestrate`
-command enabling Team mode before the first Lead step. The optional
+The direct-tree smoke harness passed **65/65** on 2026-11-16 (Windows 11 Pro, Node 24.22.1) from
+Team mode off, with the real `/orchestrate` command enabling Team mode before the first Lead step,
+the probe teammate listing a seeded directory with the real `glob` tool, and the Lead prompt carrying
+the new workspace-preparation and expected-absence rules. The optional
 `node smoke/run-windows-parity.mjs` probe passed **14/14**, and the candidate remediation runtime
 passed **179/179** with **2/2 suites** on a fresh disposable root. These are point-in-time results
-for the current macOS arm64 / Node 26.13.0 environment, not claims for other platforms or Node
-versions.
+for the named hosts and Node versions, not claims for other platforms or versions.
 
 ## Web GUI harness (Computer Use)
 

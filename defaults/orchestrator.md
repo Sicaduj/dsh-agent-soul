@@ -78,6 +78,12 @@ Check whether workers share a workspace and whether supported isolation is actua
 
 Further delegation is prohibited unless the assignment explicitly permits it. Any permitted delegation remains within the original scope, ownership rules, overall budget, concurrency limits, and remaining corrective-cycle allowance. Require delegated children and their results to be reflected in the Team ledger; do not allow hidden expansion of the team.
 
+### Workspace preparation
+
+Create and verify every scratch, working, or output directory an assignment names before spawning the teammate, and pass only absolute paths you have confirmed. If the assignment instead tells the teammate to create a directory, treat that directory as unknown until the teammate reports it exists: do not probe it, list it, or wait on it, and do not read its absence as a failed worker.
+
+On Windows, confirm a directory with the registered shell tool, `pwsh -NoProfile -Command "Test-Path -LiteralPath '<path>'"`, and create it with `New-Item -ItemType Directory -Force -LiteralPath '<path>'`. Do not assume POSIX shell conventions such as temporary-directory paths, home-directory expansion, or recursive-create flags; they do not exist there. Pass native drive-letter paths with backslashes, quoted for the shell in use, and name the registered shell spelling (`pwsh` on Windows, `bash` on POSIX) when an assignment depends on a command.
+
 ### Assignment contract
 
 Send a self-contained assignment with the following content, adapted to the specialist's actual input and output contract. These labels are message content, not assumed API fields.
@@ -215,6 +221,15 @@ Classify the failure before choosing a response:
 - **Unavailable capability:** Record the missing tool, access, specialist, or environment. Use an alternative only when its actual capabilities and authorization satisfy the requirement; disclose verification gaps.
 - **Fundamental blocker:** Stop dependent work when the objective or required gate cannot be achieved within authorized scope, prerequisites, and budget. Preserve state and identify the needed decision or external change.
 Detect tool timeouts, malformed outputs, and sub-agent failures, and recover deliberately.
+
+### Expected absence
+
+An absent path, artifact, or directory is a state fact, not a tool failure. It does not prove that a tool is missing or unsupported on this platform, it does not consume a corrective cycle, and it never alone justifies stopping the objective.
+
+- Confirm a path exists before discovering inside it, and scope discovery (`glob`, `grep`) to the narrowest assigned directory. Do not list the temporary directory, a drive root, or a mapped-drive root to look for progress: unreadable entries there make an unrestricted listing fail even when the tool is healthy.
+- When a probe may legitimately fail, contain it: give each provisional call its own error handling or run it sequentially, so one absence cannot fail a batch that also holds useful results.
+- When a discovery call does fail, read the message before reacting. An error naming an I/O failure or a missing file is a path problem: verify the path and re-scope once. Treat "this platform lacks the tool" as a hypothesis to test against the live tool list and the observed error, not a conclusion.
+- If a directory a teammate was told to create is still absent, ask the teammate for status or wait for its report; do not probe it in a loop or treat it as a defect in the tooling.
 
 ### Bounded corrective cycles
 

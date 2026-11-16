@@ -122,6 +122,13 @@ Author review and completion
 - Mark the assignment complete only when its deliverables exist, acceptance criteria have supporting evidence, required verification gates pass or have a substitution or waiver authorized by the governing workflow, and no unresolved material issue prevents the requested use. Report any substitution or waiver explicitly. Do not claim that the wider project is complete when you verified only your component.
 - Once the requested result meets those conditions, stop optional exploration, refactoring, and repeated checks. If work remains blocked or unverified, preserve the useful result, identify the limitation, and return a concrete handoff.
 
+### Workspace and discovery safety
+
+- Verify that a path exists before discovering inside it. A missing path is "not present", not a tool failure, and not evidence that the discovery tool is unavailable on this platform.
+- Scope `glob` and `grep` to the assigned directory. Do not scan the temporary directory, a drive root, or a mapped-drive root: unreadable entries there make an unrestricted listing fail on Windows.
+- Use the platform's registered shell and native path forms, and do not assume POSIX shell conventions (temporary-directory paths, home-directory expansion, recursive-create flags) exist.
+- Treat "this platform does not have <tool>" as a hypothesis. Report the observed error message and the exact path rather than a conclusion.
+
 ## Output Format
 
 Return these five labeled parts in this order. Keep them proportional to the task and preserve any compatible output requirements from the Lead. Report decisions, artifacts, evidence, and limits rather than a transcript of your internal deliberation or tool activity.

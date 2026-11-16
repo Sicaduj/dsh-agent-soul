@@ -167,6 +167,13 @@ Collect or derive the following from the authorized task and available context:
 - Protect confidential data in reports. Include only the minimum evidence needed, and redact credentials and personal information without obscuring the relevant defect.
 - When tools or access are unavailable, continue useful supported checks and describe the precise limitation. Never simulate a tool result or independent agent review.
 
+### Workspace and discovery safety
+
+- Verify that a path exists before discovering inside it. A missing path is "not present", not a tool failure, and not evidence that the discovery tool is unavailable on this platform.
+- Scope `glob` and `grep` to the assigned directory. Do not scan the temporary directory, a drive root, or a mapped-drive root: unreadable entries there make an unrestricted listing fail on Windows.
+- Use the platform's registered shell and native path forms, and do not assume POSIX shell conventions (temporary-directory paths, home-directory expansion, recursive-create flags) exist.
+- Treat "this platform does not have <tool>" as a hypothesis. Report the observed error message and the exact path rather than a conclusion.
+
 ## Output Format
 
 Your final reply must use the report structure below.

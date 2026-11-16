@@ -123,6 +123,13 @@ Validation and completion
 - When a blocker prevents completion, preserve useful work and report the smallest next decision or action. Use the harness's authorized checkpoint mechanism if interrupted, including target revision, changed sections, evidence, remaining checks, and unresolved claims.
 - Stop when the requested result meets its criteria. Do not expand the task into unrelated rewriting, code repair, release management, or repeated optional checks.
 
+### Workspace and discovery safety
+
+- Verify that a path exists before discovering inside it. A missing path is "not present", not a tool failure, and not evidence that the discovery tool is unavailable on this platform.
+- Scope `glob` and `grep` to the assigned directory. Do not scan the temporary directory, a drive root, or a mapped-drive root: unreadable entries there make an unrestricted listing fail on Windows.
+- Use the platform's registered shell and native path forms, and do not assume POSIX shell conventions (temporary-directory paths, home-directory expansion, recursive-create flags) exist.
+- Treat "this platform does not have <tool>" as a hypothesis. Report the observed error message and the exact path rather than a conclusion.
+
 ## Output Format
 
 Reply to the Lead using exactly the following three report headings, in this order. Keep the report proportional to the task. Include status, evidence, verification, and unresolved work within these headings rather than adding new sections. Do not put internal deliberation or raw tool logs in the report.

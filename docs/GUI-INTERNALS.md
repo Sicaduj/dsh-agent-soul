@@ -74,7 +74,7 @@ route-inheritance change from PR #5, still apply and are not reverted by leaving
 present in the current working tree, not in that release history. Behavior described in the sections
 below may therefore differ from a published 0.4.0 installation.
 
-**0.6.0 working tree (DSH 0.2.2 port).** The manifest is `0.6.0` and the GUI tool catalog
+**0.6.1 working tree (DSH 0.2.2 port).** The manifest is `0.6.1` and the GUI tool catalog
 advertises the missing `bash`/`pwsh` spelling as one
 marked portable-alias entry (`portableAliasOf`); the save validator and preview accept either
 spelling, and the spawn, apply, and orchestrator paths resolve it to the live one. This change and
@@ -197,13 +197,13 @@ Route names and payloads (the browser half addresses them without the leading sl
 ### `GET /agent-soul/overview`
 
 200 body (example values are illustrative; `plugin.version` is read from the real manifest —
-`0.6.0` at this revision (the DSH 0.2.2 port). The no-`pluginMeta` fallback constant
-`PLUGIN_META_DEFAULTS` in `lib/gui-host.js` reports `0.6.0`; it is used only when the Host
+`0.6.1` at this revision (the DSH 0.2.2 port). The no-`pluginMeta` fallback constant
+`PLUGIN_META_DEFAULTS` in `lib/gui-host.js` reports `0.6.1`; it is used only when the Host
 passes no plugin metadata):
 
 ```jsonc
 {
-  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.6.0", "root": "/abs/workspace" },
+  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.6.1", "root": "/abs/workspace" },
   "settings": {
     "dirs": [".dsh/agents"],
     "resolvedDirs": ["/abs/workspace/.dsh/agents"],

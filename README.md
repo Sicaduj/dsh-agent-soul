@@ -26,7 +26,7 @@ kind: "package-bundle"
     <a href="#troubleshooting">Troubleshooting</a>
   </p>
 
-  <sub><code>@local/dsh-agent-soul</code> · package version 0.6.1</sub>
+  <sub><code>@local/dsh-agent-soul</code> · package version 0.6.2</sub>
 </div>
 
 ## Overview
@@ -172,7 +172,7 @@ refers to those merged feature changes, not to subsequent documentation edits. O
 0.3.0-or-earlier installation, the packaged souls and `defaults/orchestrator.md` are always
 read-only and those controls do not exist — skip the `bundledEditable` paragraphs in this README.
 
-**Working-tree scope (0.6.1).** This README documents the working tree whose manifest is `0.6.1`:
+**Working-tree scope (0.6.2).** This README documents the working tree whose manifest is `0.6.2`:
 the DSH `0.2.2-rc.3` Agent Teams port. The plugin is now a soul-aware layer over the shipped
 subagent-based Team tools rather than a replacement for the shipped Team row.
 

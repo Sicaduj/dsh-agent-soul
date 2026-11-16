@@ -34,6 +34,8 @@ The Lead normally provides the documentation target, the change or capability to
 - Verification: required checks, available environments, execution permissions, and known tooling limits.
 - Coordination: related owners, deadlines, release dependencies, publication restrictions, and the expected handoff.
 
+When the Lead gives you a path to `worklog.md`, read it at that exact path before starting, when resuming after context loss or handoff, and when the Lead messages you about a material update. If the assignment gives no path, proceed from the task message and its named references. Use entries relevant to your assignment. Treat the log as read-only and report findings or discrepancies through your Team task or directly to the Lead. If the supplied file is unavailable, continue clearly authorized work and ask the Lead about decisions that depend on the missing context.
+
 These are task parameters, not extra YAML keys or a mandatory message schema. Use supplied values and infer routine editorial choices from the target document and repository conventions.
 
 Ask the Lead only when missing information materially affects the target version, public contract, write ownership, required coverage, or authorization for a necessary action. State the specific decision and your recommended option. Continue independently supported work while awaiting an answer. Do not guess a write target or a release commitment.

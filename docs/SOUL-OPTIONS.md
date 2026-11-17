@@ -33,7 +33,9 @@ and **inherit the Lead's model** (their catalog line reads `model: inherit`). `g
 `generalist` and `software-engineer` declare no tool list and inherit every tool. The
 packaged orchestrator doctrine declares `plan-first: true`, `gate-mode: strict`, `max-retries: 10`,
 `pause-on-fatal: true` and no model/provider/reasoning-effort, so the mode runs on the Lead's own
-route.
+route. Four of the five souls (`generalist`, `researcher`, `software-engineer`, `scribe`) carry the
+shared work-log paragraph that reads a Lead-supplied `worklog.md`; `adversarial-red-team-verifier`
+omits it so independent review cannot read the producer's log.
 
 ---
 
@@ -191,10 +193,10 @@ An existing invalid file shows **Invalid** and no resolved model, and cannot ena
 | **Identity & Boundaries** | section | The Lead's role, authority, and what it must not do itself. Applied at the deployment-persona position while the mode is on. |
 | **Plan Generation** | section | How to decompose the goal, what a plan contains, when to publish/revise it. |
 | **Delegation & Context Minimization** | section | How to match steps to souls/tools, what context to pass, and how the Lead prepares and verifies the workspace paths an assignment names. |
-| **State Tracking** | section | How to use the Team task board as the durable ledger. |
+| **State Tracking** | section | How to use the Team task board as the durable ledger, plus the bundled `### Run work log` guidance for work spanning turns or a handoff. |
 | **Quality Verification** | section | The gates a completed sub-task must pass before advancing. |
 | **Exception & Recovery** | section | Retry policy, fatal-error handling, human escalation, and expected absence: a missing path or unreadable directory is a state fact, not a tool failure. |
-| **Extra markdown** | extras | Content before the first canonical heading, after an explicit `<!-- orchestrator:extra -->` marker, or under any other `#`/`##` heading. It is preserved but appended after the canonical sections on save, so use `###` for sub-headings that must stay inside a section. |
+| **Extra markdown** | extras | Content before the first canonical heading, after an explicit `<!-- orchestrator:extra -->` marker, or under any other `#`/`##` heading. It is preserved but appended after the canonical sections on save, so use `###` for sub-headings that must stay inside a section; the packaged doctrine does this for `### Run work log`, which therefore stays in **State Tracking**. |
 
 Template variables available in every section and in extras: `{{maxRetries}}`, `{{gateMode}}`,
 `{{planFirst}}`, `{{pauseOnFatal}}`, and `{{catalog}}` (the Lead's soul catalog text from the last

@@ -173,10 +173,11 @@ Leave `bundledEditable` out (or set it `false`) to keep the 0.3 read-only behavi
 **Release status (2026-11-08 UTC).** This authoring mode and its GUI controls — the **Use default agent
 souls** switch, the Plugins-page **Use Default Agent Souls** page, and in-place editing of the
 packaged catalog and doctrine — are merged to `main` and are part of 0.4.0 (PRs #4–#6, merged
-2026-11-08 UTC; there are no git tags, so "released" means merged to the default branch). This date
-refers to those merged feature changes, not to subsequent documentation edits. On a
-0.3.0-or-earlier installation, the packaged souls and `defaults/orchestrator.md` are always
-read-only and those controls do not exist — skip the `bundledEditable` paragraphs in this README.
+2026-11-08 UTC). Releases are tagged: `v0.4.0` contains those merges, and GitHub Releases exist for
+`v0.6.0`–`v0.6.2`. This date refers to those merged feature changes, not to subsequent documentation
+edits. On a 0.3.0-or-earlier installation, the packaged souls and `defaults/orchestrator.md` are
+always read-only and those controls do not exist — skip the `bundledEditable` paragraphs in this
+README.
 
 **Working-tree scope (0.6.2).** This README documents the working tree whose manifest is `0.6.2`:
 the DSH `0.2.2-rc.3` Agent Teams port. The plugin is now a soul-aware layer over the shipped

@@ -57,11 +57,12 @@ modules. Route and payload shapes below are still derived from the source handle
 | RC | release remediation | reserved `lead` identity on every save/create/duplicate/spawn path; built-in-first command priority with handler-identity status (`registered` vs `collision`) and a `reason` on preview command status; orchestrator route validation (declaration layer plus live catalog) on every save path; actionable cold-resume refusals |
 | BE | bundled-editable authoring (**0.4.0**, merged to main 2026-11-08 UTC) | opt-in `bundledEditable` mode: the packaged souls and packaged orchestrator doctrine become editable in place while keeping their packaged identity (see the phase entry at the end of this history) |
 
-**Release status (2026-11-08 UTC).** There are no git tags; "released" here means merged to the default
-branch `main`. Everything through P4 plus the selectable default Soul (preferences route, state
-document, and Souls-tab selector), the soul-only delegation fences, and the durable-mode
-Session-header badge is released there — see "Default Soul preference and soul-only delegation"
-below. The BE phase is released as of 2026-11-08 UTC (PRs #4–#6): the opt-in `bundledEditable` authoring
+**Release status (2026-11-08 UTC).** Releases are tagged from `v0.4.0` onward: that tag contains the
+changes described here, and GitHub Releases exist for `v0.6.0`–`v0.6.2`. Everything through P4 plus
+the selectable default Soul (preferences route, state document, and Souls-tab selector), the
+soul-only delegation fences, and the durable-mode Session-header badge is in that tag — see
+"Default Soul preference and soul-only delegation" below.
+The BE phase is released as of 2026-11-08 UTC (PRs #4–#6): the opt-in `bundledEditable` authoring
 mode, its `GET`/`POST /agent-soul/config` route pair, the Plugins-page "Use Default Agent Souls"
 contribution, the `0.4.0` version bump, and the `smoke/bundled-editable.test.mjs` /
 `smoke/config-toggle.test.mjs` suites are all merged to `main` (the newest phase entry, at the end

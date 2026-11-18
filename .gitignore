@@ -14,6 +14,11 @@ npm-debug.log*
 # The default `bindingsFile` anchors state under the workspace's hidden `.dsh` dir.
 .dsh/agent-soul/
 
+# Resolved workspace soul catalog. In this workspace it is a runtime mirror of the
+# packaged `agents/` catalog (installed souls are copied here on demand), so the
+# tracked source of truth stays `agents/` and this copy never enters the diff.
+.dsh/agents/
+
 # Legacy state layout used by releases before the bundled-default layout
 state/bindings.json
 state/preferences.json

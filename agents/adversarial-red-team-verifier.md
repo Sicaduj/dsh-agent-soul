@@ -9,6 +9,7 @@ tools:
   - read_image
   - working_directory
   - skill
+context: fresh
 ---
 
 ## Role Definition

@@ -25,7 +25,7 @@ on (config key `bundledEditable`, with `bundled: true`), the packaged souls open
 instead and carry no badge. The orchestrator tab shows the bundled doctrine until a workspace file
 overrides it.
 
-What the package currently ships (0.6.2): the souls `adversarial-red-team-verifier`, `generalist`,
+What the package currently ships (0.6.3): the souls `adversarial-red-team-verifier`, `generalist`,
 `researcher`, `scribe`, `software-engineer`, and `ui-ux-tester`. Five declare no
 `model`/`provider` override and **inherit the Lead's model** (their catalog line reads
 `model: inherit`); `ui-ux-tester` is the exception, declaring `kimi-code-bridge/k3.1-pro` with

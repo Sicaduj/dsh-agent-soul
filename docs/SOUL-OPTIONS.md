@@ -17,7 +17,7 @@ Editing writes the Markdown file on disk. The **next spawn** (souls) or the **ne
 already-running Orchestrator mode are never modified in place. Eight dictionaries localize the
 plugin's UI chrome; Host diagnostics/messages and file content can appear untranslated.
 
-Installations ship **bundled defaults**: the five packaged souls under `agents/` and the packaged
+Installations ship **bundled defaults**: the six packaged souls under `agents/` and the packaged
 orchestrator doctrine under `defaults/orchestrator.md` are available in every workspace without
 local files. By default the packaged souls are listed with a **Bundled** badge and are read-only in
 place — use **Duplicate** to create an editable workspace copy. With **Use default agent souls**
@@ -26,16 +26,20 @@ instead and carry no badge. The orchestrator tab shows the bundled doctrine unti
 overrides it.
 
 What the package currently ships (0.6.2): the souls `adversarial-red-team-verifier`, `generalist`,
-`researcher`, `scribe`, and `software-engineer`. All five declare no `model`/`provider` override
-and **inherit the Lead's model** (their catalog line reads `model: inherit`). `generalist`, `researcher`, and `software-engineer` declare `context: fresh`;
-`scribe` and `adversarial-red-team-verifier` declare no context. None is `user-invocable`.
-`researcher`, `scribe`, and `adversarial-red-team-verifier` declare `bash` in `tools:`;
-`generalist` and `software-engineer` declare no tool list and inherit every tool. The
+`researcher`, `scribe`, `software-engineer`, and `ui-ux-tester`. Five declare no
+`model`/`provider` override and **inherit the Lead's model** (their catalog line reads
+`model: inherit`); `ui-ux-tester` is the exception, declaring `kimi-code-bridge/k3.1-pro` with
+`reasoning-effort: max`, so it spawns only where that provider is registered. `generalist`,
+`researcher`, and `software-engineer` declare `context: fresh`, `ui-ux-tester` declares
+`context: fork`, and `scribe` and `adversarial-red-team-verifier` declare no context.
+`ui-ux-tester` is the only `user-invocable` soul (`/ui-ux-tester`). `researcher`, `scribe`, and
+`adversarial-red-team-verifier` declare `bash` in `tools:`; `generalist`, `software-engineer`, and
+`ui-ux-tester` declare no tool list and inherit every tool. The
 packaged orchestrator doctrine declares `plan-first: true`, `gate-mode: strict`, `max-retries: 10`,
 `pause-on-fatal: true` and no model/provider/reasoning-effort, so the mode runs on the Lead's own
-route. Four of the five souls (`generalist`, `researcher`, `software-engineer`, `scribe`) carry the
+route. Four of the six souls (`generalist`, `researcher`, `software-engineer`, `scribe`) carry the
 shared work-log paragraph that reads a Lead-supplied `worklog.md`; `adversarial-red-team-verifier`
-omits it so independent review cannot read the producer's log.
+and `ui-ux-tester` omit it so review and testing cannot read the producer's log.
 
 ---
 

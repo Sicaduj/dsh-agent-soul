@@ -80,22 +80,25 @@ Team-enabled Lead. **`/orchestrate` enables Agent Teams automatically for the mo
 
 ## Bundled specialists
 
-Ready to use in any workspace. Every bundled Soul **inherits the Lead's model** and is **AI-only**
-until you opt it into a slash command.
+Ready to use in any workspace. Every bundled Soul but **UI/UX tester** inherits the Lead's model and
+is **AI-only** until you opt it into a slash command. **UI/UX tester** declares its own route and
+ships **user-invocable** as `/ui-ux-tester`.
 
 | Soul | Best for | Source |
 |---|---|---|
 | **Generalist** *(default)* | General-purpose delegation when no specialist is selected | [`generalist.md`](agents/generalist.md) |
 | **Researcher** | Source-grounded research and cited briefings | [`researcher.md`](agents/researcher.md) |
 | **Software engineer** | Implementation, debugging, and focused verification | [`software-engineer.md`](agents/software-engineer.md) |
+| **UI/UX tester** | End-to-end GUI journeys, visual QA, accessibility, and micro-interaction review of a running app | [`ui-ux-tester.md`](agents/ui-ux-tester.md) |
 | **Adversarial red-team verifier** | Independent adversarial review and verification | [`adversarial-red-team-verifier.md`](agents/adversarial-red-team-verifier.md) |
 | **Scribe** | Documentation, summaries, and clear written handoffs | [`scribe.md`](agents/scribe.md) |
 
-Four of the five souls (`generalist`, `researcher`, `software-engineer`, `scribe`) carry a shared
+Four of the six souls (`generalist`, `researcher`, `software-engineer`, `scribe`) carry a shared
 work-log paragraph: when the Lead supplies a `worklog.md` path, read it before starting, after
 context loss or handoff, and on a material update — read-only, with discrepancies reported to the
-Lead. `adversarial-red-team-verifier` deliberately omits it, because independent review must not
-read the producer's log. See [Run work log](#run-work-log).
+Lead. `adversarial-red-team-verifier` and `ui-ux-tester` deliberately omit it: independent review
+must not read the producer's log, and a tester that reads it can be primed by the producer's claims.
+See [Run work log](#run-work-log).
 
 <details>
 <summary><strong>Upgrading from an earlier release?</strong> Expand for 0.1–0.6 migration and compatibility notes.</summary>
@@ -208,8 +211,10 @@ subagent-based Team tools rather than a replacement for the shipped Team row.
 - Node.js **>= 24.9.0**. The plugin has no dependencies and imports only `node:` builtins and
   its own relative files.
 
-All five bundled Souls currently inherit the Lead's route, so the bundled catalog needs no
-additional provider. See [Bundled specialists](#bundled-specialists) for the roster.
+Five of the six bundled Souls inherit the Lead's route, so they need no additional provider.
+`ui-ux-tester` is the exception: it declares `kimi-code-bridge/k3.1-pro` with `reasoning-effort: max`,
+so it spawns only where that provider is registered. See [Bundled specialists](#bundled-specialists)
+for the roster.
 
 An unavailable explicitly configured provider/model makes only the affected spawn fail. Configure
 the route in the destination profile or remove its `model`/`provider`/`reasoning-effort` fields
@@ -1731,7 +1736,7 @@ refresh is always safe and reloads the dictionaries and client module.
 
 | Path | What it is |
 |---|---|
-| [`agents/`](agents/) | Bundled soul catalog: five packaged definitions, including the `generalist` default. Shipped with the bundle and available in every workspace; all five are AI-only until a soul opts in to `user-invocable`. |
+| [`agents/`](agents/) | Bundled soul catalog: six packaged definitions, including the `generalist` default. Shipped with the bundle and available in every workspace; all but `ui-ux-tester` are AI-only until a soul opts in to `user-invocable`. |
 | [`defaults/orchestrator.md`](defaults/orchestrator.md) | Bundled Lead doctrine, used when a workspace has no `orchestrator.md`; edit this file to change the packaged default for workspaces using that package installation/profile. |
 | `<workspace>/.dsh/agents/` | Optional local soul overrides (default `dirs`); created on demand by the GUI. |
 | `<workspace>/.dsh/agent-soul/bindings.json` | Durable teammate bindings (plugin-owned runtime state, created on first spawn; gitignored in this repository). |

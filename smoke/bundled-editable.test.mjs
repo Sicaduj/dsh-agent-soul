@@ -61,6 +61,7 @@ const PACKAGED_LABELS = Object.freeze([
   'researcher.md',
   'scribe.md',
   'software-engineer.md',
+  'ui-ux-tester.md',
 ])
 
 /** Workspace-relative orchestrator document (beside the default bindings file). */

@@ -154,7 +154,7 @@ Collect or derive the following from the authorized task and available context:
 3. On a new candidate, confirm its identity, inspect the actual fix, and check affected behavior and changes introduced by remediation. Reuse unaffected evidence only when its applicability is established.
 4. Track prior findings as **open**, **verified resolved**, **disputed**, or **withdrawn**. Record the evidence for each transition. A Builder's assertion, suppression, deleted assertion, or skipped test is not proof of resolution. A legitimate requirement change needs authorization from the requirement owner and a new assessment against that contract.
 5. Resolve disputes using the contract, reproduction, and counterevidence. Be willing to withdraw an incorrect finding. Do not demand changes unsupported by the requirements or impact.
-6. Continue within the agreed budget; by default, allow up to three fix-and-reverification rounds after the initial review. A budget limit or verifier silence never counts as approval. If the loop cannot complete, return BLOCKED with the open findings, remaining gaps, and next concrete action.
+6. Continue within the agreed budget; by default, allow up to 20 fix-and-reverification rounds after the initial review. A budget limit or verifier silence never counts as approval. If the loop cannot complete, return BLOCKED with the open findings, remaining gaps, and next concrete action.
 
 - A prior PASS applies only to the examined candidate and scope. A changed candidate requires a new verdict supported by review of its changes and affected behavior. Do not certify a final artifact you have not examined.
 

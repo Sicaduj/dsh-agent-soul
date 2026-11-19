@@ -25,7 +25,7 @@ on (config key `bundledEditable`, with `bundled: true`), the packaged souls open
 instead and carry no badge. The orchestrator tab shows the bundled doctrine until a workspace file
 overrides it.
 
-What the package currently ships (0.6.3): the souls `adversarial-red-team-verifier`, `generalist`,
+What the package currently ships (0.6.4): the souls `adversarial-red-team-verifier`, `generalist`,
 `researcher`, `scribe`, `software-engineer`, and `ui-ux-tester`. All six declare no
 `model`/`provider` override and **inherit the Lead's model** (their catalog line reads
 `model: inherit`). `generalist`, `researcher`, `software-engineer`,
@@ -33,7 +33,7 @@ What the package currently ships (0.6.3): the souls `adversarial-red-team-verifi
 context. `ui-ux-tester` is the only `user-invocable` soul (`/ui-ux-tester`). `researcher`, `scribe`,
 and `adversarial-red-team-verifier` declare `bash` in `tools:`; `generalist`, `software-engineer`,
 and `ui-ux-tester` declare no tool list and inherit every tool. The
-packaged orchestrator doctrine declares `plan-first: true`, `gate-mode: strict`, `max-retries: 10`,
+packaged orchestrator doctrine declares `plan-first: true`, `gate-mode: strict`, `max-retries: 20`,
 `pause-on-fatal: true` and no model/provider/reasoning-effort, so the mode runs on the Lead's own
 route. Four of the six souls (`generalist`, `researcher`, `software-engineer`, `scribe`) carry the
 shared work-log paragraph that reads a Lead-supplied `worklog.md`; `adversarial-red-team-verifier`
@@ -151,7 +151,7 @@ creation).
 | **Reasoning effort** | `reasoning-effort` | Optional effort id for the Lead route while the mode is on. |
 | **Tools** picker / text | `tools` | The Lead's permission matrix **while the mode is on**. Pressed **Inherit every tool** (`*`) = no restriction (`tools:` omitted); pressing it off, deselecting the last tool, or clearing the text leaves an empty value, which composes `tools: []` = deny every inherited tool; a selection list = allow exactly those inherited tools. Team tools stay visible; listing one is harmless (it is skipped) and is explained in the picker, not flagged as unknown. The portable shell pair resolves instead of being skipped: a declared `bash`/`pwsh` is applied as the registered spelling (`bash` on POSIX, `pwsh` on Windows), and an exact registration wins. Any other name unavailable in the session is skipped with a warning rather than failing the whole mode. |
 | **Gate mode** select | `gate-mode` | Substituted as `{{gateMode}}` into the doctrine: `strict`, `advisory`, or `off`. It changes what the prompt instructs the Lead to do; it does not mechanically block tools. An omitted field is read as `off`. |
-| **Max retries** number | `max-retries` | Integer 0–10, substituted as `{{maxRetries}}`: the retry ceiling the doctrine tells the Lead to follow. It is not an automatic retry driver. An omitted field is read as `0`. |
+| **Max retries** number | `max-retries` | Integer 0–20, substituted as `{{maxRetries}}`: the retry ceiling the doctrine tells the Lead to follow. It is not an automatic retry driver. An omitted field is read as `0`. |
 | **Plan first** checkbox | `plan-first` | Boolean, substituted as `{{planFirst}}`: doctrine to publish a plan before executing. An omitted field is read as off; the starter documents enable it (see below). |
 | **Pause on fatal** checkbox | `pause-on-fatal` | Boolean, substituted as `{{pauseOnFatal}}`: doctrine to stop and ask the human on unrecoverable failure. An omitted field is read as off; the starter documents enable it (see below). |
 

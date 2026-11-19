@@ -668,7 +668,7 @@ test('bundled doctrine prompt carries the corrected route, status, gate, and quo
   const text = String(result.text)
   ok(text.includes('model: inherit'), 'the shipped no-route definition inherits the Lead model')
   ok(text.includes('gate: strict'), 'the shipped gate mode is announced')
-  ok(text.includes('retries: 10'), 'the shipped retry budget is announced')
+  ok(text.includes('retries: 20'), 'the shipped retry budget is announced')
   equal(run.state.selectCalls.length, 0, 'an inherited route selects nothing')
   equal(run.state.current.model, 'base-model', 'the Lead selection is unchanged')
   equal(readFileSync(join(REAL_PACKAGE, 'defaults', 'orchestrator.md'), 'utf8'), REAL_DOCTRINE,
@@ -697,6 +697,16 @@ test('bundled doctrine prompt carries the corrected route, status, gate, and quo
     'the bundled doctrine keeps the unconditional Soul-only rule')
   ok(!delegation.includes('ordinary Soul-less delegation'),
     'the bundled doctrine never advertises a Soul-less fallback')
+  ok(delegation.includes('### Invoked-skill propagation'),
+    'the doctrine has an invoked-skill propagation subsection')
+  ok(delegation.includes('Default to passing every invoked skill'),
+    'invoked skills are propagated to spawned children by default')
+  ok(delegation.includes('load that same skill by name'),
+    'a child can resolve an invoked skill by name when it has the skill tool')
+  ok(delegation.includes('Invoked skills: <exact names'),
+    'the assignment contract carries the invoked skills to the child')
+  ok(stateSection.includes('Skills propagated: <exact names'),
+    'the handoff record reports the propagated skills and gaps')
 
   for (const status of ['`pending`', '`in_progress`', '`completed`', '`deleted`']) {
     ok(stateSection.includes(status), 'the state tracking section lists supported status ' + status)
@@ -705,7 +715,7 @@ test('bundled doctrine prompt carries the corrected route, status, gate, and quo
 
   ok(verification.includes('Under `strict` gating, a failed or unperformed gate blocks acceptance'),
     'gate correction is scoped to strict gating')
-  ok(verification.includes('within the remaining `10` allowance'),
+  ok(verification.includes('within the remaining `20` allowance'),
     'the strict correction loop is bounded by the configured retry budget')
   ok(verification.includes('Under `advisory` or `off`'),
     'advisory/off continuation is stated without blocking')

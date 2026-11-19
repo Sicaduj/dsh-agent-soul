@@ -26,7 +26,7 @@ kind: "package-bundle"
     <a href="#troubleshooting">Troubleshooting</a>
   </p>
 
-  <sub><code>@local/dsh-agent-soul</code> · package version 0.6.3</sub>
+  <sub><code>@local/dsh-agent-soul</code> · package version 0.6.4</sub>
 </div>
 
 ## Overview
@@ -182,7 +182,7 @@ edits. On a 0.3.0-or-earlier installation, the packaged souls and `defaults/orch
 always read-only and those controls do not exist — skip the `bundledEditable` paragraphs in this
 README.
 
-**Working-tree scope (0.6.3).** This README documents the working tree whose manifest is `0.6.3`:
+**Working-tree scope (0.6.4).** This README documents the working tree whose manifest is `0.6.4`:
 the DSH `0.2.2-rc.3` Agent Teams port. The plugin is now a soul-aware layer over the shipped
 subagent-based Team tools rather than a replacement for the shipped Team row.
 
@@ -1006,7 +1006,7 @@ blocking. These are prompt instructions, not mechanical enforcement.
 | `tools` | no | unrestricted | `tools:` omitted or `*` = leave the Lead's inherited tool set unchanged. A list = allow exactly those inherited tools. `[]` = deny every inherited tool. Registered Team tools stay visible; listing one is harmless (it is treated as non-restrictable), and a name that is unavailable in this session is skipped with a warning rather than failing the whole mode. |
 | `plan-first` | no | `false` | Boolean; substituted into `{{planFirst}}` as doctrine. Does not mechanically force a plan. |
 | `gate-mode` | no | `off` | `strict`, `advisory`, or `off`; substituted into `{{gateMode}}` as doctrine. |
-| `max-retries` | no | `0` | Integer 0–10; substituted into `{{maxRetries}}`. This is a doctrine value, not a retry driver. |
+| `max-retries` | no | `0` | Integer 0–20; substituted into `{{maxRetries}}`. This is a doctrine value, not a retry driver. |
 | `pause-on-fatal` | no | `false` | Boolean; substituted into `{{pauseOnFatal}}`. |
 
 The body is required and non-empty. All six sections are optional individually — empty sections are

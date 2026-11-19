@@ -3218,7 +3218,7 @@ window.__ModuleLoader__.load({
         ? fields.maxRetries
         : parseInt(fields.maxRetries, 10)
       if (typeof retries === 'number' && isFinite(retries)) {
-        maxRetries = Math.max(0, Math.min(10, Math.round(retries)))
+        maxRetries = Math.max(0, Math.min(20, Math.round(retries)))
       }
       let tools = ORCHESTRATOR_DEFAULT_FIELDS.tools
       if (typeof fields.tools === 'string') tools = fields.tools
@@ -5473,7 +5473,7 @@ window.__ModuleLoader__.load({
       }), config.error, config.id + '-error')
     }
 
-    /** Bounded integer field (the orchestrator's max-retries, 0–10). */
+    /** Bounded integer field (the orchestrator's max-retries, 0–20). */
     function numberInput(config) {
       return fieldShell(config.id, config.label, config.hint, h('input', {
         id: config.id,
@@ -8925,13 +8925,13 @@ window.__ModuleLoader__.load({
                 label: t('fieldMaxRetries'),
                 value: fields.maxRetries,
                 min: 0,
-                max: 10,
+                max: 20,
                 error: orchestratorFieldErrors.maxRetries,
                 onChange: function (value) {
                   const text = String(value).trim()
                   const parsed = parseInt(text, 10)
                   updateOrchestratorField('maxRetries',
-                    Number.isInteger(parsed) ? Math.max(0, Math.min(10, parsed)) : 0)
+                    Number.isInteger(parsed) ? Math.max(0, Math.min(20, parsed)) : 0)
                 },
               })),
             h('div', { className: 'agent-soul-field-grid' },

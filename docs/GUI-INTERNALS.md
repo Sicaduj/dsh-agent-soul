@@ -75,7 +75,7 @@ route-inheritance change from PR #5, still apply and are not reverted by leaving
 present in the current working tree, not in that release history. Behavior described in the sections
 below may therefore differ from a published 0.4.0 installation.
 
-**0.6.3 working tree (DSH 0.2.2 port).** The manifest is `0.6.3` and the GUI tool catalog
+**0.6.4 working tree (DSH 0.2.2 port).** The manifest is `0.6.4` and the GUI tool catalog
 advertises the missing `bash`/`pwsh` spelling as one
 marked portable-alias entry (`portableAliasOf`); the save validator and preview accept either
 spelling, and the spawn, apply, and orchestrator paths resolve it to the live one. This change and
@@ -198,13 +198,13 @@ Route names and payloads (the browser half addresses them without the leading sl
 ### `GET /agent-soul/overview`
 
 200 body (example values are illustrative; `plugin.version` is read from the real manifest —
-`0.6.3` at this revision (the DSH 0.2.2 port). The no-`pluginMeta` fallback constant
-`PLUGIN_META_DEFAULTS` in `lib/gui-host.js` reports `0.6.3`; it is used only when the Host
+`0.6.4` at this revision (the DSH 0.2.2 port). The no-`pluginMeta` fallback constant
+`PLUGIN_META_DEFAULTS` in `lib/gui-host.js` reports `0.6.4`; it is used only when the Host
 passes no plugin metadata):
 
 ```jsonc
 {
-  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.6.3", "root": "/abs/workspace" },
+  "plugin": { "name": "@local/dsh-agent-soul", "version": "0.6.4", "root": "/abs/workspace" },
   "settings": {
     "dirs": [".dsh/agents"],
     "resolvedDirs": ["/abs/workspace/.dsh/agents"],
@@ -245,7 +245,7 @@ passes no plugin metadata):
     "valid": true, "name": "orchestrator",
     "model": "", "modelResolved": null,
     "tools": null, "planFirst": true,
-    "gateMode": "strict", "maxRetries": 10, "pauseOnFatal": true, "diagnostics": []
+    "gateMode": "strict", "maxRetries": 20, "pauseOnFatal": true, "diagnostics": []
   },
   "preferences": {                         // default-Soul selector state
     "path": "/abs/workspace/.dsh/agent-soul/preferences.json",
@@ -1096,7 +1096,7 @@ Frontmatter (strict YAML subset via `lib/soul.js` `parseFrontmatter`):
 `name` (optional, default `orchestrator`), `model`, `provider`, `reasoning-effort`,
 `tools` (same normalization as souls: omitted/`*` = unrestricted; list = Lead's inherited-tool
 allow-list; `[]` = deny every inherited tool), `plan-first` (bool), `gate-mode`
-(`strict|advisory|off`), `max-retries` (integer 0–10), `pause-on-fatal` (bool).
+(`strict|advisory|off`), `max-retries` (integer 0–20), `pause-on-fatal` (bool).
 
 Body: six canonical sections (heading level `#`/`##`, case-insensitive aliases) in canonical order:
 **Identity & Boundaries**, **Plan Generation**, **Delegation & Context Minimization**,
